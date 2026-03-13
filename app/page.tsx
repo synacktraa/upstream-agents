@@ -289,9 +289,7 @@ export default function Home() {
                   gitHistoryOpen={gitHistoryOpen}
                   onToggleGitHistory={() => setGitHistoryOpen((v) => !v)}
                   onAddMessage={handleAddMessage}
-                  onUpdateMessage={(messageId, updates) =>
-                    handleUpdateMessage(activeBranch.id, messageId, updates)
-                  }
+                  onUpdateMessage={handleUpdateMessage}
                   onUpdateBranch={handleUpdateBranch}
                   onSaveDraftForBranch={handleSaveDraftForBranch}
                   onForceSave={() => {}}
@@ -319,9 +317,7 @@ export default function Home() {
               gitHistoryOpen={gitHistoryOpen}
               onToggleGitHistory={() => setGitHistoryOpen((v) => !v)}
               onAddMessage={handleAddMessage}
-              onUpdateMessage={(messageId, updates) =>
-                handleUpdateMessage(activeBranch.id, messageId, updates)
-              }
+              onUpdateMessage={handleUpdateMessage}
               onUpdateBranch={handleUpdateBranch}
               onSaveDraftForBranch={handleSaveDraftForBranch}
               onForceSave={() => {}}

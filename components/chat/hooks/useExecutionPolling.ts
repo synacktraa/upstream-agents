@@ -6,7 +6,8 @@ import { BRANCH_STATUS, EXECUTION_STATUS, PATHS } from "@/lib/constants"
 interface UseExecutionPollingOptions {
   branch: Branch
   repoName: string
-  onUpdateMessage: (messageId: string, updates: Partial<Message>) => void
+  /** Update message in a specific branch - branchId is required to avoid race conditions when user switches branches during execution */
+  onUpdateMessage: (branchId: string, messageId: string, updates: Partial<Message>) => void
   onUpdateBranch: (branchId: string, updates: Partial<Branch>) => void
   /** Add message to a specific branch - branchId is required to avoid race conditions when user switches branches during execution */
   onAddMessage: (branchId: string, message: Message) => Promise<string>
@@ -162,12 +163,16 @@ export function useExecutionPolling({
             },
           )
 
-          onUpdateMessage(messageId, {
-            content: data.content || "",
-            toolCalls: toolCallsWithIds,
-            contentBlocks:
-              contentBlocksWithIds.length > 0 ? contentBlocksWithIds : undefined,
-          })
+          // Use pollingBranchIdRef to ensure updates go to the correct branch
+          const targetBranchId = pollingBranchIdRef.current
+          if (targetBranchId) {
+            onUpdateMessage(targetBranchId, messageId, {
+              content: data.content || "",
+              toolCalls: toolCallsWithIds,
+              contentBlocks:
+                contentBlocksWithIds.length > 0 ? contentBlocksWithIds : undefined,
+            })
+          }
         }
 
         // Check if completed or error (only run completion once; multiple in-flight polls can all see "completed")
@@ -190,11 +195,14 @@ export function useExecutionPolling({
           }
 
           if (data.status === EXECUTION_STATUS.ERROR && data.error) {
-            onUpdateMessage(messageId, {
-              content: data.content
-                ? `${data.content}\n\nError: ${data.error}`
-                : `Error: ${data.error}`,
-            })
+            const targetBranchId = pollingBranchIdRef.current
+            if (targetBranchId) {
+              onUpdateMessage(targetBranchId, messageId, {
+                content: data.content
+                  ? `${data.content}\n\nError: ${data.error}`
+                  : `Error: ${data.error}`,
+              })
+            }
           }
 
           onForceSave()
@@ -315,11 +323,11 @@ export function useExecutionPolling({
       clearInterval(pollingRef.current)
       pollingRef.current = null
     }
-    if (currentMessageIdRef.current) {
+    if (currentMessageIdRef.current && pollingBranchIdRef.current) {
       // Use ref to get current messages to avoid dependency issues
       const lastMsg = branchMessagesRef.current.find(m => m.id === currentMessageIdRef.current)
       const currentContent = lastMsg?.content || ""
-      onUpdateMessage(currentMessageIdRef.current, {
+      onUpdateMessage(pollingBranchIdRef.current, currentMessageIdRef.current, {
         content: currentContent ? `${currentContent}\n\n[Stopped by user]` : "[Stopped by user]"
       })
     }
