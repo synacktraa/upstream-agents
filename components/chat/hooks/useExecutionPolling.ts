@@ -122,6 +122,26 @@ export function useExecutionPolling({
 
         notFoundRetries = 0
 
+        // Safety: stop polling when agent is no longer running (avoids looping after agent ends)
+        if (
+          data.status != null &&
+          data.status !== EXECUTION_STATUS.RUNNING &&
+          data.status !== EXECUTION_STATUS.COMPLETED &&
+          data.status !== EXECUTION_STATUS.ERROR
+        ) {
+          if (pollingRef.current) {
+            clearInterval(pollingRef.current)
+            pollingRef.current = null
+          }
+          currentExecutionIdRef.current = null
+          currentMessageIdRef.current = null
+          if (streamingMessageIdRef) streamingMessageIdRef.current = null
+          if (pollingBranchIdRef.current) {
+            onUpdateBranch(pollingBranchIdRef.current, { status: BRANCH_STATUS.IDLE })
+          }
+          return
+        }
+
         // Update message content
         if (
           data.content ||
