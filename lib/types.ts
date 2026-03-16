@@ -108,7 +108,7 @@ export function getAvailableModels(
   agent: Agent,
   _credentials: UserCredentialFlags | null | undefined
 ): ModelOption[] {
-  return agentModels[agent]
+  return agentModels[agent] ?? []
 }
 
 /**
@@ -150,7 +150,7 @@ export function getDefaultModelForAgent(
   agent: Agent,
   credentials: UserCredentialFlags | null | undefined
 ): string {
-  const allModels = agentModels[agent]
+  const allModels = agentModels[agent] ?? []
   const defaultModel = defaultAgentModel[agent]
 
   // Find the default model config
@@ -247,7 +247,7 @@ export function getModelLabel(agent: Agent, modelValue: string | undefined): str
   if (!modelValue) {
     modelValue = defaultAgentModel[agent]
   }
-  const models = agentModels[agent]
+  const models = agentModels[agent] ?? []
   const model = models.find(m => m.value === modelValue)
   return model?.label || modelValue
 }
