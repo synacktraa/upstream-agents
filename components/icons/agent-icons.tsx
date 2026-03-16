@@ -45,6 +45,7 @@ export function CodexIcon({ className }: AgentIconProps) {
 
 // OpenCode icon - Official OpenCode logo
 // Source: https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/opencode.svg
+// Centered within square viewBox, background removed
 export function OpenCodeIcon({ className }: AgentIconProps) {
   return (
     <svg
@@ -53,17 +54,21 @@ export function OpenCodeIcon({ className }: AgentIconProps) {
       xmlns="http://www.w3.org/2000/svg"
       className={cn("h-4 w-4", className)}
     >
-      {/* OpenCode logo - geometric rectangle design */}
+      {/* Inner lighter rectangle (bottom portion) */}
       <path
-        d="M18 19.2H6V9.6H18V19.2Z"
+        d="M17 21H7V12H17V21Z"
         fill="currentColor"
         fillOpacity="0.4"
       />
-      <path
-        d="M18 4.8H6V19.2H18V4.8ZM24 24H0V0H24V24Z"
-        fill="currentColor"
-        fillRule="evenodd"
-        clipRule="evenodd"
+      {/* Outer rectangle frame */}
+      <rect
+        x="7"
+        y="3"
+        width="10"
+        height="18"
+        stroke="currentColor"
+        strokeWidth="2"
+        fill="none"
       />
     </svg>
   )
