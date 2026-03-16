@@ -30,7 +30,7 @@ export function getProviderForAgent(agent: string | undefined): ProviderName {
 export interface ModelOption {
   value: string
   label: string
-  requiresKey?: "anthropic" | "openai" | "none" // Which API key is required
+  requiresKey?: "anthropic" | "openai" | "openrouter" | "none" // Which API key is required
 }
 
 export const agentModels: Record<Agent, ModelOption[]> = {
@@ -41,30 +41,28 @@ export const agentModels: Record<Agent, ModelOption[]> = {
     { value: "haiku", label: "Haiku", requiresKey: "anthropic" },
   ],
   "opencode": [
-    // Free models (limited time) - no API key needed
-    // These use openrouter/ prefix as they're served via OpenRouter's free tier
-    { value: "openrouter/sao10k/l3.3-euryale-70b", label: "Big Pickle (Free)", requiresKey: "none" },
-    { value: "openrouter/minimax/minimax-01", label: "MiniMax M2.5 (Free)", requiresKey: "none" },
-    { value: "openrouter/xiaomi/mimo-vl-7b-free", label: "MiMo v2 Flash (Free)", requiresKey: "none" },
-    { value: "openrouter/nvidia/llama-3.1-nemotron-ultra-253b-v1:free", label: "Nemotron 3 Super (Free)", requiresKey: "none" },
-    // Anthropic models (requires Anthropic API key)
-    // These use anthropic/ prefix as expected by OpenCode CLI
-    { value: "anthropic/claude-sonnet-4-20250514", label: "Claude Sonnet 4", requiresKey: "anthropic" },
-    { value: "anthropic/claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet", requiresKey: "anthropic" },
-    { value: "anthropic/claude-3-5-haiku-20241022", label: "Claude 3.5 Haiku", requiresKey: "anthropic" },
-    // OpenAI models (requires OpenAI API key)
-    // These use openai/ prefix as expected by OpenCode CLI
-    { value: "openai/gpt-4o", label: "GPT-4o", requiresKey: "openai" },
-    { value: "openai/gpt-4o-mini", label: "GPT-4o Mini", requiresKey: "openai" },
-    { value: "openai/o3-mini", label: "o3-mini", requiresKey: "openai" },
-    { value: "openai/gpt-4-turbo", label: "GPT-4 Turbo", requiresKey: "openai" },
+    // Free models - no API key needed
+    { value: "opencode/big-pickle", label: "Big Pickle (Free)", requiresKey: "none" },
+    { value: "opencode/nemotron-3-super-free", label: "Nemotron 3 Super (Free)", requiresKey: "none" },
+    { value: "opencode/minimax-m2.5-free", label: "MiniMax M2.5 (Free)", requiresKey: "none" },
+    { value: "opencode/mimo-v2-flash-free", label: "MiMo v2 Flash (Free)", requiresKey: "none" },
+    // Paid models (requires OpenRouter API key)
+    { value: "opencode/claude-sonnet-4", label: "Claude Sonnet 4", requiresKey: "openrouter" },
+    { value: "opencode/claude-sonnet-4-5", label: "Claude Sonnet 4.5", requiresKey: "openrouter" },
+    { value: "opencode/claude-haiku-4-5", label: "Claude Haiku 4.5", requiresKey: "openrouter" },
+    { value: "opencode/claude-opus-4-5", label: "Claude Opus 4.5", requiresKey: "openrouter" },
+    { value: "opencode/gpt-5", label: "GPT-5", requiresKey: "openrouter" },
+    { value: "opencode/gpt-5-codex", label: "GPT-5 Codex", requiresKey: "openrouter" },
+    { value: "opencode/gpt-5-nano", label: "GPT-5 Nano", requiresKey: "openrouter" },
+    { value: "opencode/gemini-3-flash", label: "Gemini 3 Flash", requiresKey: "openrouter" },
+    { value: "opencode/gemini-3-pro", label: "Gemini 3 Pro", requiresKey: "openrouter" },
   ],
 }
 
 // Default model per agent
 export const defaultAgentModel: Record<Agent, string> = {
   "claude-code": "default",
-  "opencode": "openrouter/sao10k/l3.3-euryale-70b",
+  "opencode": "opencode/big-pickle",
 }
 
 // User credentials for filtering
@@ -72,6 +70,7 @@ export interface UserCredentialFlags {
   hasAnthropicApiKey?: boolean
   hasAnthropicAuthToken?: boolean
   hasOpenaiApiKey?: boolean
+  hasOpenrouterApiKey?: boolean
 }
 
 /**
@@ -108,8 +107,8 @@ export function getAvailableModels(
  * Check if user has credentials for a specific model.
  * Returns true if the model can be used, false if credentials are missing.
  *
- * Note: For OpenCode agent, Anthropic models require the API key only (not Claude subscription).
- * Claude subscription only works with the Claude Code agent.
+ * Note: For OpenCode agent, paid models require an OpenRouter API key.
+ * Claude Code agent can use either Anthropic API key or subscription.
  */
 export function hasCredentialsForModel(
   model: ModelOption,
@@ -128,6 +127,8 @@ export function hasCredentialsForModel(
       return !!(credentials?.hasAnthropicApiKey || credentials?.hasAnthropicAuthToken)
     case "openai":
       return !!credentials?.hasOpenaiApiKey
+    case "openrouter":
+      return !!credentials?.hasOpenrouterApiKey
     default:
       return true
   }
