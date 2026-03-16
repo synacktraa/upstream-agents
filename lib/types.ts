@@ -84,7 +84,8 @@ export const agentModels: Record<Agent, ModelOption[]> = {
 // Default model per agent
 export const defaultAgentModel: Record<Agent, string> = {
   "claude-code": "default",
-  "opencode": "openrouter/sao10k/l3.3-euryale-70b",
+  // Use a free OpenCode-hosted model that doesn't require any API key
+  "opencode": "opencode/big-pickle",
   "codex": "gpt-5.4",
 }
 
