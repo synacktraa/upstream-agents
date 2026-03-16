@@ -9,7 +9,6 @@ import {
   transformMessage,
 } from "@/lib/db-types"
 import { BRANCH_STATUS } from "@/lib/constants"
-import { applyRepoOrder } from "@/lib/store"
 
 interface UseRepoDataOptions {
   isAuthenticated: boolean
@@ -39,10 +38,9 @@ export function useRepoData({ isAuthenticated }: UseRepoDataOptions) {
       })
       .then(async (data) => {
         if (data.repos) {
+          // Repos are already returned in the correct order from the API
           const transformedRepos: TransformedRepo[] = data.repos.map(transformRepo)
-          // Apply saved repo order from localStorage
-          const orderedRepos = applyRepoOrder(transformedRepos)
-          setRepos(orderedRepos)
+          setRepos(transformedRepos)
 
           // Eagerly load messages for any running branches to prevent race conditions
           // This ensures messages are available when chat-panel checks for active executions

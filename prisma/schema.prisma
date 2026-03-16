@@ -43,6 +43,9 @@ model User {
   githubId      String?   @unique
   githubLogin   String?
 
+  // User preferences
+  repoOrder Json? // Array of repo IDs in display order
+
   accounts    Account[]
   sessions    Session[]
   credentials UserCredentials?

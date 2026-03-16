@@ -9,7 +9,6 @@ import {
   removeBranchFromRepo,
 } from "@/lib/state-utils"
 import { PATHS } from "@/lib/constants"
-import { saveRepoOrder, loadRepoOrder } from "@/lib/store"
 
 interface UseRepoOperationsOptions {
   repos: TransformedRepo[]
@@ -51,8 +50,12 @@ export function useRepoOperations({
       const transformed = transformRepo(data.repo)
       setRepos((prev) => {
         const newRepos = [...prev, transformed]
-        // Update saved order to include the new repo at the end
-        saveRepoOrder(newRepos.map((r) => r.id))
+        // Persist the new order to database (fire and forget)
+        fetch("/api/user/repo-order", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ repoOrder: newRepos.map((r) => r.id) }),
+        }).catch(() => {})
         return newRepos
       })
       selectRepo(transformed.id)
@@ -82,9 +85,12 @@ export function useRepoOperations({
 
     setRepos((prev) => {
       const newRepos = removeRepo(prev, repoId)
-      // Update saved order to remove the deleted repo
-      const currentOrder = loadRepoOrder()
-      saveRepoOrder(currentOrder.filter((id) => id !== repoId))
+      // Persist the new order to database (fire and forget)
+      fetch("/api/user/repo-order", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repoOrder: newRepos.map((r) => r.id) }),
+      }).catch(() => {})
       return newRepos
     })
     if (activeRepoId === repoId) {
@@ -94,12 +100,16 @@ export function useRepoOperations({
     }
   }, [repos, activeRepoId, setRepos, selectRepo, setActiveBranchId])
 
-  // Reorder repos (drag and drop) - persists order to localStorage
+  // Reorder repos (drag and drop) - persists order to database
   const handleReorderRepos = useCallback((fromIndex: number, toIndex: number) => {
     setRepos((prev) => {
       const reordered = reorderRepos(prev, fromIndex, toIndex)
-      // Save the new order to localStorage so it persists across page loads
-      saveRepoOrder(reordered.map((r) => r.id))
+      // Persist the new order to database (fire and forget)
+      fetch("/api/user/repo-order", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repoOrder: reordered.map((r) => r.id) }),
+      }).catch(() => {})
       return reordered
     })
   }, [setRepos])

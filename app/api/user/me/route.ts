@@ -12,7 +12,13 @@ export async function GET() {
   try {
     const user = await prisma.user.findUnique({
       where: { id: auth.userId },
-      include: {
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        image: true,
+        githubLogin: true,
+        repoOrder: true,
         credentials: {
           select: {
             anthropicAuthType: true,
@@ -68,6 +74,22 @@ export async function GET() {
         }
       : null
 
+    // Apply saved repo order if it exists
+    let orderedRepos = user.repos
+    if (user.repoOrder && Array.isArray(user.repoOrder)) {
+      const orderMap = new Map((user.repoOrder as string[]).map((id, index) => [id, index]))
+      orderedRepos = [...user.repos].sort((a, b) => {
+        const posA = orderMap.get(a.id)
+        const posB = orderMap.get(b.id)
+        // Repos with saved order come first, sorted by position
+        // Repos without saved order come last, preserving original order
+        if (posA !== undefined && posB !== undefined) return posA - posB
+        if (posA !== undefined) return -1
+        if (posB !== undefined) return 1
+        return 0
+      })
+    }
+
     return Response.json({
       user: {
         id: user.id,
@@ -77,7 +99,7 @@ export async function GET() {
         githubLogin: user.githubLogin,
       },
       credentials,
-      repos: user.repos,
+      repos: orderedRepos,
       quota,
     })
   } catch (error) {

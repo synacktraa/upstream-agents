@@ -250,15 +250,6 @@ export interface Repo {
 
 export type AnthropicAuthType = ConstantsAnthropicAuthType
 
-export interface Settings {
-  githubPat: string
-  anthropicApiKey: string
-  anthropicAuthType: AnthropicAuthType
-  anthropicAuthToken: string
-  daytonaApiKey: string
-  opencodeApiKey: string
-}
-
 export const agentLabels: Record<Agent, string> = {
   "claude-code": "Claude Code",
   "opencode": "OpenCode",
@@ -273,13 +264,4 @@ export function getModelLabel(agent: Agent, modelValue: string | undefined): str
   const models = agentModels[agent] ?? []
   const model = models.find(m => m.value === modelValue)
   return model?.label || modelValue
-}
-
-export const defaultSettings: Settings = {
-  githubPat: "",
-  anthropicApiKey: "",
-  anthropicAuthType: "api-key",
-  anthropicAuthToken: "",
-  daytonaApiKey: "",
-  opencodeApiKey: "",
 }
