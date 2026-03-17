@@ -18,13 +18,20 @@ Requirements:
 - Use 2-4 words maximum (not counting the prefix)
 - All lowercase
 - Words separated by hyphens
-- Use a conventional prefix with a SLASH separator: feat/, fix/, refactor/, docs/, test/, chore/
+- Choose the CORRECT prefix based on the type of work:
+  - fix/ = fixing a bug or issue
+  - feat/ = adding a new feature or capability
+  - refactor/ = restructuring code without changing behavior
+  - docs/ = documentation changes
+  - test/ = adding or updating tests
+  - chore/ = maintenance tasks, dependencies, config
 - Be specific but concise
+- Do NOT use "fix" in the description if using feat/ prefix (and vice versa)
 
 Conversation:
 {conversation}
 
-Reply with ONLY the branch name, nothing else. Example: fix/auth-validation`
+Reply with ONLY the branch name, nothing else. Examples: fix/auth-validation, feat/dark-mode, refactor/api-client`
 
 /**
  * POST /api/branches/suggest-name
