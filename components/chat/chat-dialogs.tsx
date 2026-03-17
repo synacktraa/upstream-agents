@@ -1,7 +1,7 @@
 "use client"
 
 import type { Branch } from "@/lib/types"
-import { Loader2, Copy, Check, ArrowUpDown } from "lucide-react"
+import { Loader2, Copy, Check, RefreshCw } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -71,16 +71,19 @@ export function ChatDialogs({ branch, repoOwner, repoName, gitActions }: ChatDia
               )}
 
               {/* Arrow with "into" and swap button */}
-              <div className="flex items-center gap-2 py-1">
+              <div className="flex items-center justify-between w-full py-1">
+                <div className="flex-1" />
                 <span className="text-xs text-muted-foreground">↓ into</span>
-                <button
-                  type="button"
-                  onClick={gitActions.toggleMergeDirection}
-                  className="cursor-pointer rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-                  title="Swap merge direction"
-                >
-                  <ArrowUpDown className="h-3.5 w-3.5" />
-                </button>
+                <div className="flex-1 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={gitActions.toggleMergeDirection}
+                    className="cursor-pointer rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                    title="Swap merge direction"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
 
               {/* Target (bottom) */}
