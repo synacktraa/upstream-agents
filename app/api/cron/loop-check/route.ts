@@ -41,14 +41,14 @@ export async function GET(req: Request) {
     // - Branch has loopEnabled = true
     // - loopCount < loopMaxIterations
     // - Response does not indicate FINISHED
-    // - Completed more than 30 seconds ago (to let frontend handle first)
-    const thirtySecondsAgo = new Date(Date.now() - 30 * 1000)
+    // - Completed more than 15 seconds ago (to let frontend handle first)
+    const fifteenSecondsAgo = new Date(Date.now() - 15 * 1000)
 
     const executions = await prisma.agentExecution.findMany({
       where: {
         status: EXECUTION_STATUS.COMPLETED,
         completedAt: {
-          lt: thirtySecondsAgo,
+          lt: fifteenSecondsAgo,
         },
         message: {
           branch: {
