@@ -124,6 +124,7 @@ export async function POST(req: Request) {
           name: sandboxName,
           snapshot: SANDBOX_CONFIG.DEFAULT_SNAPSHOT,
           autoStopInterval: sandboxAutoStopInterval,
+          public: true,
           labels: {
             [SANDBOX_CONFIG.LABEL_KEY]: "true",
             repo: `${repoOwner}/${repoName}`,
