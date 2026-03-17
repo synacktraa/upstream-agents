@@ -421,28 +421,17 @@ export function useExecutionPolling({
             loopCountRef.current < loopMaxIterationsRef.current &&
             !isLoopFinished(data.content)
 
-          console.log("[loop-check]", {
-            completedBranchId,
-            loopEnabled: loopEnabledRef.current,
-            loopCount: loopCountRef.current,
-            loopMaxIterations: loopMaxIterationsRef.current,
-            isFinished: isLoopFinished(data.content),
-            shouldContinueLoop,
-            contentPreview: data.content?.substring(0, 100),
-          })
-
           if (shouldContinueLoop && completedBranchId) {
-            // Increment loop count and trigger continuation
+            // Increment loop count and trigger continuation immediately
+            // Don't set status to idle - keep it running for seamless continuation
             const newLoopCount = loopCountRef.current + 1
             onUpdateBranch(completedBranchId, {
               loopCount: newLoopCount,
               lastActivity: "now",
               lastActivityTs: Date.now(),
             })
-            // Trigger loop continuation after a short delay to ensure state is updated
-            setTimeout(() => {
-              onLoopContinue?.(completedBranchId)
-            }, 500)
+            // Trigger loop continuation immediately
+            onLoopContinue?.(completedBranchId)
           } else {
             // Normal completion - set status to idle
             if (completedBranchId) {
