@@ -17,9 +17,9 @@ export function useRepoNavigation() {
   const pathname = usePathname()
 
   // Parse current repo from URL path
-  // Matches: /repos/:owner/:repo
+  // Matches: /repo/:owner/:repo
   const repoFromUrl = useMemo((): RepoFromUrl | null => {
-    const match = pathname.match(/^\/repos\/([^/]+)\/([^/]+)/)
+    const match = pathname.match(/^\/repo\/([^/]+)\/([^/]+)/)
     if (match) {
       return {
         owner: decodeURIComponent(match[1]),
@@ -33,7 +33,7 @@ export function useRepoNavigation() {
   const updateUrlToRepo = useCallback((owner: string, name: string) => {
     const encodedOwner = encodeURIComponent(owner)
     const encodedName = encodeURIComponent(name)
-    const newUrl = `/repos/${encodedOwner}/${encodedName}`
+    const newUrl = `/repo/${encodedOwner}/${encodedName}`
 
     // Use replaceState to update URL without reload
     // This keeps the URL in sync but doesn't trigger React re-render
