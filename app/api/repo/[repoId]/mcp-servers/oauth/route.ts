@@ -97,7 +97,7 @@ export async function GET(
     })
 
     // Check if we already have a client ID for this server (from previous registration)
-    let clientId = existing?.clientId || "sandboxed-agents"
+    let clientId = existing?.clientId || "upstream-agents"
 
     // Try dynamic client registration if we don't have a client ID yet
     if (!existing?.clientId && endpoints.registrationEndpoint) {

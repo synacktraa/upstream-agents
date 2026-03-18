@@ -12,7 +12,7 @@ export default function LoginPage() {
         </div>
 
         <div className="flex flex-col items-center gap-2 text-center">
-          <h1 className="text-2xl font-bold text-foreground">Sandboxed Agents</h1>
+          <h1 className="text-2xl font-bold text-foreground">Upstream Agents</h1>
           <p className="text-sm text-muted-foreground max-w-sm">
             Run Claude Code agents in isolated sandboxes connected to your GitHub repositories
           </p>

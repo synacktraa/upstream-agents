@@ -208,8 +208,8 @@ export const PATHS = {
 export const SANDBOX_CONFIG = {
   /** Default snapshot for sandbox creation */
   DEFAULT_SNAPSHOT: "daytona-medium",
-  /** Label key for identifying sandboxed-agents sandboxes */
-  LABEL_KEY: "sandboxed-agents",
+  /** Label key for identifying upstream-agents sandboxes */
+  LABEL_KEY: "upstream-agents",
   /** Default preview port */
   DEFAULT_PREVIEW_PORT: 3000,
   /** Timeout in seconds for starting sandbox */

@@ -141,7 +141,7 @@ export async function registerClient(
         token_endpoint_auth_method: "none", // Public client
         grant_types: ["authorization_code", "refresh_token"],
         response_types: ["code"],
-        client_name: "Sandboxed Agents",
+        client_name: "Upstream Agents",
         client_uri: process.env.NEXTAUTH_URL || "http://localhost:3000",
       }),
     })
@@ -323,7 +323,7 @@ export async function refreshMcpToken(serverId: string): Promise<boolean> {
   const endpoints = await getOAuthEndpoints(server.url)
 
   // Use stored client_id or default
-  const clientId = server.clientId || "sandboxed-agents"
+  const clientId = server.clientId || "upstream-agents"
 
   const tokens = await refreshAccessToken(endpoints.tokenEndpoint, refreshToken, clientId)
 

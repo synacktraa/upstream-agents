@@ -8,7 +8,7 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const jetbrainsMono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains" });
 
 export const metadata: Metadata = {
-  title: 'Sandboxed Agents',
+  title: 'Upstream Agents',
   description: 'A Slack-like interface for running AI coding agents on your GitHub repositories.',
   icons: {
     icon: '/favicon.ico',

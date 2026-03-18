@@ -2,7 +2,7 @@
 
 ## Overview
 
-Integrate remote MCP (Model Context Protocol) servers into the sandboxed-agents platform, allowing users to connect external tools and services (GitHub, Sentry, Notion, databases, etc.) that AI agents can use during coding sessions.
+Integrate remote MCP (Model Context Protocol) servers into the upstream-agents platform, allowing users to connect external tools and services (GitHub, Sentry, Notion, databases, etc.) that AI agents can use during coding sessions.
 
 ---
 

@@ -74,7 +74,7 @@ export async function GET(req: Request) {
       code,
       codeVerifier,
       callbackUrl,
-      clientId || "sandboxed-agents"
+      clientId || "upstream-agents"
     )
 
     if (!tokens) {
@@ -100,7 +100,7 @@ export async function GET(req: Request) {
     await prisma.repoMcpServer.update({
       where: { id: serverId },
       data: {
-        clientId: clientId || "sandboxed-agents",
+        clientId: clientId || "upstream-agents",
         accessToken: encrypt(tokens.access_token),
         refreshToken: tokens.refresh_token ? encrypt(tokens.refresh_token) : null,
         tokenExpiry,
