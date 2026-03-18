@@ -121,7 +121,8 @@ export async function ensureSandboxReady(
   }
 
   // Write MCP server configurations if any are configured for this repo
-  if (repoId && agent) {
+  // NOTE: OpenCode MCP config writing is currently disabled.
+  if (repoId && agent && agent !== "opencode") {
     t0 = Date.now()
     try {
       const mcpServers = await prisma.repoMcpServer.findMany({
