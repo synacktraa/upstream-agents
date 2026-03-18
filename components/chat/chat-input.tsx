@@ -190,33 +190,59 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
           </button>
         </div>
         <div className="mt-2 flex items-center justify-between">
-          {/* Left: Agent Dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger className="group flex items-center gap-1 px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground data-[state=open]:text-foreground cursor-pointer">
-              <AgentIcon agent={currentAgent} className="h-2.5 w-2.5 shrink-0" />
-              <span>{agentLabels[currentAgent]}</span>
-              <ChevronDown className="h-2.5 w-2.5 shrink-0 opacity-50 transition-transform duration-200 group-data-[state=open]:rotate-180" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" sideOffset={4} className="min-w-[160px] rounded-lg border border-border/60 py-0.5 shadow-md">
-              {(Object.keys(agentLabels) as Agent[]).map((agent) => (
-                <DropdownMenuItem
-                  key={agent}
-                  onClick={() => handleAgentChange(agent)}
-                  className="flex items-center justify-between py-1.5 text-[11px] cursor-pointer"
-                >
-                  <span className="flex items-center gap-1.5">
-                    <AgentIcon agent={agent} className="h-3 w-3 shrink-0" />
-                    {agentLabels[agent]}
-                  </span>
-                  {agent === currentAgent && <Check className="h-3.5 w-3.5 shrink-0 text-primary" />}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          {/* Right: Model Combobox + Loop Toggle */}
+          {/* Left: Agent Dropdown + Loop Toggle */}
           <div className="flex items-center gap-3">
-            <Popover open={modelOpen} onOpenChange={setModelOpen}>
+            <DropdownMenu>
+              <DropdownMenuTrigger className="group flex items-center gap-1 px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground data-[state=open]:text-foreground cursor-pointer">
+                <AgentIcon agent={currentAgent} className="h-2.5 w-2.5 shrink-0" />
+                <span>{agentLabels[currentAgent]}</span>
+                <ChevronDown className="h-2.5 w-2.5 shrink-0 opacity-50 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" sideOffset={4} className="min-w-[160px] rounded-lg border border-border/60 py-0.5 shadow-md">
+                {(Object.keys(agentLabels) as Agent[]).map((agent) => (
+                  <DropdownMenuItem
+                    key={agent}
+                    onClick={() => handleAgentChange(agent)}
+                    className="flex items-center justify-between py-1.5 text-[11px] cursor-pointer"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <AgentIcon agent={agent} className="h-3 w-3 shrink-0" />
+                      {agentLabels[agent]}
+                    </span>
+                    {agent === currentAgent && <Check className="h-3.5 w-3.5 shrink-0 text-primary" />}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Loop Toggle */}
+            <button
+              type="button"
+              onClick={handleLoopToggle}
+              className="flex items-center gap-1.5 cursor-pointer rounded px-1.5 py-0.5 -mr-1.5 hover:bg-muted/60 transition-colors"
+            >
+              <Switch
+                checked={branch.loopEnabled ?? false}
+                onCheckedChange={handleLoopToggle}
+                className="h-3 w-5 data-[state=checked]:bg-primary [&_[data-slot=switch-thumb]]:size-2.5"
+              />
+              <span className={cn(
+                "text-[11px] transition-colors",
+                branch.loopEnabled ? "text-foreground" : "text-muted-foreground"
+              )}>
+                Loop until finished
+              </span>
+              <span className={cn(
+                "inline-flex h-4 min-w-[2.25rem] items-center justify-center rounded px-1.5 text-[10px] tabular-nums font-medium transition-colors",
+                branch.loopEnabled ? "bg-primary/20 text-primary" : "text-transparent"
+              )}>
+                {branch.loopCount ?? 0}/{branch.loopMaxIterations ?? defaultLoopMaxIterations}
+              </span>
+            </button>
+          </div>
+
+          {/* Right: Model Combobox */}
+          <Popover open={modelOpen} onOpenChange={setModelOpen}>
               <PopoverTrigger className="group flex items-center gap-1 px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground data-[state=open]:text-foreground cursor-pointer">
                 <Sparkles className="h-2.5 w-2.5 shrink-0" />
                 <span>{getModelLabel(currentAgent, currentModel)}</span>
@@ -263,31 +289,6 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                 </Command>
               </PopoverContent>
             </Popover>
-
-            {/* Loop Toggle */}
-            <button
-              type="button"
-              onClick={handleLoopToggle}
-              className="flex items-center gap-1.5 cursor-pointer rounded px-1.5 py-0.5 -mr-1.5 hover:bg-muted/60 transition-colors"
-            >
-              <Switch
-                checked={branch.loopEnabled ?? false}
-                onCheckedChange={handleLoopToggle}
-                className="h-3 w-5 data-[state=checked]:bg-primary [&_[data-slot=switch-thumb]]:size-2.5"
-              />
-              <span className={cn(
-                "text-[11px] transition-colors",
-                branch.loopEnabled ? "text-foreground" : "text-muted-foreground"
-              )}>
-                Loop until finished
-              </span>
-              {branch.loopEnabled && (
-                <span className="rounded px-1.5 py-0.5 text-[10px] tabular-nums bg-primary/20 text-primary font-medium">
-                  {branch.loopCount ?? 0}/{branch.loopMaxIterations ?? defaultLoopMaxIterations}
-                </span>
-              )}
-            </button>
-          </div>
         </div>
       </div>
     )
