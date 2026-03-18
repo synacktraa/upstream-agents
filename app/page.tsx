@@ -29,12 +29,14 @@ import {
   useSyncData,
   useCrossDeviceSync,
   useIsMobile,
+  useRepoNavigation,
 } from "@/hooks"
 
 export default function Home() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const isMobile = useIsMobile()
+  const { repoFromUrl, navigateToRepo } = useRepoNavigation()
 
   // Core data state
   const {
@@ -57,10 +59,22 @@ export default function Home() {
     activeBranchIdRef,
     activeRepo,
     activeBranch,
-    selectRepo,
+    selectRepo: selectRepoInternal,
     selectBranch,
     setActiveBranchId,
-  } = useBranchSelection({ repos, loaded })
+  } = useBranchSelection({ repos, loaded, repoFromUrl })
+
+  // Wrap selectRepo to also update URL
+  const selectRepo = useCallback(
+    (repoId: string) => {
+      const repo = repos.find((r) => r.id === repoId)
+      if (repo) {
+        navigateToRepo(repo.owner, repo.name)
+      }
+      selectRepoInternal(repoId)
+    },
+    [repos, navigateToRepo, selectRepoInternal]
+  )
 
   // Repo operations
   const {
@@ -172,6 +186,22 @@ export default function Home() {
       router.push("/login")
     }
   }, [status, router])
+
+  // Redirect to home if URL repo is not found in user's repos
+  useEffect(() => {
+    if (!loaded || repos.length === 0 || !repoFromUrl) return
+
+    const matchingRepo = repos.find(
+      (r) =>
+        r.owner.toLowerCase() === repoFromUrl.owner.toLowerCase() &&
+        r.name.toLowerCase() === repoFromUrl.name.toLowerCase()
+    )
+
+    if (!matchingRepo) {
+      // URL repo not found, redirect to home
+      router.replace("/")
+    }
+  }, [loaded, repos, repoFromUrl, router])
 
   // Load messages when active branch changes
   useEffect(() => {
