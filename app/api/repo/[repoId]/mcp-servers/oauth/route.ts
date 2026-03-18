@@ -86,9 +86,15 @@ export async function GET(
     // Get OAuth endpoints via discovery or defaults
     const endpoints = await getOAuthEndpoints(url)
 
-    // Get callback URL
-    const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000"
+    // Get callback URL (remove trailing slash from baseUrl if present)
+    const baseUrl = (process.env.NEXTAUTH_URL || "http://localhost:3000").replace(/\/$/, "")
     const callbackUrl = `${baseUrl}/api/auth/mcp-callback`
+
+    console.log("[MCP OAuth] Endpoints discovered:", {
+      authorizationEndpoint: endpoints.authorizationEndpoint,
+      tokenEndpoint: endpoints.tokenEndpoint,
+      registrationEndpoint: endpoints.registrationEndpoint,
+    })
 
     // Check if we already have a client ID for this server (from previous registration)
     let clientId = existing?.clientId || "sandboxed-agents"
