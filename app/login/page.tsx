@@ -31,6 +31,15 @@ export default function LoginPage() {
         <p className="text-xs text-muted-foreground">
           We&apos;ll request access to your repositories for the agent to work with
         </p>
+
+        <a
+          href="https://github.com/jamesmurdza/upstreamagents"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          View on GitHub
+        </a>
       </div>
     </div>
   )
