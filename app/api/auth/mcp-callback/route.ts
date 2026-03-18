@@ -16,7 +16,8 @@ export async function GET(req: Request) {
   const error = searchParams.get("error")
   const errorDescription = searchParams.get("error_description")
 
-  const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000"
+  // Remove trailing slash to match the OAuth initiation route
+  const baseUrl = (process.env.NEXTAUTH_URL || "http://localhost:3000").replace(/\/$/, "")
 
   // Handle OAuth errors
   if (error) {

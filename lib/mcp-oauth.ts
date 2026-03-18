@@ -208,7 +208,12 @@ export async function exchangeCodeForTokens(
   token_type?: string
 } | null> {
   try {
-    console.log("[MCP OAuth] Exchanging code for tokens at", tokenEndpoint)
+    console.log("[MCP OAuth] Exchanging code for tokens at", tokenEndpoint, {
+      redirect_uri: redirectUri,
+      client_id: clientId,
+      code_length: code.length,
+      code_verifier_length: codeVerifier.length,
+    })
 
     const response = await fetch(tokenEndpoint, {
       method: "POST",
