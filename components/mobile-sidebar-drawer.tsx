@@ -7,7 +7,7 @@ import { generateId } from "@/lib/store"
 import { randomBranchName, validateBranchName } from "@/lib/branch-utils"
 import { BRANCH_STATUS } from "@/lib/constants"
 import { StatusDot } from "@/components/ui/status-dot"
-import { Plus, LogOut, Settings, Box, ChevronDown, Check, Loader2, GitBranch } from "lucide-react"
+import { Plus, LogOut, Settings, Box, ChevronDown, Check, Loader2, GitBranch, Trash2 } from "lucide-react"
 import { AgentIcon } from "@/components/icons/agent-icons"
 import { useState, useEffect, useCallback } from "react"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
@@ -37,6 +37,7 @@ import {
   CommandGroup,
   CommandItem,
 } from "@/components/ui/command"
+import { DeleteBranchDialog, useDeleteBranchDialog } from "@/components/delete-branch-dialog"
 
 interface Quota {
   current: number
@@ -64,6 +65,7 @@ interface MobileSidebarDrawerProps {
   onUpdateBranch?: (branchId: string, updates: Partial<Branch>) => void
   onQuotaRefresh?: () => void
   credentials?: UserCredentialFlags | null
+  onRemoveBranch?: (branchId: string, deleteRemote?: boolean) => void
 }
 
 export function MobileSidebarDrawer({
@@ -86,6 +88,7 @@ export function MobileSidebarDrawer({
   onUpdateBranch,
   onQuotaRefresh,
   credentials,
+  onRemoveBranch,
 }: MobileSidebarDrawerProps) {
   const [removeModalRepo, setRemoveModalRepo] = useState<Repo | null>(null)
   const [baseBranchOpen, setBaseBranchOpen] = useState(false)
@@ -97,6 +100,22 @@ export function MobileSidebarDrawer({
   const [githubBranchesLoading, setGithubBranchesLoading] = useState(false)
 
   const activeRepo = repos.find(r => r.id === activeRepoId)
+  const fallbackDeleteRepo: Repo = {
+    id: "__fallback__",
+    name: "",
+    owner: "",
+    avatar: "",
+    defaultBranch: "main",
+    branches: [],
+  }
+  const deleteDialogRepo = activeRepo ?? repos[0] ?? fallbackDeleteRepo
+
+  const deleteDialog = useDeleteBranchDialog({
+    repo: deleteDialogRepo,
+    onRemoveBranch: onRemoveBranch ?? (() => {}),
+  })
+
+  const canDeleteBranch = !!activeRepo && !!onRemoveBranch
 
   // Reset create branch UI when repo changes
   useEffect(() => {
@@ -492,35 +511,62 @@ export function MobileSidebarDrawer({
                     const isActive = branch.id === activeBranchId
                     const isBold = branch.status === BRANCH_STATUS.RUNNING || branch.status === BRANCH_STATUS.CREATING || (branch.unread && !isActive)
                     return (
-                      <button
-                        key={branch.id}
-                        onClick={() => handleSelectBranch(branch.id)}
-                        className={cn(
-                          "flex w-full cursor-pointer items-center gap-2.5 px-4 py-2.5 text-left transition-colors",
-                          isActive
-                            ? "bg-accent text-foreground"
-                            : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                      <div key={branch.id} className="group relative">
+                        <button
+                          onClick={() => handleSelectBranch(branch.id)}
+                          className={cn(
+                            "flex w-full cursor-pointer items-center gap-2.5 px-4 pr-10 py-2.5 text-left transition-colors",
+                            isActive
+                              ? "bg-accent text-foreground"
+                              : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                          )}
+                        >
+                          <StatusDot status={branch.status} unread={branch.unread} isActive={isActive} />
+                          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                            <span
+                              className={cn(
+                                "truncate text-sm",
+                                isBold ? "font-semibold text-foreground" : "font-medium"
+                              )}
+                            >
+                              {branch.name}
+                            </span>
+                            <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                              <AgentIcon agent={branch.agent || "claude-code"} className="h-2 w-2" />
+                              {branch.status === BRANCH_STATUS.CREATING
+                                ? "Setting up..."
+                                : agentLabels[branch.agent || "claude-code"]}
+                            </span>
+                          </div>
+                        </button>
+
+                        {canDeleteBranch && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              deleteDialog.handleDeleteClick(branch.id)
+                            }}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 flex h-5 w-5 cursor-pointer items-center justify-center rounded text-muted-foreground/60 transition-colors hover:bg-muted-foreground/10 hover:text-foreground"
+                            title="Delete branch"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
                         )}
-                      >
-                        <StatusDot status={branch.status} unread={branch.unread} isActive={isActive} />
-                        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                          <span className={cn(
-                            "truncate text-sm",
-                            isBold ? "font-semibold text-foreground" : "font-medium"
-                          )}>
-                            {branch.name}
-                          </span>
-                          <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                            <AgentIcon agent={branch.agent || "claude-code"} className="h-2 w-2" />
-                            {branch.status === BRANCH_STATUS.CREATING ? "Setting up..." : agentLabels[branch.agent || "claude-code"]}
-                          </span>
-                        </div>
-                      </button>
+                      </div>
                     )
                   })}
                 </div>
               )}
             </div>
+
+            {/* Delete confirmation modal */}
+            <DeleteBranchDialog
+              branch={deleteDialog.deletingBranch}
+              repo={deleteDialogRepo}
+              onClose={deleteDialog.handleClose}
+              onConfirm={deleteDialog.handleConfirm}
+            />
 
             {/* Quota display */}
             {quota && (

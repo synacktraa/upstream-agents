@@ -338,6 +338,7 @@ export default function Home() {
             onUpdateBranch={handleUpdateBranch}
             onQuotaRefresh={refreshQuota}
             credentials={credentials}
+            onRemoveBranch={(branchId, deleteRemote) => handleRemoveBranch(branchId, deleteRemote, activeBranchId ?? undefined)}
           />
         )}
 
