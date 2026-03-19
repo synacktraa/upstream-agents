@@ -63,6 +63,7 @@ export function BranchList({
 }: BranchListProps) {
   const [search, setSearch] = useState("")
   const [baseBranchOpen, setBaseBranchOpen] = useState(false)
+  const [branchSearch, setBranchSearch] = useState("")
   const [newBranchBase, setNewBranchBase] = useState(repo.defaultBranch || "main")
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
@@ -122,6 +123,7 @@ export function BranchList({
   const handleBaseBranchOpenChange = useCallback((open: boolean) => {
     setBaseBranchOpen(open)
     if (open) {
+      setBranchSearch("")
       fetchGithubBranches()
     }
   }, [fetchGithubBranches])
@@ -406,8 +408,13 @@ export function BranchList({
               <ChevronDown className="h-2.5 w-2.5 shrink-0 opacity-50 transition-transform duration-200 group-data-[state=open]:rotate-180" />
             </PopoverTrigger>
             <PopoverContent align="start" sideOffset={4} className="w-[220px] p-0">
-              <Command>
-                <CommandInput placeholder="Search branches..." className="h-8 text-[11px]" />
+              <Command shouldFilter={false}>
+                <CommandInput
+                  placeholder="Search branches..."
+                  className="h-8 text-[11px]"
+                  value={branchSearch}
+                  onValueChange={setBranchSearch}
+                />
                 <CommandList>
                   {githubBranchesLoading ? (
                     <div className="flex items-center justify-center gap-2 py-6 text-[11px] text-muted-foreground">
@@ -416,60 +423,72 @@ export function BranchList({
                     </div>
                   ) : (
                     <>
-                      <CommandEmpty className="py-3 px-3 text-[11px] text-center text-muted-foreground">
-                        No branches found.
-                      </CommandEmpty>
-                      <CommandGroup>
-                        {(() => {
-                          const defaultBranch = repo.defaultBranch || "main"
-                          const allBranches = githubBranches.length > 0 ? githubBranches : [defaultBranch]
+                      {(() => {
+                        const defaultBranch = repo.defaultBranch || "main"
+                        const allBranches = githubBranches.length > 0 ? githubBranches : [defaultBranch]
 
-                          // Get the base branch of the currently active sandbox
-                          const activeBranch = activeBranchId
-                            ? repo.branches.find((b) => b.id === activeBranchId)
-                            : null
-                          const currentBranch = activeBranch?.baseBranch || null
+                        // Get the base branch of the currently active sandbox
+                        const activeBranch = activeBranchId
+                          ? repo.branches.find((b) => b.id === activeBranchId)
+                          : null
+                        const currentBranch = activeBranch?.baseBranch || null
 
-                          // Sort: default branch first, then current branch (if different), then rest alphabetically
-                          const sortedBranches = [...allBranches].sort((a, b) => {
-                            if (a === defaultBranch) return -1
-                            if (b === defaultBranch) return 1
-                            if (a === currentBranch) return -1
-                            if (b === currentBranch) return 1
-                            return a.localeCompare(b)
-                          })
+                        // Filter by search term
+                        const filteredBranches = branchSearch
+                          ? allBranches.filter(b => b.toLowerCase().includes(branchSearch.toLowerCase()))
+                          : allBranches
 
-                          return sortedBranches.map((branch) => {
-                            const isDefault = branch === defaultBranch
-                            const isSelected = branch === newBranchBase
-                            const isCurrent = branch === currentBranch
+                        // Sort: default branch first, then current branch (if different), then rest alphabetically
+                        const sortedBranches = [...filteredBranches].sort((a, b) => {
+                          if (a === defaultBranch) return -1
+                          if (b === defaultBranch) return 1
+                          if (a === currentBranch) return -1
+                          if (b === currentBranch) return 1
+                          return a.localeCompare(b)
+                        })
 
-                            return (
-                              <CommandItem
-                                key={branch}
-                                value={branch}
-                                onSelect={() => {
-                                  setNewBranchBase(branch)
-                                  setBaseBranchOpen(false)
-                                }}
-                                className="flex items-center justify-between text-[11px] cursor-pointer"
-                              >
-                                <span className="flex items-center gap-1.5">
-                                  <GitBranch className="h-3 w-3 shrink-0" />
-                                  <span>{branch}</span>
-                                  {isDefault && (
-                                    <span className="text-[9px] px-1 py-0.5 rounded bg-muted text-muted-foreground">default</span>
-                                  )}
-                                  {isCurrent && !isDefault && (
-                                    <span className="text-[9px] px-1 py-0.5 rounded bg-primary/10 text-primary">current</span>
-                                  )}
-                                </span>
-                                {isSelected && <Check className="h-3.5 w-3.5 shrink-0 text-primary" />}
-                              </CommandItem>
-                            )
-                          })
-                        })()}
-                      </CommandGroup>
+                        if (sortedBranches.length === 0) {
+                          return (
+                            <div className="py-3 px-3 text-[11px] text-center text-muted-foreground">
+                              No branches found.
+                            </div>
+                          )
+                        }
+
+                        return (
+                          <CommandGroup>
+                            {sortedBranches.map((branch) => {
+                              const isDefault = branch === defaultBranch
+                              const isSelected = branch === newBranchBase
+                              const isCurrent = branch === currentBranch
+
+                              return (
+                                <CommandItem
+                                  key={branch}
+                                  value={branch}
+                                  onSelect={() => {
+                                    setNewBranchBase(branch)
+                                    setBaseBranchOpen(false)
+                                  }}
+                                  className="flex items-center justify-between text-[11px] cursor-pointer"
+                                >
+                                  <span className="flex items-center gap-1.5">
+                                    <GitBranch className="h-3 w-3 shrink-0" />
+                                    <span>{branch}</span>
+                                    {isDefault && (
+                                      <span className="text-[9px] px-1 py-0.5 rounded bg-muted text-muted-foreground">default</span>
+                                    )}
+                                    {isCurrent && !isDefault && (
+                                      <span className="text-[9px] px-1 py-0.5 rounded bg-primary/10 text-primary">current</span>
+                                    )}
+                                  </span>
+                                  {isSelected && <Check className="h-3.5 w-3.5 shrink-0 text-primary" />}
+                                </CommandItem>
+                              )
+                            })}
+                          </CommandGroup>
+                        )
+                      })()}
                     </>
                   )}
                 </CommandList>
