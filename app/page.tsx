@@ -15,6 +15,7 @@ import { AddRepoModal } from "@/components/add-repo-modal"
 import { MobileHeader } from "@/components/mobile-header"
 import { MobileSidebarDrawer } from "@/components/mobile-sidebar-drawer"
 import { DiffModal } from "@/components/diff-modal"
+import { MobileGitDialogs } from "@/components/mobile-git-dialogs"
 import { BRANCH_STATUS } from "@/lib/constants"
 import { Loader2 } from "lucide-react"
 
@@ -514,6 +515,24 @@ export default function Home() {
           repoName={activeRepo.name}
           branchName={activeBranch.name}
           baseBranch={activeBranch.baseBranch || activeRepo.defaultBranch}
+        />
+      )}
+
+      {/* Mobile Git Dialogs (Merge, Rebase, Tag, Reset) */}
+      {isMobile && activeRepo && activeBranch && activeBranch.sandboxId && (
+        <MobileGitDialogs
+          branch={activeBranch}
+          repoOwner={activeRepo.owner}
+          repoName={activeRepo.name}
+          mergeOpen={mobileUI.mobileMergeOpen}
+          rebaseOpen={mobileUI.mobileRebaseOpen}
+          tagOpen={mobileUI.mobileTagOpen}
+          resetOpen={mobileUI.mobileResetOpen}
+          onMergeClose={() => mobileUI.setMobileMergeOpen(false)}
+          onRebaseClose={() => mobileUI.setMobileRebaseOpen(false)}
+          onTagClose={() => mobileUI.setMobileTagOpen(false)}
+          onResetClose={() => mobileUI.setMobileResetOpen(false)}
+          onAddMessage={handleAddMessage}
         />
       )}
     </>
