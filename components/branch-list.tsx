@@ -8,10 +8,23 @@ import { randomBranchName, validateBranchName } from "@/lib/branch-utils"
 import { BRANCH_STATUS } from "@/lib/constants"
 import { StatusDot } from "@/components/ui/status-dot"
 import { DeleteBranchDialog, useDeleteBranchDialog } from "@/components/delete-branch-dialog"
-import { GitBranch, Plus, Search, ChevronDown, Loader2, X, Settings } from "lucide-react"
+import { GitBranch, Plus, Search, ChevronDown, Loader2, X, Settings, Check } from "lucide-react"
 import { AgentIcon } from "@/components/icons/agent-icons"
 import { Input } from "@/components/ui/input"
 import { useState, useRef, useEffect, useCallback } from "react"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import {
+  Command,
+  CommandInput,
+  CommandList,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+} from "@/components/ui/command"
 
 interface BranchListProps {
   repo: Repo
@@ -49,10 +62,7 @@ export function BranchList({
   onOpenRepoSettings,
 }: BranchListProps) {
   const [search, setSearch] = useState("")
-  const [branchFromOpen, setBranchFromOpen] = useState(false)
-  const [newBranchOpen, setNewBranchOpen] = useState(false)
-  const [newBranchName, setNewBranchName] = useState("")
-  const [branchPlaceholder, setBranchPlaceholder] = useState(() => randomBranchName())
+  const [baseBranchOpen, setBaseBranchOpen] = useState(false)
   const [newBranchBase, setNewBranchBase] = useState(repo.defaultBranch || "main")
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
@@ -60,8 +70,6 @@ export function BranchList({
   const [githubBranches, setGithubBranches] = useState<string[]>([])
   const [githubBranchesLoading, setGithubBranchesLoading] = useState(false)
   const isResizing = useRef(false)
-  const dropdownRef = useRef<HTMLDivElement>(null)
-  const newBranchInputRef = useRef<HTMLInputElement>(null)
 
   const filtered = repo.branches
     .filter((b) => b.name.toLowerCase().includes(search.toLowerCase()))
@@ -90,31 +98,19 @@ export function BranchList({
     }
   }, [onWidthChange])
 
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setBranchFromOpen(false)
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside)
-    return () => document.removeEventListener("mousedown", handleClickOutside)
-  }, [])
-
-  useEffect(() => {
-    if (newBranchOpen && newBranchInputRef.current) {
-      newBranchInputRef.current.focus()
-    }
-  }, [newBranchOpen])
 
   // Reset create branch UI when repo changes
   useEffect(() => {
-    setNewBranchOpen(false)
-    setNewBranchName("")
     setCreateError(null)
     setStartCommit(null)
     setNewBranchBase(repo.defaultBranch || "main")
     setGithubBranches([])
   }, [repo.id, repo.defaultBranch])
+
+  // Fetch github branches on mount
+  useEffect(() => {
+    fetchGithubBranches()
+  }, [repo.owner, repo.name])
 
   const fetchGithubBranches = useCallback(async () => {
     setGithubBranchesLoading(true)
@@ -134,13 +130,12 @@ export function BranchList({
   // Open new branch dialog when a commit is selected from git history
   useEffect(() => {
     if (pendingStartCommit) {
-      setNewBranchOpen(true)
-      setBranchPlaceholder(randomBranchName())
       setStartCommit(pendingStartCommit)
       onClearPendingCommit?.()
-      fetchGithubBranches()
+      // Auto-create branch from the selected commit
+      handleCreateBranch(pendingStartCommit)
     }
-  }, [pendingStartCommit, onClearPendingCommit, fetchGithubBranches])
+  }, [pendingStartCommit, onClearPendingCommit])
 
   // Delete branch dialog hook - handles pre-check and state
   const deleteDialog = useDeleteBranchDialog({ repo, onRemoveBranch })
