@@ -118,13 +118,13 @@ export function BranchList({
     }
   }, [repo.owner, repo.name])
 
-  // Fetch github branches when dropdown opens (lazy load)
+  // Fetch github branches every time dropdown opens (to get fresh list)
   const handleBaseBranchOpenChange = useCallback((open: boolean) => {
     setBaseBranchOpen(open)
-    if (open && githubBranches.length === 0) {
+    if (open) {
       fetchGithubBranches()
     }
-  }, [githubBranches.length, fetchGithubBranches])
+  }, [fetchGithubBranches])
 
   // Delete branch dialog hook - handles pre-check and state
   const deleteDialog = useDeleteBranchDialog({ repo, onRemoveBranch })
@@ -409,53 +409,62 @@ export function BranchList({
               <Command>
                 <CommandInput placeholder="Search branches..." className="h-8 text-[11px]" />
                 <CommandList>
-                  <CommandEmpty className="py-3 px-3 text-[11px] text-center text-muted-foreground">
-                    {githubBranchesLoading ? "Loading branches..." : "No branches found."}
-                  </CommandEmpty>
-                  <CommandGroup>
-                    {(() => {
-                      const defaultBranch = repo.defaultBranch || "main"
-                      const allBranches = githubBranches.length > 0 ? githubBranches : [defaultBranch]
+                  {githubBranchesLoading ? (
+                    <div className="flex items-center justify-center gap-2 py-6 text-[11px] text-muted-foreground">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <span>Loading branches...</span>
+                    </div>
+                  ) : (
+                    <>
+                      <CommandEmpty className="py-3 px-3 text-[11px] text-center text-muted-foreground">
+                        No branches found.
+                      </CommandEmpty>
+                      <CommandGroup>
+                        {(() => {
+                          const defaultBranch = repo.defaultBranch || "main"
+                          const allBranches = githubBranches.length > 0 ? githubBranches : [defaultBranch]
 
-                      // Sort: default branch first, then selected branch (if different), then rest alphabetically
-                      const sortedBranches = [...allBranches].sort((a, b) => {
-                        if (a === defaultBranch) return -1
-                        if (b === defaultBranch) return 1
-                        if (a === newBranchBase) return -1
-                        if (b === newBranchBase) return 1
-                        return a.localeCompare(b)
-                      })
+                          // Sort: default branch first, then selected branch (if different), then rest alphabetically
+                          const sortedBranches = [...allBranches].sort((a, b) => {
+                            if (a === defaultBranch) return -1
+                            if (b === defaultBranch) return 1
+                            if (a === newBranchBase) return -1
+                            if (b === newBranchBase) return 1
+                            return a.localeCompare(b)
+                          })
 
-                      return sortedBranches.map((branch) => {
-                        const isDefault = branch === defaultBranch
-                        const isSelected = branch === newBranchBase
+                          return sortedBranches.map((branch) => {
+                            const isDefault = branch === defaultBranch
+                            const isSelected = branch === newBranchBase
 
-                        return (
-                          <CommandItem
-                            key={branch}
-                            value={branch}
-                            onSelect={() => {
-                              setNewBranchBase(branch)
-                              setBaseBranchOpen(false)
-                            }}
-                            className="flex items-center justify-between text-[11px] cursor-pointer"
-                          >
-                            <span className="flex items-center gap-1.5">
-                              <GitBranch className="h-3 w-3 shrink-0" />
-                              <span>{branch}</span>
-                              {isDefault && (
-                                <span className="text-[9px] px-1 py-0.5 rounded bg-muted text-muted-foreground">default</span>
-                              )}
-                              {isSelected && !isDefault && (
-                                <span className="text-[9px] px-1 py-0.5 rounded bg-primary/10 text-primary">selected</span>
-                              )}
-                            </span>
-                            {isSelected && <Check className="h-3.5 w-3.5 shrink-0 text-primary" />}
-                          </CommandItem>
-                        )
-                      })
-                    })()}
-                  </CommandGroup>
+                            return (
+                              <CommandItem
+                                key={branch}
+                                value={branch}
+                                onSelect={() => {
+                                  setNewBranchBase(branch)
+                                  setBaseBranchOpen(false)
+                                }}
+                                className="flex items-center justify-between text-[11px] cursor-pointer"
+                              >
+                                <span className="flex items-center gap-1.5">
+                                  <GitBranch className="h-3 w-3 shrink-0" />
+                                  <span>{branch}</span>
+                                  {isDefault && (
+                                    <span className="text-[9px] px-1 py-0.5 rounded bg-muted text-muted-foreground">default</span>
+                                  )}
+                                  {isSelected && !isDefault && (
+                                    <span className="text-[9px] px-1 py-0.5 rounded bg-primary/10 text-primary">selected</span>
+                                  )}
+                                </span>
+                                {isSelected && <Check className="h-3.5 w-3.5 shrink-0 text-primary" />}
+                              </CommandItem>
+                            )
+                          })
+                        })()}
+                      </CommandGroup>
+                    </>
+                  )}
                 </CommandList>
               </Command>
             </PopoverContent>
