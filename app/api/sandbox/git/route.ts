@@ -413,32 +413,57 @@ export async function POST(req: Request) {
         if (renameBranchError) {
           return badRequest(renameBranchError)
         }
+
+        // Track whether branch exists on GitHub (for setting upstream later)
+        let branchExistsOnGitHub = false
+
+        // Try to rename on GitHub first via API
+        // This ensures GitHub and sandbox stay in sync - if GitHub fails, we haven't touched local
+        if (githubToken && repoOwner && repoApiName) {
+          const renameRes = await fetch(
+            `https://api.github.com/repos/${repoOwner}/${repoApiName}/branches/${currentBranch}/rename`,
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${githubToken}`,
+                Accept: "application/vnd.github.v3+json",
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ new_name: newName }),
+            }
+          )
+          if (renameRes.ok) {
+            branchExistsOnGitHub = true
+          } else if (renameRes.status !== 404) {
+            // 404 means branch doesn't exist on GitHub yet - that's okay, we'll push after local rename
+            // Any other error is a real failure
+            const errorData = await renameRes.json().catch(() => ({}))
+            const errorMessage = (errorData as { message?: string }).message || `Status ${renameRes.status}`
+            return Response.json(
+              { error: `GitHub rename failed: ${errorMessage}` },
+              { status: renameRes.status }
+            )
+          }
+        }
+
+        // Rename local branch
         const renameResult = await sandbox.process.executeCommand(
           `cd ${repoPath} && git branch -m ${currentBranch} ${newName} 2>&1`
         )
         if (renameResult.exitCode) {
-          return Response.json({ error: "Rename failed: " + renameResult.result }, { status: 500 })
+          return Response.json({ error: "Local rename failed: " + renameResult.result }, { status: 500 })
         }
-        // Push new branch name and delete old remote branch
+
+        // If branch existed on GitHub, set upstream tracking
+        // If branch didn't exist on GitHub, push the newly renamed branch
         if (githubToken) {
-          // Verify we're on the newly renamed branch before pushing
-          const renameVerifyStatus = await sandbox.git.status(repoPath)
-          if (renameVerifyStatus.currentBranch !== newName) {
-            return badRequest(`Branch mismatch after rename: expected ${newName} but on ${renameVerifyStatus.currentBranch}`)
-          }
-          await sandbox.git.push(repoPath, "x-access-token", githubToken)
-          // Delete old remote branch (best effort)
-          if (repoOwner && repoApiName) {
-            await fetch(
-              `https://api.github.com/repos/${repoOwner}/${repoApiName}/git/refs/heads/${currentBranch}`,
-              {
-                method: "DELETE",
-                headers: {
-                  Authorization: `Bearer ${githubToken}`,
-                  Accept: "application/vnd.github.v3+json",
-                },
-              }
-            ).catch(() => {})
+          if (branchExistsOnGitHub) {
+            await sandbox.process.executeCommand(
+              `cd ${repoPath} && git branch -u origin/${newName} 2>&1`
+            )
+          } else {
+            // Branch doesn't exist on GitHub yet - push with upstream tracking
+            await sandbox.git.push(repoPath, "x-access-token", githubToken)
           }
         }
 
