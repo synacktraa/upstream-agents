@@ -122,7 +122,7 @@ export function MergeDialog({
           <button
             onClick={onMerge}
             disabled={!selectedBranch || actionLoading}
-            className="cursor-pointer flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            className="cursor-pointer flex items-center justify-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
             {actionLoading && <Loader2 className="h-3 w-3 animate-spin" />}
             Merge

@@ -217,7 +217,7 @@ export function DeleteBranchDialog({
           <button
             onClick={handleConfirm}
             disabled={isDeleting || mergeStatus === MERGE_STATUS.LOADING}
-            className="rounded-md bg-destructive px-3 py-1.5 text-xs font-medium text-destructive-foreground transition-colors hover:bg-destructive/90 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+            className="rounded-md bg-destructive px-3 py-1.5 text-xs font-medium text-destructive-foreground transition-colors hover:bg-destructive/90 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
           >
             {isDeleting && <Loader2 className="h-3 w-3 animate-spin" />}
             Remove

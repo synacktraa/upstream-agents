@@ -80,7 +80,7 @@ export function SwitchAgentDialog({
           </button>
           <button
             onClick={handleConfirm}
-            className="rounded-md bg-destructive px-3 py-1.5 text-xs font-medium text-destructive-foreground transition-colors hover:bg-destructive/90 cursor-pointer"
+            className="flex items-center justify-center rounded-md bg-destructive px-3 py-1.5 text-xs font-medium text-destructive-foreground transition-colors hover:bg-destructive/90 cursor-pointer"
           >
             Switch Agent
           </button>
