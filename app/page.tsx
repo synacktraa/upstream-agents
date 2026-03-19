@@ -392,6 +392,7 @@ export default function Home() {
               gitHistoryOpen={gitHistoryOpen}
               sandboxToggleLoading={mobileUI.mobileSandboxToggleLoading}
               prLoading={mobileUI.mobilePrLoading}
+              onUpdateBranch={handleUpdateBranch}
             />
 
             {/* Chat content */}

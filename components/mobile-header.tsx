@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils"
 import type { Branch } from "@/lib/types"
-import { BRANCH_STATUS } from "@/lib/constants"
+import { BRANCH_STATUS, PATHS } from "@/lib/constants"
 import {
   Menu,
   GitPullRequest,
@@ -15,6 +15,9 @@ import {
   GitMerge,
   GitCompareArrows,
   Tag,
+  Pencil,
+  Check,
+  X,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -23,6 +26,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { useCallback, useEffect, useState } from "react"
 
 interface MobileHeaderProps {
   repoOwner: string | null
@@ -39,6 +43,7 @@ interface MobileHeaderProps {
   gitHistoryOpen: boolean
   sandboxToggleLoading: boolean
   prLoading: boolean
+  onUpdateBranch: (branchId: string, updates: Partial<Branch>) => void
 }
 
 export function MobileHeader({
@@ -56,11 +61,81 @@ export function MobileHeader({
   gitHistoryOpen,
   sandboxToggleLoading,
   prLoading,
+  onUpdateBranch,
 }: MobileHeaderProps) {
   const isStopped = branch?.status === BRANCH_STATUS.STOPPED
   const isRunning = branch?.status === BRANCH_STATUS.RUNNING || branch?.status === BRANCH_STATUS.CREATING
   const hasPR = !!branch?.prUrl
   const hasSandbox = !!branch?.sandboxId
+
+  const [renaming, setRenaming] = useState(false)
+  const [renameValue, setRenameValue] = useState("")
+  const [renameLoading, setRenameLoading] = useState(false)
+  const [renameError, setRenameError] = useState<string | null>(null)
+
+  const canRename = !!branch?.sandboxId && !isRunning
+
+  useEffect(() => {
+    // If branch changes while renaming, cancel so we don't rename the wrong one.
+    setRenaming(false)
+    setRenameValue("")
+    setRenameError(null)
+    setRenameLoading(false)
+  }, [branch?.id])
+
+  const startRenaming = useCallback(() => {
+    if (!branch || !canRename || renameLoading) return
+    setRenaming(true)
+    setRenameValue(branch.name)
+    setRenameError(null)
+  }, [branch, canRename, renameLoading])
+
+  const cancelRenaming = useCallback(() => {
+    if (renameLoading) return
+    setRenaming(false)
+    setRenameValue("")
+    setRenameError(null)
+  }, [renameLoading])
+
+  const submitRenaming = useCallback(async () => {
+    if (!branch || !repoOwner || !repoName || !branch.sandboxId) return
+    if (!canRename || renameLoading) return
+
+    const newName = renameValue.trim()
+    if (!newName || newName === branch.name) return
+
+    setRenameLoading(true)
+    setRenameError(null)
+
+    try {
+      const res = await fetch("/api/sandbox/git", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sandboxId: branch.sandboxId,
+          repoPath: `${PATHS.SANDBOX_HOME}/${repoName}`,
+          action: "rename-branch",
+          currentBranch: branch.name,
+          newBranchName: newName,
+          repoOwner,
+          repoApiName: repoName,
+        }),
+      })
+
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error((data as { error?: string; message?: string }).error || (data as { error?: string; message?: string }).message || `Rename failed (${res.status})`)
+      }
+
+      onUpdateBranch(branch.id, { name: newName })
+      setRenaming(false)
+      setRenameValue("")
+    } catch (err: unknown) {
+      setRenameError(err instanceof Error ? err.message : "Failed to rename branch")
+    } finally {
+      setRenameLoading(false)
+    }
+  }, [branch, repoOwner, repoName, canRename, renameLoading, renameValue, onUpdateBranch])
 
   return (
     <header
@@ -87,9 +162,80 @@ export function MobileHeader({
                 <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="shrink-0 text-muted-foreground">
                   <path fillRule="evenodd" d="M11.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zm-2.25.75a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.493 2.493 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25zM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zM3.5 3.25a.75.75 0 1 1 1.5 0 .75.75 0 0 1-1.5 0z" />
                 </svg>
-                <span className="text-sm font-medium text-foreground truncate font-mono">
-                  {branch.name}
-                </span>
+                {renaming ? (
+                  <div className="flex min-w-0 flex-col">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <input
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault()
+                            submitRenaming()
+                          }
+                          if (e.key === "Escape") {
+                            e.preventDefault()
+                            cancelRenaming()
+                          }
+                        }}
+                        autoFocus
+                        disabled={renameLoading}
+                        className="h-7 bg-transparent border border-border/30 rounded px-1.5 text-sm font-mono text-foreground focus:outline-none focus:border-border/60 disabled:text-muted-foreground min-w-[6ch]"
+                      />
+                      {renameLoading ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground shrink-0" />
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              submitRenaming()
+                            }}
+                            disabled={!renameValue.trim()}
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50 disabled:pointer-events-none"
+                            title="Save"
+                          >
+                            <Check className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              cancelRenaming()
+                            }}
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50 disabled:pointer-events-none"
+                            title="Cancel"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                    {renameError && (
+                      <span className="mt-1 text-[10px] text-red-400 ml-1.5 truncate max-w-[16rem]">
+                        {renameError}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <span className="text-sm font-medium text-foreground truncate font-mono">
+                      {branch.name}
+                    </span>
+                    {canRename && (
+                      <button
+                        type="button"
+                        onClick={startRenaming}
+                        disabled={renameLoading}
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50 disabled:pointer-events-none"
+                        title="Rename branch"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                )}
                 {isRunning && (
                   <Loader2 className="h-3 w-3 animate-spin text-primary shrink-0" />
                 )}
