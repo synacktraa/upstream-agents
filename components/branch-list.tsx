@@ -413,23 +413,48 @@ export function BranchList({
                     {githubBranchesLoading ? "Loading branches..." : "No branches found."}
                   </CommandEmpty>
                   <CommandGroup>
-                    {(githubBranches.length > 0 ? githubBranches : [repo.defaultBranch || "main"]).map((branch) => (
-                      <CommandItem
-                        key={branch}
-                        value={branch}
-                        onSelect={() => {
-                          setNewBranchBase(branch)
-                          setBaseBranchOpen(false)
-                        }}
-                        className="flex items-center justify-between text-[11px] cursor-pointer"
-                      >
-                        <span className="flex items-center gap-1.5">
-                          <GitBranch className="h-3 w-3 shrink-0" />
-                          {branch}
-                        </span>
-                        {branch === newBranchBase && <Check className="h-3.5 w-3.5 shrink-0 text-primary" />}
-                      </CommandItem>
-                    ))}
+                    {(() => {
+                      const defaultBranch = repo.defaultBranch || "main"
+                      const allBranches = githubBranches.length > 0 ? githubBranches : [defaultBranch]
+
+                      // Sort: default branch first, then selected branch (if different), then rest alphabetically
+                      const sortedBranches = [...allBranches].sort((a, b) => {
+                        if (a === defaultBranch) return -1
+                        if (b === defaultBranch) return 1
+                        if (a === newBranchBase) return -1
+                        if (b === newBranchBase) return 1
+                        return a.localeCompare(b)
+                      })
+
+                      return sortedBranches.map((branch) => {
+                        const isDefault = branch === defaultBranch
+                        const isSelected = branch === newBranchBase
+
+                        return (
+                          <CommandItem
+                            key={branch}
+                            value={branch}
+                            onSelect={() => {
+                              setNewBranchBase(branch)
+                              setBaseBranchOpen(false)
+                            }}
+                            className="flex items-center justify-between text-[11px] cursor-pointer"
+                          >
+                            <span className="flex items-center gap-1.5">
+                              <GitBranch className="h-3 w-3 shrink-0" />
+                              <span>{branch}</span>
+                              {isDefault && (
+                                <span className="text-[9px] px-1 py-0.5 rounded bg-muted text-muted-foreground">default</span>
+                              )}
+                              {isSelected && !isDefault && (
+                                <span className="text-[9px] px-1 py-0.5 rounded bg-primary/10 text-primary">selected</span>
+                              )}
+                            </span>
+                            {isSelected && <Check className="h-3.5 w-3.5 shrink-0 text-primary" />}
+                          </CommandItem>
+                        )
+                      })
+                    })()}
                   </CommandGroup>
                 </CommandList>
               </Command>
