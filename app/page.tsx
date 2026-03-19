@@ -389,7 +389,6 @@ export default function Home() {
               onSandboxToggle={handleMobileSandboxToggle}
               onMerge={() => mobileGitDialogs.setMergeOpen(true)}
               onRebase={() => mobileGitDialogs.setRebaseOpen(true)}
-              onTag={() => mobileGitDialogs.setTagOpen(true)}
               gitHistoryOpen={gitHistoryOpen}
               sandboxToggleLoading={mobileUI.mobileSandboxToggleLoading}
               prLoading={mobileUI.mobilePrLoading}

@@ -9,7 +9,6 @@ import {
   Loader2,
   GitMerge,
   GitCompareArrows,
-  Tag,
   History,
   Diff,
   FolderSync,
@@ -33,7 +32,6 @@ const headerActions = [
   { icon: GitPullRequest, label: "Create PR", action: "create-pr" },
   { icon: GitMerge, label: "Merge", action: "merge" },
   { icon: GitCompareArrows, label: "Rebase", action: "rebase" },
-  { icon: Tag, label: "Tag", action: "tag" },
   { icon: Diff, label: "Diff", action: "diff" },
   { icon: History, label: "Log", action: "log" },
 ]

@@ -14,7 +14,6 @@ import {
   MoreVertical,
   GitMerge,
   GitCompareArrows,
-  Tag,
   Pencil,
   Check,
   X,
@@ -40,7 +39,6 @@ interface MobileHeaderProps {
   onSandboxToggle: () => void
   onMerge: () => void
   onRebase: () => void
-  onTag: () => void
   gitHistoryOpen: boolean
   sandboxToggleLoading: boolean
   prLoading: boolean
@@ -59,7 +57,6 @@ export function MobileHeader({
   onSandboxToggle,
   onMerge,
   onRebase,
-  onTag,
   gitHistoryOpen,
   sandboxToggleLoading,
   prLoading,
@@ -421,11 +418,6 @@ export function MobileHeader({
                     Rebase
                   </DropdownMenuItem>
 
-                  {/* Tag */}
-                  <DropdownMenuItem onClick={onTag} className="cursor-pointer">
-                    <Tag className="h-4 w-4" />
-                    Create Tag
-                  </DropdownMenuItem>
                 </>
               )}
             </DropdownMenuContent>
