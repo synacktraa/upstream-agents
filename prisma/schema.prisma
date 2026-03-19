@@ -50,6 +50,20 @@ model User {
   sandboxes     Sandbox[]
   sessions      Session[]
   credentials   UserCredentials?
+  activityLogs  ActivityLog[]
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  userId    String
+  action    String
+  metadata  Json?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
 }
 
 model VerificationToken {

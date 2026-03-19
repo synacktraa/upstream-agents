@@ -8,8 +8,6 @@ export async function GET() {
   const auth = await requireAdmin()
   if (isAuthError(auth)) return auth
 
-  const activityLog = (prisma as { activityLog?: any }).activityLog
-
   // Get current date boundaries
   const now = new Date()
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
@@ -35,59 +33,49 @@ export async function GET() {
     }),
 
     // Sandboxes created today (from activity log)
-    activityLog
-      ? activityLog.count({
-          where: {
-            action: "sandbox_created",
-            createdAt: { gte: startOfToday },
-          },
-        })
-      : Promise.resolve(0),
+    prisma.activityLog.count({
+      where: {
+        action: "sandbox_created",
+        createdAt: { gte: startOfToday },
+      },
+    }),
 
     // Sandboxes created this week
-    activityLog
-      ? activityLog.count({
-          where: {
-            action: "sandbox_created",
-            createdAt: { gte: startOfWeek },
-          },
-        })
-      : Promise.resolve(0),
+    prisma.activityLog.count({
+      where: {
+        action: "sandbox_created",
+        createdAt: { gte: startOfWeek },
+      },
+    }),
 
     // Agent executions today
-    activityLog
-      ? activityLog.count({
-          where: {
-            action: "agent_executed",
-            createdAt: { gte: startOfToday },
-          },
-        })
-      : Promise.resolve(0),
+    prisma.activityLog.count({
+      where: {
+        action: "agent_executed",
+        createdAt: { gte: startOfToday },
+      },
+    }),
 
     // Agent executions this week
-    activityLog
-      ? activityLog.count({
-          where: {
-            action: "agent_executed",
-            createdAt: { gte: startOfWeek },
-          },
-        })
-      : Promise.resolve(0),
+    prisma.activityLog.count({
+      where: {
+        action: "agent_executed",
+        createdAt: { gte: startOfWeek },
+      },
+    }),
 
     // Recent activity (last 50 entries)
-    activityLog
-      ? activityLog.findMany({
-          take: 50,
-          orderBy: { createdAt: "desc" },
-          select: {
-            id: true,
-            userId: true,
-            action: true,
-            metadata: true,
-            createdAt: true,
-          },
-        })
-      : Promise.resolve([]),
+    prisma.activityLog.findMany({
+      take: 50,
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        userId: true,
+        action: true,
+        metadata: true,
+        createdAt: true,
+      },
+    }),
   ])
 
   return Response.json({
