@@ -114,24 +114,34 @@ model RepoMcpServer {
 }
 
 model Branch {
-  id                String    @id @default(cuid())
-  repoId            String
-  name              String
-  baseBranch        String?
-  startCommit       String?
-  status            String    @default("idle")
-  prUrl             String?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  draftPrompt       String?
-  agent             String    @default("claude-code")
-  model             String?
-  loopCount         Int       @default(0)
-  loopEnabled       Boolean   @default(false)
-  loopMaxIterations Int       @default(10)
-  repo              Repo      @relation(fields: [repoId], references: [id], onDelete: Cascade)
-  messages          Message[]
-  sandbox           Sandbox?
+  id     String @id @default(cuid())
+  repoId String
+  repo   Repo   @relation(fields: [repoId], references: [id], onDelete: Cascade)
+
+  name        String
+  baseBranch  String?
+  startCommit String?
+  status      String  @default("idle") // "idle" | "running" | "creating" | "stopped" | "error"
+  prUrl       String?
+  draftPrompt String? @db.Text // Persisted draft input for chat continuity
+
+  // Agent configuration
+  agent String @default("claude-code") // "claude-code" | "opencode" | "codex"
+  model String? // Model selection for the agent (e.g., "sonnet", "gpt-4o")
+
+  // Loop mode configuration
+  loopEnabled       Boolean @default(false) // Is loop mode active for this branch?
+  loopCount         Int     @default(0)     // Current number of loop iterations
+  loopMaxIterations Int     @default(10)    // Max iterations before stopping
+
+  // Commit tracking - HEAD at start of last execution, used for detecting new commits
+  lastShownCommitHash String?
+
+  sandbox  Sandbox?
+  messages Message[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([repoId, name])
 }
