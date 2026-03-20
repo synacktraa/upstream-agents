@@ -90,7 +90,7 @@ export function useExecutionPolling({
     try {
       // Optionally run auto-commit first
       if (runAutoCommit) {
-        await fetch("/api/sandbox/git", {
+        const autoCommitRes = await fetch("/api/sandbox/git", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -100,6 +100,21 @@ export function useExecutionPolling({
             branchName: currentBranchName,
           }),
         })
+
+        // Show error in chat if push failed
+        if (!autoCommitRes.ok) {
+          const errorData = await autoCommitRes.json().catch(() => ({}))
+          const errorMessage = (errorData as { error?: string }).error || `Push failed (${autoCommitRes.status})`
+          onAddMessage(targetBranchId, {
+            id: generateId(),
+            role: "assistant",
+            content: `⚠️ **Push failed:** ${errorMessage}`,
+            timestamp: new Date().toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          })
+        }
       }
 
       // Check for new commits since lastShownCommitHash
