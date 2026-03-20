@@ -134,7 +134,7 @@ export function useBranchRenaming({
 
   /**
    * Automatically suggests and applies a branch name based on conversation history.
-   * Unlike suggestBranchName, this does NOT enter edit mode or require confirmation.
+   * Unlike suggestBranchName, this does NOT require confirmation but still shows loading state.
    * Used when the user sends their first message without changing the branch name.
    */
   const autoSuggestBranchName = useCallback(async () => {
@@ -142,6 +142,11 @@ export function useBranchRenaming({
     if (branch.hasCustomName) {
       return
     }
+
+    // Show loading state in the branch title text field
+    setSuggesting(true)
+    setRenaming(true)
+    setRenameValue("loading...")
 
     try {
       const res = await fetch("/api/branches/suggest-name", {
@@ -183,6 +188,10 @@ export function useBranchRenaming({
     } catch (err) {
       // Silently fail - auto-suggestion is not critical
       console.warn("Auto branch name suggestion failed:", err)
+    } finally {
+      // Exit renaming mode and reset state
+      setSuggesting(false)
+      setRenaming(false)
     }
   }, [branch.id, branch.name, branch.hasCustomName, branch.sandboxId, repoName, repoFullName, onUpdateBranch])
 
