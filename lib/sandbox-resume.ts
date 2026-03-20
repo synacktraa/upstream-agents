@@ -60,17 +60,25 @@ function getEnvForModel(
   agent: Agent | undefined,
   credentials: {
     anthropicApiKey?: string
-    anthropicAuthType?: string
+    anthropicAuthToken?: string
     openaiApiKey?: string
     opencodeApiKey?: string
   }
 ): Record<string, string> {
   const env: Record<string, string> = {}
 
-  // For Claude Code agent, always use Anthropic credentials
+  // For Claude Code agent: use API key only if not using auth token (credentials file)
   if (agent === "claude-code" || !agent) {
-    if (credentials.anthropicAuthType !== "claude-max" && credentials.anthropicApiKey) {
+    if (!credentials.anthropicAuthToken && credentials.anthropicApiKey) {
       env.ANTHROPIC_API_KEY = credentials.anthropicApiKey
+    }
+    return env
+  }
+
+  // For Codex agent: use OpenAI API key
+  if (agent === "codex") {
+    if (credentials.openaiApiKey) {
+      env.OPENAI_API_KEY = credentials.openaiApiKey
     }
     return env
   }
@@ -209,7 +217,7 @@ export async function ensureSandboxReady(
   // Get environment variables based on model and agent (API keys)
   const apiKeyEnv = getEnvForModel(model, agent, {
     anthropicApiKey,
-    anthropicAuthType,
+    anthropicAuthToken,
     openaiApiKey,
     opencodeApiKey,
   })
