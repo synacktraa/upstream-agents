@@ -52,12 +52,13 @@ interface ChatInputProps {
   onOpenSettingsWithHighlight?: (field: string) => void
   credentials?: UserCredentialFlags | null
   defaultLoopMaxIterations?: number
+  loopUntilFinishedEnabled?: boolean
   isMobile?: boolean
 }
 
 export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
   function ChatInput(
-    { branch, input, onInputChange, onSend, onStop, onAgentChange, onModelChange, onLoopToggle, onOpenSettings, onOpenSettingsWithHighlight, credentials, defaultLoopMaxIterations = 10, isMobile },
+    { branch, input, onInputChange, onSend, onStop, onAgentChange, onModelChange, onLoopToggle, onOpenSettings, onOpenSettingsWithHighlight, credentials, defaultLoopMaxIterations = 10, loopUntilFinishedEnabled = false, isMobile },
     ref
   ) {
     // Normalize agent value (handle legacy "claude" value from database)
@@ -215,32 +216,34 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Loop Toggle */}
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={handleLoopToggle}
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleLoopToggle(); } }}
-              className="flex items-center gap-1.5 cursor-pointer rounded px-1.5 py-0.5 -mr-1.5 hover:bg-muted/60 transition-colors"
-            >
-              <Switch
-                checked={branch.loopEnabled ?? false}
-                onCheckedChange={handleLoopToggle}
-                className="h-3 w-5 data-[state=checked]:bg-primary [&_[data-slot=switch-thumb]]:size-2.5"
-              />
-              <span className={cn(
-                "text-[11px] transition-colors",
-                branch.loopEnabled ? "text-foreground" : "text-muted-foreground"
-              )}>
-                Loop until finished
-              </span>
-              <span className={cn(
-                "inline-flex h-4 min-w-[2.25rem] items-center justify-center rounded px-1.5 text-[10px] tabular-nums font-medium transition-colors",
-                branch.loopEnabled ? "bg-primary/20 text-primary" : "text-transparent"
-              )}>
-                {branch.loopCount ?? 0}/{branch.loopMaxIterations ?? defaultLoopMaxIterations}
-              </span>
-            </div>
+            {/* Loop Toggle - Only shown when experimental feature is enabled */}
+            {loopUntilFinishedEnabled && (
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={handleLoopToggle}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleLoopToggle(); } }}
+                className="flex items-center gap-1.5 cursor-pointer rounded px-1.5 py-0.5 -mr-1.5 hover:bg-muted/60 transition-colors"
+              >
+                <Switch
+                  checked={branch.loopEnabled ?? false}
+                  onCheckedChange={handleLoopToggle}
+                  className="h-3 w-5 data-[state=checked]:bg-primary [&_[data-slot=switch-thumb]]:size-2.5"
+                />
+                <span className={cn(
+                  "text-[11px] transition-colors",
+                  branch.loopEnabled ? "text-foreground" : "text-muted-foreground"
+                )}>
+                  Loop until finished
+                </span>
+                <span className={cn(
+                  "inline-flex h-4 min-w-[2.25rem] items-center justify-center rounded px-1.5 text-[10px] tabular-nums font-medium transition-colors",
+                  branch.loopEnabled ? "bg-primary/20 text-primary" : "text-transparent"
+                )}>
+                  {branch.loopCount ?? 0}/{branch.loopMaxIterations ?? defaultLoopMaxIterations}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Right: Model Combobox */}

@@ -31,6 +31,7 @@ export async function GET() {
             daytonaApiKey: true,
             sandboxAutoStopInterval: true,
             defaultLoopMaxIterations: true,
+            loopUntilFinishedEnabled: true,
           },
         },
         repos: {
@@ -74,6 +75,7 @@ export async function GET() {
           hasDaytonaApiKey: !!user.credentials.daytonaApiKey,
           sandboxAutoStopInterval: user.credentials.sandboxAutoStopInterval,
           defaultLoopMaxIterations: user.credentials.defaultLoopMaxIterations,
+          loopUntilFinishedEnabled: user.credentials.loopUntilFinishedEnabled,
         }
       : null
 

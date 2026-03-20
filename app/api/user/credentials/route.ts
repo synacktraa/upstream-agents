@@ -22,6 +22,7 @@ export async function POST(req: Request) {
     daytonaApiKey,
     sandboxAutoStopInterval,
     defaultLoopMaxIterations,
+    loopUntilFinishedEnabled,
   } = body
 
   // Validate sandboxAutoStopInterval if provided
@@ -76,6 +77,10 @@ export async function POST(req: Request) {
 
   if (defaultLoopMaxIterations !== undefined) {
     updateData.defaultLoopMaxIterations = defaultLoopMaxIterations
+  }
+
+  if (loopUntilFinishedEnabled !== undefined) {
+    updateData.loopUntilFinishedEnabled = loopUntilFinishedEnabled
   }
 
   // Handle Daytona API key change or clear - this deletes all sandboxes

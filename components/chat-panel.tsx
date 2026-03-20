@@ -56,6 +56,8 @@ interface ChatPanelProps {
   onOpenSettingsWithHighlight?: (field: string) => void
   /** Default loop max iterations from user settings */
   defaultLoopMaxIterations?: number
+  /** Whether the loop until finished feature is enabled (experimental) */
+  loopUntilFinishedEnabled?: boolean
 }
 
 export function ChatPanel({
@@ -79,6 +81,7 @@ export function ChatPanel({
   onOpenSettings,
   onOpenSettingsWithHighlight,
   defaultLoopMaxIterations = DEFAULT_LOOP_MAX_ITERATIONS,
+  loopUntilFinishedEnabled = false,
 }: ChatPanelProps) {
   // Refs
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -591,6 +594,7 @@ export function ChatPanel({
           onOpenSettingsWithHighlight={onOpenSettingsWithHighlight}
           credentials={credentials}
           defaultLoopMaxIterations={defaultLoopMaxIterations}
+          loopUntilFinishedEnabled={loopUntilFinishedEnabled}
           isMobile={isMobile}
         />
       </div>

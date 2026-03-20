@@ -75,18 +75,19 @@ model VerificationToken {
 }
 
 model UserCredentials {
-  id                       String   @id @default(cuid())
-  userId                   String   @unique
-  anthropicApiKey          String?
-  anthropicAuthType        String   @default("api-key")
-  anthropicAuthToken       String?
-  updatedAt                DateTime @updatedAt
-  sandboxAutoStopInterval  Int      @default(5)
-  openaiApiKey             String?
-  daytonaApiKey            String?
-  opencodeApiKey           String?
-  defaultLoopMaxIterations Int      @default(10)
-  user                     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                        String   @id @default(cuid())
+  userId                    String   @unique
+  anthropicApiKey           String?
+  anthropicAuthType         String   @default("api-key")
+  anthropicAuthToken        String?
+  updatedAt                 DateTime @updatedAt
+  sandboxAutoStopInterval   Int      @default(5)
+  openaiApiKey              String?
+  daytonaApiKey             String?
+  opencodeApiKey            String?
+  defaultLoopMaxIterations  Int      @default(10)
+  loopUntilFinishedEnabled  Boolean  @default(false)
+  user                      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Repo {

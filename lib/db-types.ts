@@ -84,6 +84,7 @@ export interface UserCredentials {
   hasDaytonaApiKey: boolean
   sandboxAutoStopInterval?: number
   defaultLoopMaxIterations?: number
+  loopUntilFinishedEnabled?: boolean
 }
 
 /**
