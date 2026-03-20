@@ -168,6 +168,12 @@ export function ChatPanel({
 
       if (!response.ok) {
         const data = await response.json()
+        // For sandbox deleted during loop, just stop the loop gracefully
+        if (response.status === 410 && data.error === "SANDBOX_NOT_FOUND") {
+          onUpdateMessage(branchId, messageId, { content: "Sandbox was deleted. Please send a new message to recreate it." })
+          onUpdateBranch(branchId, { status: BRANCH_STATUS.IDLE, loopCount: 0, loopEnabled: false })
+          return
+        }
         throw new Error(data.error || "Failed to start agent")
       }
 
@@ -327,6 +333,79 @@ export function ChatPanel({
 
       if (!response.ok) {
         const data = await response.json()
+
+        // Handle sandbox deleted - trigger recreation
+        if (response.status === 410 && data.error === "SANDBOX_NOT_FOUND" && data.recreateInfo?.branchId) {
+          onUpdateMessage(branch.id, messageId, { content: "Sandbox was deleted. Recreating..." })
+
+          // Call sandbox create with existing branch ID to recreate
+          const recreateRes = await fetch("/api/sandbox/create", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              existingBranchId: data.recreateInfo.branchId,
+            }),
+          })
+
+          if (recreateRes.ok) {
+            // Parse SSE response to get new sandbox info
+            const reader = recreateRes.body?.getReader()
+            if (reader) {
+              const decoder = new TextDecoder()
+              let sandboxId: string | null = null
+              let previewUrlPattern: string | null = null
+
+              while (true) {
+                const { done, value } = await reader.read()
+                if (done) break
+                const text = decoder.decode(value)
+                const lines = text.split("\n")
+                for (const line of lines) {
+                  if (line.startsWith("data: ")) {
+                    try {
+                      const eventData = JSON.parse(line.slice(6))
+                      if (eventData.type === "done" && eventData.data) {
+                        sandboxId = eventData.data.sandboxId
+                        previewUrlPattern = eventData.data.previewUrlPattern
+                      }
+                    } catch {
+                      // Ignore parse errors
+                    }
+                  }
+                }
+              }
+
+              if (sandboxId) {
+                // Update branch with new sandbox info and retry the message
+                onUpdateBranch(branch.id, { sandboxId, previewUrlPattern: previewUrlPattern ?? undefined })
+                onUpdateMessage(branch.id, messageId, { content: "" })
+
+                // Retry the original request with new sandbox
+                const retryRes = await fetch("/api/agent/execute", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    sandboxId,
+                    prompt,
+                    previewUrlPattern,
+                    repoName,
+                    messageId,
+                    agent: effectiveAgent,
+                    model: effectiveModel,
+                  }),
+                })
+
+                if (retryRes.ok) {
+                  startPolling(messageId)
+                  return
+                }
+              }
+            }
+          }
+
+          throw new Error("Failed to recreate sandbox")
+        }
+
         throw new Error(data.error || "Failed to start agent")
       }
 

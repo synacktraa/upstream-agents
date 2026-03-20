@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { ensureSandboxReady } from "@/lib/sandbox-resume"
+import { ensureSandboxReady, SandboxNotFoundError } from "@/lib/sandbox-resume"
 import { createBackgroundAgentSession } from "@/lib/agent-session"
 import {
   requireAuth,
@@ -13,9 +13,7 @@ import {
   internalError,
   updateSandboxAndBranchStatus,
   resetSandboxStatus,
-  getGitHubTokenForUser,
 } from "@/lib/api-helpers"
-import { getOrRecreateSandbox } from "@/lib/sandbox-recreate"
 import { PATHS } from "@/lib/constants"
 import type { Agent } from "@/lib/types"
 import { logActivity } from "@/lib/activity-log"
@@ -75,41 +73,12 @@ export async function POST(req: Request) {
     return notFound("Message not found - it may not have been saved yet")
   }
 
-  // Get GitHub token for potential sandbox recreation
-  const githubToken = await getGitHubTokenForUser(auth.userId)
-
   // Canonical Daytona sandbox ID from DB — use this for session and execution so status reads the same meta
-  let daytonaSandboxId = sandboxRecord.sandboxId
-  // Track if sandbox was recreated for accurate logging
-  let sandboxWasRecreated = false
+  const daytonaSandboxId = sandboxRecord.sandboxId
 
   try {
-    // 5. First, check if sandbox exists and recreate if needed
+    // 5. Ensure sandbox is ready and create background session (fast — no sandbox process launched yet)
     let t0 = Date.now()
-
-    // If we have a GitHub token, try to recreate if the sandbox is missing
-    if (githubToken) {
-      const userCredentials = decryptUserCredentials(sandboxRecord.user.credentials)
-      const recreationResult = await getOrRecreateSandbox({
-        daytonaApiKey,
-        sandboxRecord,
-        githubToken,
-        userCredentials,
-        userId: auth.userId,
-      })
-
-      if (recreationResult.wasRecreated) {
-        console.log(`[agent/execute] Sandbox was recreated. New ID: ${recreationResult.newSandboxId}`)
-        daytonaSandboxId = recreationResult.newSandboxId!
-        sandboxWasRecreated = true
-        // Update sandboxRecord reference for previewUrlPattern
-        sandboxRecord.sandboxId = daytonaSandboxId
-      }
-      console.log(`[agent/execute] getOrRecreateSandbox took ${Date.now() - t0}ms`)
-    }
-
-    // 6. Ensure sandbox is ready and create background session (fast — no sandbox process launched yet)
-    t0 = Date.now()
     const { sandbox, resumeSessionId, env } = await ensureSandboxReady(
       daytonaApiKey,
       daytonaSandboxId,
@@ -118,9 +87,8 @@ export async function POST(req: Request) {
       anthropicApiKey,
       anthropicAuthType,
       anthropicAuthToken,
-      // If sandbox was recreated, don't try to resume session (it won't exist)
-      sandboxWasRecreated ? undefined : (sandboxRecord.sessionId || undefined),
-      sandboxWasRecreated ? undefined : (sandboxRecord.sessionAgent || undefined),
+      sandboxRecord.sessionId || undefined,
+      sandboxRecord.sessionAgent || undefined,
       openaiApiKey,
       agent,
       model,
@@ -141,7 +109,7 @@ export async function POST(req: Request) {
     })
     console.log(`[agent/execute] createBackgroundAgentSession took ${Date.now() - t0}ms`)
 
-    // 7. Persist session ID so polling can find it, create execution record
+    // 6. Persist session ID so polling can find it, create execution record
     const { backgroundSessionId } = bgSession
     if (sandboxRecord.sessionId !== backgroundSessionId || sandboxRecord.sessionAgent !== agent) {
       await prisma.sandbox.update({
@@ -158,7 +126,7 @@ export async function POST(req: Request) {
       },
     })
 
-    // 8. Update sandbox and branch status
+    // 7. Update sandbox and branch status
     await updateSandboxAndBranchStatus(
       sandboxRecord.id,
       sandboxRecord.branch?.id,
@@ -166,7 +134,7 @@ export async function POST(req: Request) {
       { lastActiveAt: new Date() }
     )
 
-    // 9. Start the turn and write meta before returning (so client polling sees runId/outputFile)
+    // 8. Start the turn and write meta before returning (so client polling sees runId/outputFile)
     try {
       await bgSession.start(prompt)
     } catch (error) {
@@ -208,7 +176,26 @@ export async function POST(req: Request) {
 
     return Response.json({ success: true, messageId, executionId: agentExecution.id })
   } catch (error: unknown) {
-    // Sync steps failed (sandbox not ready, session creation failed)
+    // Handle sandbox not found - tell frontend to recreate
+    if (error instanceof SandboxNotFoundError) {
+      // Clean up the stale sandbox record from DB
+      await prisma.sandbox.delete({ where: { id: sandboxRecord.id } }).catch(() => {})
+
+      // Return info needed for frontend to recreate
+      // Only branchId is needed - the create endpoint will fetch branch details
+      return Response.json(
+        {
+          error: "SANDBOX_NOT_FOUND",
+          message: "Sandbox was deleted and needs to be recreated",
+          recreateInfo: {
+            branchId: sandboxRecord.branch?.id,
+          },
+        },
+        { status: 410 } // 410 Gone - resource no longer available
+      )
+    }
+
+    // Other errors - sandbox not ready, session creation failed
     await resetSandboxStatus(sandboxRecord.id, sandboxRecord.branch?.id)
     return internalError(error)
   }

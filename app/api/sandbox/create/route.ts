@@ -28,9 +28,12 @@ export async function POST(req: Request) {
   const { userId } = authResult
 
   const body = await req.json()
-  const { repoId, repoOwner, repoName, baseBranch, newBranch, startCommit } = body
+  const { repoId, repoOwner, repoName, baseBranch, newBranch, startCommit, existingBranchId } = body
 
-  if (!repoOwner || !repoName || !newBranch) {
+  // For recreation, we need existingBranchId; for new branches, we need the standard fields
+  if (existingBranchId) {
+    // Recreation mode - we'll fetch branch info from DB
+  } else if (!repoOwner || !repoName || !newBranch) {
     return badRequest("Missing required fields")
   }
 
@@ -80,6 +83,39 @@ export async function POST(req: Request) {
     hasAnthropicAuthToken: !!anthropicAuthToken,
   })
 
+  // For recreation mode, fetch the existing branch and its repo
+  let existingBranch: {
+    id: string
+    name: string
+    baseBranch: string | null
+    agent: string
+    repo: { id: string; owner: string; name: string }
+  } | null = null
+
+  if (existingBranchId) {
+    existingBranch = await prisma.branch.findFirst({
+      where: { id: existingBranchId, repo: { userId } },
+      select: {
+        id: true,
+        name: true,
+        baseBranch: true,
+        agent: true,
+        repo: { select: { id: true, owner: true, name: true } },
+      },
+    })
+    if (!existingBranch) {
+      return badRequest("Branch not found or doesn't belong to user")
+    }
+  }
+
+  // Use existing branch info for recreation, or request params for new branch
+  const effectiveRepoOwner = existingBranch?.repo.owner ?? repoOwner
+  const effectiveRepoName = existingBranch?.repo.name ?? repoName
+  const effectiveBranchName = existingBranch?.name ?? newBranch
+  const effectiveBaseBranch = existingBranch?.baseBranch ?? baseBranch ?? "main"
+  const effectiveRepoId = existingBranch?.repo.id ?? repoId
+  const isRecreation = !!existingBranch
+
   // Track records for cleanup on error
   let sandboxRecord: { id: string; sandboxId: string } | null = null
   let branchRecord: { id: string } | null = null
@@ -89,7 +125,7 @@ export async function POST(req: Request) {
   return createSSEStream({
     onStart: async (controller) => {
       try {
-        sendProgress(controller, "Creating sandbox...")
+        sendProgress(controller, isRecreation ? "Recreating sandbox..." : "Creating sandbox...")
 
         daytonaClient = new Daytona({ apiKey: daytonaApiKey })
         const sandboxName = generateSandboxName(userId)
@@ -97,14 +133,14 @@ export async function POST(req: Request) {
         // Repo env vars: from DB (encrypted). Prefer repoId when provided (must belong to user);
         // otherwise resolve by owner/name so clients that omit repoId still get vars.
         let repoEnvVars: Record<string, string> = {}
-        const repoForEnv = repoId
+        const repoForEnv = effectiveRepoId
           ? await prisma.repo.findFirst({
-              where: { id: repoId, userId },
+              where: { id: effectiveRepoId, userId },
               select: { envVars: true },
             })
           : await prisma.repo.findUnique({
               where: {
-                userId_owner_name: { userId, owner: repoOwner, name: repoName },
+                userId_owner_name: { userId, owner: effectiveRepoOwner, name: effectiveRepoName },
               },
               select: { envVars: true },
             })
@@ -134,8 +170,8 @@ export async function POST(req: Request) {
           public: true,
           labels: {
             [SANDBOX_CONFIG.LABEL_KEY]: "true",
-            repo: `${repoOwner}/${repoName}`,
-            branch: newBranch,
+            repo: `${effectiveRepoOwner}/${effectiveRepoName}`,
+            branch: effectiveBranchName,
             userId: userId,
           },
           ...(Object.keys(sandboxEnvVars).length > 0 && {
@@ -157,13 +193,12 @@ export async function POST(req: Request) {
         sendProgress(controller, "Cloning repository...")
 
         // Use Daytona SDK git interface
-        const repoPath = `${PATHS.SANDBOX_HOME}/${repoName}`
-        const cloneUrl = `https://github.com/${repoOwner}/${repoName}.git`
-        const base = baseBranch || "main"
+        const repoPath = `${PATHS.SANDBOX_HOME}/${effectiveRepoName}`
+        const cloneUrl = `https://github.com/${effectiveRepoOwner}/${effectiveRepoName}.git`
         await sandbox.git.clone(
           cloneUrl,
           repoPath,
-          base,
+          effectiveBaseBranch,
           undefined,
           "x-access-token",
           githubToken
@@ -189,20 +224,41 @@ export async function POST(req: Request) {
           `cd ${repoPath} && git config user.email "${gitEmail}" && git config user.name "${gitName}"`
         )
 
-        // Create and checkout new branch via Daytona SDK
-        sendProgress(controller, `Creating branch ${newBranch} from ${base}...`)
-        await sandbox.git.createBranch(repoPath, newBranch)
-        await sandbox.git.checkoutBranch(repoPath, newBranch)
+        // For recreation: try to fetch and checkout the existing branch from remote
+        // For new branch: create it from base
+        const authedUrl = cloneUrl.replace(
+          /^https:\/\//,
+          `https://x-access-token:${githubToken}@`
+        )
 
-        // If starting from a specific commit, fetch it (in case it's not in the cloned branch) and reset to it
-        if (startCommit) {
+        if (isRecreation) {
+          sendProgress(controller, `Checking out branch ${effectiveBranchName}...`)
+          // Try to fetch the branch from remote (may have been pushed before deletion)
+          await sandbox.process.executeCommand(
+            `cd ${repoPath} && git fetch ${authedUrl} ${effectiveBranchName}:${effectiveBranchName} 2>&1 || true`
+          )
+          // Check if branch exists locally now
+          const branchExistsResult = await sandbox.process.executeCommand(
+            `cd ${repoPath} && git show-ref --verify --quiet refs/heads/${effectiveBranchName} && echo "exists" || echo "not_exists"`
+          )
+          if (branchExistsResult.result.trim() === "exists") {
+            await sandbox.git.checkoutBranch(repoPath, effectiveBranchName)
+          } else {
+            // Branch doesn't exist on remote, create it fresh from base
+            await sandbox.git.createBranch(repoPath, effectiveBranchName)
+            await sandbox.git.checkoutBranch(repoPath, effectiveBranchName)
+          }
+        } else {
+          sendProgress(controller, `Creating branch ${effectiveBranchName} from ${effectiveBaseBranch}...`)
+          await sandbox.git.createBranch(repoPath, effectiveBranchName)
+          await sandbox.git.checkoutBranch(repoPath, effectiveBranchName)
+        }
+
+        // If starting from a specific commit (new branch only), fetch it and reset to it
+        if (startCommit && !isRecreation) {
           sendProgress(controller, `Resetting to commit ${startCommit.slice(0, 7)}...`)
           // Fetch the specific commit in case it's not part of the cloned branch history
           // This handles the case where user branches from a commit that exists on a different branch
-          const authedUrl = cloneUrl.replace(
-            /^https:\/\//,
-            `https://x-access-token:${githubToken}@`
-          )
           await sandbox.process.executeCommand(
             `cd ${repoPath} && git fetch ${authedUrl} ${startCommit} 2>&1`
           )
@@ -235,75 +291,113 @@ export async function POST(req: Request) {
         // Note: The SDK handles Claude CLI installation automatically when
         // createAgentSession is called. We don't need to do any Python setup here.
 
-        // Create or find the repo in database
-        let dbRepo = await prisma.repo.findUnique({
-          where: {
-            userId_owner_name: {
-              userId: userId,
-              owner: repoOwner,
-              name: repoName,
-            },
-          },
-        })
+        let finalBranchId: string
+        let finalRepoId: string
+        let finalAgent: string
 
-        if (!dbRepo && repoId) {
-          dbRepo = await prisma.repo.findUnique({
-            where: { id: repoId },
-          })
-        }
+        if (isRecreation && existingBranch) {
+          // Recreation mode: use existing branch, just create sandbox record
+          finalBranchId = existingBranch.id
+          finalRepoId = existingBranch.repo.id
+          finalAgent = existingBranch.agent
 
-        if (!dbRepo) {
-          // Create repo if it doesn't exist
-          dbRepo = await prisma.repo.create({
+          // Create sandbox record linked to existing branch
+          sandboxRecord = await prisma.sandbox.create({
             data: {
+              sandboxId: sandbox.id,
+              sandboxName,
               userId: userId,
-              owner: repoOwner,
-              name: repoName,
-              defaultBranch: baseBranch || "main",
+              branchId: finalBranchId,
+              previewUrlPattern,
+              status: "running",
             },
           })
-        }
 
-        // Create branch record with appropriate default agent based on credentials
-        branchRecord = await prisma.branch.create({
-          data: {
-            repoId: dbRepo.id,
-            name: newBranch,
-            baseBranch: baseBranch || "main",
-            startCommit: headCommit, // Store the HEAD commit for commit detection baseline
-            status: "idle",
-            agent: defaultAgent,
-          },
-        })
-
-        // Create sandbox record (no contextId needed - SDK handles sessions natively)
-        sandboxRecord = await prisma.sandbox.create({
-          data: {
+          // Log recreation activity
+          logActivity(userId, "sandbox_created", {
+            repoOwner: effectiveRepoOwner,
+            repoName: effectiveRepoName,
+            branchName: effectiveBranchName,
             sandboxId: sandbox.id,
-            sandboxName,
-            userId: userId,
-            branchId: branchRecord.id,
-            previewUrlPattern,
-            status: "running",
-          },
-        })
+            agent: finalAgent,
+            isRecreation: true,
+          })
+        } else {
+          // New branch mode: create repo (if needed), branch, and sandbox records
+          let dbRepo = await prisma.repo.findUnique({
+            where: {
+              userId_owner_name: {
+                userId: userId,
+                owner: effectiveRepoOwner,
+                name: effectiveRepoName,
+              },
+            },
+          })
 
-        // Log activity for metrics
-        logActivity(userId, "sandbox_created", {
-          repoOwner,
-          repoName,
-          branchName: newBranch,
-          sandboxId: sandbox.id,
-          agent: defaultAgent,
-        })
+          if (!dbRepo && effectiveRepoId) {
+            dbRepo = await prisma.repo.findUnique({
+              where: { id: effectiveRepoId },
+            })
+          }
+
+          if (!dbRepo) {
+            // Create repo if it doesn't exist
+            dbRepo = await prisma.repo.create({
+              data: {
+                userId: userId,
+                owner: effectiveRepoOwner,
+                name: effectiveRepoName,
+                defaultBranch: effectiveBaseBranch,
+              },
+            })
+          }
+
+          // Create branch record with appropriate default agent based on credentials
+          branchRecord = await prisma.branch.create({
+            data: {
+              repoId: dbRepo.id,
+              name: effectiveBranchName,
+              baseBranch: effectiveBaseBranch,
+              startCommit: headCommit, // Store the HEAD commit for commit detection baseline
+              status: "idle",
+              agent: defaultAgent,
+            },
+          })
+
+          finalBranchId = branchRecord.id
+          finalRepoId = dbRepo.id
+          finalAgent = defaultAgent
+
+          // Create sandbox record
+          sandboxRecord = await prisma.sandbox.create({
+            data: {
+              sandboxId: sandbox.id,
+              sandboxName,
+              userId: userId,
+              branchId: finalBranchId,
+              previewUrlPattern,
+              status: "running",
+            },
+          })
+
+          // Log activity for metrics
+          logActivity(userId, "sandbox_created", {
+            repoOwner: effectiveRepoOwner,
+            repoName: effectiveRepoName,
+            branchName: effectiveBranchName,
+            sandboxId: sandbox.id,
+            agent: finalAgent,
+          })
+        }
 
         sendDone(controller, {
           sandboxId: sandbox.id,
           previewUrlPattern,
-          branchId: branchRecord.id,
-          repoId: dbRepo.id,
+          branchId: finalBranchId,
+          repoId: finalRepoId,
           startCommit: headCommit,
-          agent: defaultAgent,
+          agent: finalAgent,
+          isRecreation,
         })
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : "Unknown error"

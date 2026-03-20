@@ -1,9 +1,20 @@
-import { Daytona } from "@daytonaio/sdk"
+import { Daytona, DaytonaNotFoundError } from "@daytonaio/sdk"
 import { readPersistedSessionId } from "@/lib/agent-session"
 import { PATHS, SANDBOX_CONFIG } from "@/lib/constants"
 import { prisma } from "@/lib/prisma"
 import { buildMcpConfig, getMcpConfigWriteCommand } from "@/lib/mcp-config"
 import type { Agent } from "@/lib/types"
+
+/**
+ * Error thrown when a sandbox is not found in Daytona but exists in the database.
+ * This indicates the sandbox was deleted externally and needs to be recreated.
+ */
+export class SandboxNotFoundError extends Error {
+  constructor(public sandboxId: string) {
+    super(`Sandbox ${sandboxId} not found in Daytona - it may have been deleted`)
+    this.name = "SandboxNotFoundError"
+  }
+}
 
 /**
  * Determines which API key(s) to inject based on agent type and selected model.
@@ -90,7 +101,16 @@ export async function ensureSandboxReady(
 }> {
   let t0 = Date.now()
   const daytona = new Daytona({ apiKey: daytonaApiKey })
-  const sandbox = await daytona.get(sandboxId)
+  let sandbox
+  try {
+    sandbox = await daytona.get(sandboxId)
+  } catch (error) {
+    if (error instanceof DaytonaNotFoundError) {
+      console.log(`[ensureSandboxReady] Sandbox ${sandboxId} not found in Daytona`)
+      throw new SandboxNotFoundError(sandboxId)
+    }
+    throw error
+  }
   console.log(`[ensureSandboxReady] daytona.get took ${Date.now() - t0}ms`)
 
   // Start sandbox if not running
@@ -175,7 +195,16 @@ export async function ensureSandboxStarted(
   sandboxId: string
 ): Promise<Awaited<ReturnType<InstanceType<typeof Daytona>["get"]>>> {
   const daytona = new Daytona({ apiKey: daytonaApiKey })
-  const sandbox = await daytona.get(sandboxId)
+  let sandbox
+  try {
+    sandbox = await daytona.get(sandboxId)
+  } catch (error) {
+    if (error instanceof DaytonaNotFoundError) {
+      console.log(`[ensureSandboxStarted] Sandbox ${sandboxId} not found in Daytona`)
+      throw new SandboxNotFoundError(sandboxId)
+    }
+    throw error
+  }
 
   if (sandbox.state !== "started") {
     await sandbox.start(SANDBOX_CONFIG.START_TIMEOUT_SECONDS)
