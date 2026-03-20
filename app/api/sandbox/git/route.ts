@@ -165,9 +165,24 @@ export async function POST(req: Request) {
         if (verifyStatus.currentBranch !== branchName) {
           return badRequest(`Branch changed during operation: expected ${branchName} but on ${verifyStatus.currentBranch}`)
         }
-        // Always push — covers agent-made commits AND new branches with no upstream.
-        await sandbox.git.push(repoPath, "x-access-token", githubToken)
-        return Response.json({ committed, pushed: true, commitMessage })
+        // Only push if we committed something OR there are unpushed commits
+        // This avoids 400 errors when the branch is already up-to-date with remote
+        let pushed = false
+        if (committed) {
+          await sandbox.git.push(repoPath, "x-access-token", githubToken)
+          pushed = true
+        } else {
+          // Check if there are unpushed commits (local ahead of remote)
+          const unpushedResult = await sandbox.process.executeCommand(
+            `cd ${repoPath} && git rev-list @{upstream}..HEAD --count 2>&1`
+          )
+          const unpushedCount = parseInt(unpushedResult.result.trim(), 10)
+          if (!unpushedResult.exitCode && unpushedCount > 0) {
+            await sandbox.git.push(repoPath, "x-access-token", githubToken)
+            pushed = true
+          }
+        }
+        return Response.json({ committed, pushed, commitMessage })
       }
 
       case "push": {
