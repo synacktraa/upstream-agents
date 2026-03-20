@@ -165,14 +165,17 @@ export async function ensureSandboxReady(
   const resumeSessionId =
     sameAgent ? (fileSessionId || databaseSessionId) : undefined
 
-  // For Claude Max, write credentials if needed
+  // Write Claude credentials file on every prompt execution
+  // This ensures fresh credentials are always available to the Claude Agent SDK
   if (anthropicAuthType === "claude-max" && anthropicAuthToken) {
     t0 = Date.now()
     const credentialsB64 = Buffer.from(anthropicAuthToken).toString("base64")
     await sandbox.process.executeCommand(
       `mkdir -p ${PATHS.CLAUDE_CREDENTIALS_DIR} && echo '${credentialsB64}' | base64 -d > ${PATHS.CLAUDE_CREDENTIALS_FILE} && chmod 600 ${PATHS.CLAUDE_CREDENTIALS_FILE}`
     )
-    console.log(`[ensureSandboxReady] claude-max credentials took ${Date.now() - t0}ms`)
+    console.log(`[ensureSandboxReady] claude-max credentials written, took ${Date.now() - t0}ms`)
+  } else {
+    console.log(`[ensureSandboxReady] skipping credentials write: authType=${anthropicAuthType}, hasToken=${!!anthropicAuthToken}`)
   }
 
   // Write MCP server configurations if any are configured for this repo
