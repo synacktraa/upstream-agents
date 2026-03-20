@@ -31,6 +31,53 @@ async function ensureCorrectBranch(
   return null
 }
 
+/**
+ * Push with retry logic. Returns { success, nothingToPush } to distinguish
+ * between successful push and "already up-to-date" scenarios.
+ */
+async function pushWithRetry(
+  sandbox: Sandbox,
+  repoPath: string,
+  githubToken: string,
+  maxRetries = 2
+): Promise<{ success: boolean; nothingToPush?: boolean; error?: string }> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      await sandbox.git.push(repoPath, "x-access-token", githubToken)
+      return { success: true }
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : String(err)
+      // Check if this is a "nothing to push" error (400 with up-to-date message)
+      // or an axios 400 which often means nothing to push
+      const isNothingToPush =
+        errorMessage.includes("up-to-date") ||
+        errorMessage.includes("up to date") ||
+        (errorMessage.includes("400") && !errorMessage.includes("permission") && !errorMessage.includes("denied"))
+
+      if (isNothingToPush) {
+        return { success: true, nothingToPush: true }
+      }
+
+      // If it's a transient error and we have retries left, wait and retry
+      const isTransient =
+        errorMessage.includes("timeout") ||
+        errorMessage.includes("ETIMEDOUT") ||
+        errorMessage.includes("ECONNRESET") ||
+        errorMessage.includes("503") ||
+        errorMessage.includes("502")
+
+      if (isTransient && attempt < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)))
+        continue
+      }
+
+      // Non-transient error or out of retries
+      return { success: false, error: errorMessage }
+    }
+  }
+  return { success: false, error: "Max retries exceeded" }
+}
+
 export async function POST(req: Request) {
   const auth = await requireAuth()
   if (isAuthError(auth)) return auth
@@ -165,23 +212,13 @@ export async function POST(req: Request) {
         if (verifyStatus.currentBranch !== branchName) {
           return badRequest(`Branch changed during operation: expected ${branchName} but on ${verifyStatus.currentBranch}`)
         }
-        // Only push if we committed something OR there are unpushed commits
-        // This avoids 400 errors when the branch is already up-to-date with remote
-        let pushed = false
-        if (committed) {
-          await sandbox.git.push(repoPath, "x-access-token", githubToken)
-          pushed = true
-        } else {
-          // Check if there are unpushed commits (local ahead of remote)
-          const unpushedResult = await sandbox.process.executeCommand(
-            `cd ${repoPath} && git rev-list @{upstream}..HEAD --count 2>&1`
-          )
-          const unpushedCount = parseInt(unpushedResult.result.trim(), 10)
-          if (!unpushedResult.exitCode && unpushedCount > 0) {
-            await sandbox.git.push(repoPath, "x-access-token", githubToken)
-            pushed = true
-          }
+        // Push with retry - handles transient failures and "nothing to push" gracefully
+        const pushResult = await pushWithRetry(sandbox, repoPath, githubToken)
+        if (!pushResult.success) {
+          return Response.json({ error: "Push failed: " + pushResult.error }, { status: 500 })
         }
+        // pushed is true if we actually pushed (not if already up-to-date)
+        const pushed = !pushResult.nothingToPush
         return Response.json({ committed, pushed, commitMessage })
       }
 
@@ -202,8 +239,11 @@ export async function POST(req: Request) {
         if (pushVerifyStatus.currentBranch !== branchName) {
           return badRequest(`Branch mismatch: expected ${branchName} but on ${pushVerifyStatus.currentBranch}`)
         }
-        await sandbox.git.push(repoPath, "x-access-token", githubToken)
-        return Response.json({ success: true })
+        const manualPushResult = await pushWithRetry(sandbox, repoPath, githubToken)
+        if (!manualPushResult.success) {
+          return Response.json({ error: "Push failed: " + manualPushResult.error }, { status: 500 })
+        }
+        return Response.json({ success: true, nothingToPush: manualPushResult.nothingToPush })
       }
 
       case "pull": {
@@ -293,8 +333,13 @@ export async function POST(req: Request) {
         if (mergeVerifyStatus.currentBranch !== targetBranch) {
           return badRequest(`Branch changed during merge: expected ${targetBranch} but on ${mergeVerifyStatus.currentBranch}`)
         }
-        // Push the merged target
-        await sandbox.git.push(repoPath, "x-access-token", githubToken)
+        // Push the merged target with retry
+        const mergePushResult = await pushWithRetry(sandbox, repoPath, githubToken)
+        if (!mergePushResult.success) {
+          // Switch back before returning error
+          await sandbox.git.checkoutBranch(repoPath, currentBranch)
+          return Response.json({ error: "Push failed: " + mergePushResult.error }, { status: 500 })
+        }
         // Switch back to current branch
         await sandbox.git.checkoutBranch(repoPath, currentBranch)
         return Response.json({ success: true })
@@ -489,7 +534,10 @@ export async function POST(req: Request) {
             )
           } else {
             // Branch doesn't exist on GitHub yet - push with upstream tracking
-            await sandbox.git.push(repoPath, "x-access-token", githubToken)
+            const renamePushResult = await pushWithRetry(sandbox, repoPath, githubToken)
+            if (!renamePushResult.success) {
+              return Response.json({ error: "Push failed: " + renamePushResult.error }, { status: 500 })
+            }
           }
         }
 
