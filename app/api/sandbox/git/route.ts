@@ -202,24 +202,18 @@ export async function POST(req: Request) {
         if (verifyStatus.currentBranch !== branchName) {
           return badRequest(`Branch changed during operation: expected ${branchName} but on ${verifyStatus.currentBranch}`)
         }
-        // Check if there are unpushed commits
-        // First try origin/branchName, fall back to checking if remote branch exists
-        const aheadResult = await sandbox.process.executeCommand(
-          `cd ${repoPath} && git rev-list origin/${branchName}..HEAD --count 2>/dev/null || echo "no-remote"`
+        // Check if there are unpushed commits by comparing local HEAD with remote
+        // Use ls-remote since single-branch clones don't have origin/branchName refs
+        const localHead = await sandbox.process.executeCommand(
+          `cd ${repoPath} && git rev-parse HEAD 2>/dev/null`
         )
-        const resultTrimmed = aheadResult.result.trim()
-        // If remote branch doesn't exist, check if we have any commits at all
-        let needsPush = false
-        if (resultTrimmed === "no-remote") {
-          // Remote branch doesn't exist - check if local branch has commits
-          const hasCommits = await sandbox.process.executeCommand(
-            `cd ${repoPath} && git rev-parse HEAD 2>/dev/null && echo "has-commits"`
-          )
-          needsPush = hasCommits.result.includes("has-commits")
-        } else {
-          const aheadCount = parseInt(resultTrimmed, 10) || 0
-          needsPush = aheadCount > 0
-        }
+        const remoteHead = await sandbox.process.executeCommand(
+          `cd ${repoPath} && git ls-remote origin refs/heads/${branchName} 2>/dev/null | cut -f1`
+        )
+        const localSha = localHead.result.trim()
+        const remoteSha = remoteHead.result.trim()
+        // Push if local has commits and remote is different (or doesn't exist)
+        const needsPush = localSha && localSha !== remoteSha
         let pushed = false
         if (needsPush) {
           const pushResult = await pushWithRetry(sandbox, repoPath, githubToken)
