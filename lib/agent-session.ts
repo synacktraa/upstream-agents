@@ -111,6 +111,7 @@ Always check the current state of files before editing them.
 After making meaningful changes, commit them with a descriptive message using git add and git commit.
 Do not push — pushing is handled automatically.
 Never run commands that rewrite git history, such as git commit --amend, git rebase, or git reset --hard.
+IMPORTANT: Always create NEW commits. If a commit fails (e.g., due to pre-commit hooks), fix the issue and create a new commit - never use --amend, as it would modify the previous unrelated commit.
 When you finish a task, provide a clear summary of what you did.`
 
   if (previewUrlPattern) {
