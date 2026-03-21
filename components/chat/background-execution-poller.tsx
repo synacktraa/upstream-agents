@@ -37,6 +37,8 @@ export function BackgroundExecutionPoller({
     onCommitsDetected,
     streamingMessageIdRef,
     globalActiveBranchIdRef,
+    // Disable completion sound for background pollers - only the active branch (ChatPanel) should ding
+    playCompletionSound: false,
   })
   return null
 }
