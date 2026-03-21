@@ -29,15 +29,17 @@ export function useBranchRenaming({
   const [renaming, setRenaming] = useState(false)
   const [renameValue, setRenameValue] = useState("")
   const [renameLoading, setRenameLoading] = useState(false)
-  const [suggesting, setSuggesting] = useState(false)
+  // Track which branch ID has an active auto-suggest in progress
+  const [suggestingBranchId, setSuggestingBranchId] = useState<string | null>(null)
   const renameInputRef = useRef<HTMLInputElement>(null)
 
-  // Reset state when switching to a different branch
-  // This prevents loading/renaming state from one branch showing on another
+  // Only show suggesting state if it's for the current branch
+  const suggesting = suggestingBranchId === branch.id
+
+  // Reset UI state when switching branches (but keep suggestingBranchId to track background work)
   useEffect(() => {
     setRenaming(false)
     setRenameValue("")
-    setSuggesting(false)
   }, [branch.id])
 
   const handleRename = useCallback(async () => {
@@ -93,7 +95,8 @@ export function useBranchRenaming({
       return
     }
 
-    setSuggesting(true)
+    const targetBranchId = branch.id
+    setSuggestingBranchId(targetBranchId)
     setRenaming(true)
     setRenameValue("loading...") // Show loading state
 
@@ -101,7 +104,7 @@ export function useBranchRenaming({
       const res = await fetch("/api/branches/suggest-name", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ branchId: branch.id }),
+        body: JSON.stringify({ branchId: targetBranchId }),
       })
 
       const data = await res.json()
@@ -136,7 +139,7 @@ export function useBranchRenaming({
         }
       })
     } finally {
-      setSuggesting(false)
+      setSuggestingBranchId(null)
     }
   }, [branch.id, branch.name, branch.messages.length, addSystemMessage])
 
@@ -151,8 +154,13 @@ export function useBranchRenaming({
       return
     }
 
+    // Capture branch info at call time to avoid stale closures
+    const targetBranchId = branch.id
+    const targetBranchName = branch.name
+    const targetSandboxId = branch.sandboxId
+
     // Show loading state in the branch title text field
-    setSuggesting(true)
+    setSuggestingBranchId(targetBranchId)
     setRenaming(true)
     setRenameValue("loading...")
 
@@ -160,7 +168,7 @@ export function useBranchRenaming({
       const res = await fetch("/api/branches/suggest-name", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ branchId: branch.id }),
+        body: JSON.stringify({ branchId: targetBranchId }),
       })
 
       const data = await res.json()
@@ -179,10 +187,10 @@ export function useBranchRenaming({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          sandboxId: branch.sandboxId,
+          sandboxId: targetSandboxId,
           repoPath: `${PATHS.SANDBOX_HOME}/${repoName}`,
           action: "rename-branch",
-          currentBranch: branch.name,
+          currentBranch: targetBranchName,
           newBranchName: suggestedName,
           repoOwner: owner,
           repoApiName: repo,
@@ -190,7 +198,7 @@ export function useBranchRenaming({
       })
 
       if (renameRes.ok) {
-        onUpdateBranch(branch.id, { name: suggestedName })
+        onUpdateBranch(targetBranchId, { name: suggestedName })
       }
       // Silently fail if rename doesn't work - auto-suggestion is not critical
     } catch (err) {
@@ -198,7 +206,7 @@ export function useBranchRenaming({
       console.warn("Auto branch name suggestion failed:", err)
     } finally {
       // Exit renaming mode and reset state
-      setSuggesting(false)
+      setSuggestingBranchId(null)
       setRenaming(false)
     }
   }, [branch.id, branch.name, branch.hasCustomName, branch.sandboxId, repoName, repoFullName, onUpdateBranch])
