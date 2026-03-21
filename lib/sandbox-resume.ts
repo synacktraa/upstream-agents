@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { buildMcpConfig, getMcpConfigWriteCommand } from "@/lib/mcp-config"
 import { decrypt } from "@/lib/encryption"
 import type { Agent } from "@/lib/types"
-import { getClaudeHooksSetupCommand } from "@/lib/claude-hooks"
+import { setupClaudeHooks } from "@/lib/claude-hooks"
 
 /**
  * Error thrown when a sandbox is not found in Daytona but exists in the database.
@@ -189,7 +189,7 @@ export async function ensureSandboxReady(
   // This handles cases where hooks may have been removed or sandbox was rebuilt
   if (agent === "claude-code" || !agent) {
     t0 = Date.now()
-    await sandbox.process.executeCommand(getClaudeHooksSetupCommand())
+    await setupClaudeHooks(sandbox)
     console.log(`[ensureSandboxReady] claude hooks written, took ${Date.now() - t0}ms`)
   }
 
