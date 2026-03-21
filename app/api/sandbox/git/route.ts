@@ -219,6 +219,12 @@ export async function POST(req: Request) {
         const remoteSha = remoteHead.result.trim()
         // Push if local has commits and remote is different (or doesn't exist)
         const needsPush = localSha && localSha !== remoteSha
+        console.log("[auto-commit-push] Push check:", {
+          currentBranch,
+          localSha,
+          remoteSha,
+          needsPush,
+        })
         let pushed = false
         if (needsPush) {
           const pushResult = await pushWithRetry(sandbox, repoPath, githubToken)
