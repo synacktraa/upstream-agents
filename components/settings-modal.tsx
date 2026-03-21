@@ -640,7 +640,7 @@ export function SettingsModal({ open, onClose, credentials, onCredentialsUpdate,
                 These features are experimental and may change or be removed in future updates.
               </p>
 
-              {/* Loop Until Finished Toggle */}
+              {/* Loop until finished: chat toggle + max iterations */}
               <div className="flex flex-col gap-1.5 pt-2 border-t border-border">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -656,14 +656,7 @@ export function SettingsModal({ open, onClose, credentials, onCredentialsUpdate,
                 <p className="text-[11px] text-muted-foreground">
                   When enabled, the &quot;Loop until finished&quot; toggle will appear in the chat input area.
                 </p>
-              </div>
-
-              {/* Default Loop Max Iterations */}
-              <div className="flex flex-col gap-1.5 pt-2 border-t border-border">
-                <div className="flex items-center gap-2">
-                  <FlaskConical className="h-3.5 w-3.5 text-muted-foreground" />
-                  <label className="text-xs font-medium text-foreground">Max Loop Iterations</label>
-                </div>
+                <label className="text-xs font-medium text-foreground pt-1">Max Loop Iterations</label>
                 <div className="flex items-center gap-3">
                   <input
                     type="range"
