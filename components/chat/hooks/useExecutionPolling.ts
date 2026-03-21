@@ -45,6 +45,8 @@ export function useExecutionPolling({
   const currentMessageIdRef = useRef<string | null>(null)
   const startPollingRef = useRef<(messageId: string, executionId?: string) => void>(() => {})
   const pollingBranchIdRef = useRef<string | null>(null)
+  // Guard to prevent detectAndShowCommits from running multiple times for the same execution
+  const commitDetectionRunningRef = useRef(false)
 
   // Store the branch context at polling start time to avoid using wrong branch data
   // when the user switches branches during execution. These are ONLY updated when
@@ -72,12 +74,20 @@ export function useExecutionPolling({
    * @param runAutoCommit - Whether to run auto-commit before checking for commits
    */
   const detectAndShowCommits = useCallback(async (runAutoCommit: boolean = true) => {
+    // Prevent concurrent runs - this can happen if multiple polling instances complete
+    // or if stopPolling races with normal completion
+    if (commitDetectionRunningRef.current) return
+    commitDetectionRunningRef.current = true
+
     // Use the branch context captured at polling start, not the currently viewed branch
     const currentSandboxId = pollingBranchSandboxIdRef.current
     const currentBranchName = pollingBranchNameRef.current
     const targetBranchId = pollingBranchIdRef.current
 
-    if (!currentSandboxId || !targetBranchId) return
+    if (!currentSandboxId || !targetBranchId) {
+      commitDetectionRunningRef.current = false
+      return
+    }
 
     try {
       // Optionally run auto-commit first
@@ -170,6 +180,8 @@ export function useExecutionPolling({
       }
     } catch {
       // Non-critical - commit detection failure shouldn't break the flow
+    } finally {
+      commitDetectionRunningRef.current = false
     }
   }, [repoName, onAddMessage, onCommitsDetected])
 
@@ -192,6 +204,8 @@ export function useExecutionPolling({
     pollingBranchSandboxIdRef.current = branch.sandboxId
     pollingBranchMessagesRef.current = branch.messages
     pollingLastShownCommitHashRef.current = branch.lastShownCommitHash || null
+    // Reset commit detection guard for new execution
+    commitDetectionRunningRef.current = false
 
     if (streamingMessageIdRef) {
       streamingMessageIdRef.current = messageId
