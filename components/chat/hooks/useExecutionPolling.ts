@@ -52,6 +52,7 @@ export function useExecutionPolling({
   const pollingBranchNameRef = useRef<string | null>(null)
   const pollingBranchSandboxIdRef = useRef<string | undefined>(undefined)
   const pollingBranchMessagesRef = useRef<Message[]>([])
+  const pollingLastShownCommitHashRef = useRef<string | null>(null)
 
   // Track the currently viewed branch (used for determining unread status)
   const activeBranchIdRef = useRef(branch.id)
@@ -64,14 +65,6 @@ export function useExecutionPolling({
   loopEnabledRef.current = branch.loopEnabled
   loopCountRef.current = branch.loopCount || 0
   loopMaxIterationsRef.current = branch.loopMaxIterations || 10
-
-  // Commit tracking ref - uses lastShownCommitHash which is set at execution start
-  const lastShownCommitHashRef = useRef<string | null>(branch.lastShownCommitHash || null)
-  useEffect(() => {
-    if (branch.lastShownCommitHash) {
-      lastShownCommitHashRef.current = branch.lastShownCommitHash
-    }
-  }, [branch.id, branch.lastShownCommitHash])
 
   /**
    * Detects and displays new commits made since lastShownCommitHash.
@@ -116,8 +109,8 @@ export function useExecutionPolling({
         }
       }
 
-      // Check for new commits since lastShownCommitHash
-      if (lastShownCommitHashRef.current) {
+      // Check for new commits since lastShownCommitHash (captured at polling start)
+      if (pollingLastShownCommitHashRef.current) {
         const logRes = await fetch("/api/sandbox/git", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -125,7 +118,7 @@ export function useExecutionPolling({
             sandboxId: currentSandboxId,
             repoPath: `${PATHS.SANDBOX_HOME}/${repoName}`,
             action: "log",
-            sinceCommit: lastShownCommitHashRef.current,
+            sinceCommit: pollingLastShownCommitHashRef.current,
           }),
         })
         const logData = await logRes.json()
@@ -170,8 +163,8 @@ export function useExecutionPolling({
         }
 
         if (newCommits.length > 0) {
-          // Update the ref to the latest commit
-          lastShownCommitHashRef.current = allCommits[0].shortHash
+          // Update the polling ref to the latest commit for subsequent checks
+          pollingLastShownCommitHashRef.current = allCommits[0].shortHash
           onCommitsDetected?.()
         }
       }
@@ -198,6 +191,7 @@ export function useExecutionPolling({
     pollingBranchNameRef.current = branch.name
     pollingBranchSandboxIdRef.current = branch.sandboxId
     pollingBranchMessagesRef.current = branch.messages
+    pollingLastShownCommitHashRef.current = branch.lastShownCommitHash || null
 
     if (streamingMessageIdRef) {
       streamingMessageIdRef.current = messageId
