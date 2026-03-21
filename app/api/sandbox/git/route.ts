@@ -202,11 +202,13 @@ export async function POST(req: Request) {
         if (verifyStatus.currentBranch !== branchName) {
           return badRequest(`Branch changed during operation: expected ${branchName} but on ${verifyStatus.currentBranch}`)
         }
-        // Check if there are unpushed commits
+        // Check if there are unpushed commits (or no upstream yet)
         const aheadResult = await sandbox.process.executeCommand(
           `cd ${repoPath} && git rev-list @{upstream}..HEAD --count 2>&1`
         )
-        const aheadCount = parseInt(aheadResult.result.trim(), 10) || 0
+        // If no upstream configured (new branch), we need to push
+        const noUpstream = aheadResult.exitCode !== 0 || aheadResult.result.includes("no upstream")
+        const aheadCount = noUpstream ? 1 : (parseInt(aheadResult.result.trim(), 10) || 0)
         let pushed = false
         if (aheadCount > 0) {
           const pushResult = await pushWithRetry(sandbox, repoPath, githubToken)
