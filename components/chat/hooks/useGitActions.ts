@@ -89,14 +89,10 @@ export function useGitActions({
     }
   }, [branch.sandboxId, branch.baseBranch, branch.name, repoFullName])
 
-  // Check for changes periodically and when branch status changes
+  // Check for changes when branch status changes (e.g., execution completes)
+  // No need to poll continuously - just check when relevant state changes
   useEffect(() => {
-    // Initial check
     checkForChanges()
-
-    // Poll for changes every 30 seconds
-    const interval = setInterval(checkForChanges, 30000)
-    return () => clearInterval(interval)
   }, [checkForChanges, branch.status])
 
   const handleSandboxToggle = useCallback(async () => {
