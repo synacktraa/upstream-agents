@@ -5,6 +5,7 @@ import type { Agent, Branch, Message, UserCredentialFlags } from "@/lib/types"
 import { defaultAgentModel, getDefaultModelForAgent, LOOP_CONTINUATION_MESSAGE, DEFAULT_LOOP_MAX_ITERATIONS } from "@/lib/types"
 import { generateId } from "@/lib/store"
 import { BRANCH_STATUS, PATHS } from "@/lib/constants"
+import { waitForSSEResult } from "@/lib/sse-utils"
 import { Terminal } from "lucide-react"
 import { useRef, useEffect, useCallback, useState } from "react"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -362,64 +363,24 @@ export function ChatPanel({
             }),
           })
 
-          // Handle non-OK responses from sandbox create
           if (!recreateRes.ok) {
-            // Try to get error details from response
             let errorMessage = "Failed to recreate sandbox"
             try {
               const errorData = await recreateRes.json()
-              if (errorData.message) {
-                errorMessage = errorData.message
-              } else if (errorData.error) {
-                errorMessage = errorData.error
-              }
+              errorMessage = errorData.message || errorData.error || errorMessage
             } catch {
-              // If not JSON, try to get status text
               errorMessage = `Failed to recreate sandbox: ${recreateRes.status} ${recreateRes.statusText}`
             }
             throw new Error(errorMessage)
           }
 
           // Parse SSE response to get new sandbox info
-          const reader = recreateRes.body?.getReader()
-          if (!reader) {
-            throw new Error("Failed to recreate sandbox: Unable to read response stream")
+          const sseResult = await waitForSSEResult<{ sandboxId: string; previewUrlPattern?: string; type: string }>(recreateRes)
+          if (!sseResult.success) {
+            throw new Error(`Failed to recreate sandbox: ${sseResult.error}`)
           }
 
-          const decoder = new TextDecoder()
-          let sandboxId: string | null = null
-          let previewUrlPattern: string | null = null
-          let sseError: string | null = null
-
-          while (true) {
-            const { done, value } = await reader.read()
-            if (done) break
-            const text = decoder.decode(value)
-            const lines = text.split("\n")
-            for (const line of lines) {
-              if (line.startsWith("data: ")) {
-                try {
-                  const eventData = JSON.parse(line.slice(6))
-                  if (eventData.type === "done") {
-                    // sendDone spreads data directly onto event, not nested under 'data'
-                    sandboxId = eventData.sandboxId
-                    previewUrlPattern = eventData.previewUrlPattern
-                  } else if (eventData.type === "error") {
-                    // Capture error from SSE stream
-                    sseError = eventData.message || eventData.error || "Unknown error during sandbox creation"
-                  }
-                } catch {
-                  // Ignore parse errors
-                }
-              }
-            }
-          }
-
-          // Check for errors from SSE stream
-          if (sseError) {
-            throw new Error(`Failed to recreate sandbox: ${sseError}`)
-          }
-
+          const { sandboxId, previewUrlPattern } = sseResult.data
           if (!sandboxId) {
             throw new Error("Failed to recreate sandbox: No sandbox ID returned")
           }
