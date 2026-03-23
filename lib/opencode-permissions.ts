@@ -17,6 +17,10 @@ const OPENCODE_PERMISSIONS = JSON.parse(
 // OpenCode config path - used for OPENCODE_CONFIG env var
 export const OPENCODE_CONFIG_PATH = PATHS.MCP_CONFIG["opencode"]
 
+// OpenCode permission rules as a JSON string for OPENCODE_PERMISSION env var
+// This overrides the SDK's default '{"*":"allow"}' that bypasses all permissions
+export const OPENCODE_PERMISSION_ENV = JSON.stringify(OPENCODE_PERMISSIONS.permission)
+
 /**
  * Sets up OpenCode permissions in a sandbox.
  * Writes the permissions config to ~/.config/opencode/opencode.jsonc

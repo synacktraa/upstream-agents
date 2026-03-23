@@ -6,7 +6,7 @@ import { buildMcpConfig, getMcpConfigWriteCommand } from "@/lib/mcp-config"
 import { decrypt } from "@/lib/encryption"
 import type { Agent } from "@/lib/types"
 import { setupClaudeHooks } from "@/lib/claude-hooks"
-import { setupOpenCodePermissions, OPENCODE_CONFIG_PATH } from "@/lib/opencode-permissions"
+import { setupOpenCodePermissions, OPENCODE_CONFIG_PATH, OPENCODE_PERMISSION_ENV } from "@/lib/opencode-permissions"
 import { setupCodexRules } from "@/lib/codex-rules"
 
 /**
@@ -253,9 +253,11 @@ export async function ensureSandboxReady(
   // Merge: repo env vars first, then API keys (API keys take precedence if same key)
   const env: Record<string, string> = { ...repoEnv, ...apiKeyEnv }
 
-  // For OpenCode, set the config path env var so it finds the permissions config
+  // For OpenCode, set permission env vars
+  // OPENCODE_PERMISSION overrides the SDK's default '{"*":"allow"}' that bypasses all permissions
   if (agent === "opencode") {
     env.OPENCODE_CONFIG = OPENCODE_CONFIG_PATH
+    env.OPENCODE_PERMISSION = OPENCODE_PERMISSION_ENV
   }
 
   return {
