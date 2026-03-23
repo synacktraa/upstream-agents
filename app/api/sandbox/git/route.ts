@@ -32,17 +32,25 @@ async function ensureCorrectBranch(
 }
 
 /**
- * Push with retry logic for transient errors.
+ * Push with retry logic.
+ * Optionally verifies the current branch before each push attempt.
  * Returns the raw error message on failure - let frontend handle display.
  */
 async function pushWithRetry(
   sandbox: Sandbox,
   repoPath: string,
   githubToken: string,
+  expectedBranch?: string,
   maxRetries = 2
 ): Promise<{ success: boolean; error?: string }> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
+      if (expectedBranch) {
+        const branchError = await ensureCorrectBranch(sandbox, repoPath, expectedBranch)
+        if (branchError) {
+          return { success: false, error: branchError }
+        }
+      }
       await sandbox.git.push(repoPath, "x-access-token", githubToken)
       return { success: true }
     } catch (err: unknown) {
@@ -207,7 +215,7 @@ export async function POST(req: Request) {
         const needsPush = localSha && localSha !== remoteSha
         let pushed = false
         if (needsPush) {
-          const pushResult = await pushWithRetry(sandbox, repoPath, githubToken)
+          const pushResult = await pushWithRetry(sandbox, repoPath, githubToken, currentBranch)
           if (!pushResult.success) {
             return Response.json({ error: "Push failed: " + pushResult.error }, { status: 500 })
           }
@@ -304,7 +312,7 @@ export async function POST(req: Request) {
           return badRequest(`Branch changed during merge: expected ${targetBranch} but on ${mergeVerifyStatus.currentBranch}`)
         }
         // Push the merged target with retry
-        const mergePushResult = await pushWithRetry(sandbox, repoPath, githubToken)
+        const mergePushResult = await pushWithRetry(sandbox, repoPath, githubToken, targetBranch)
         if (!mergePushResult.success) {
           // Switch back before returning error
           await sandbox.git.checkoutBranch(repoPath, currentBranch)
@@ -504,7 +512,7 @@ export async function POST(req: Request) {
             )
           } else {
             // Branch doesn't exist on GitHub yet - push with upstream tracking
-            const renamePushResult = await pushWithRetry(sandbox, repoPath, githubToken)
+            const renamePushResult = await pushWithRetry(sandbox, repoPath, githubToken, newName)
             if (!renamePushResult.success) {
               return Response.json({ error: "Push failed: " + renamePushResult.error }, { status: 500 })
             }
