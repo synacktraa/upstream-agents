@@ -108,14 +108,20 @@ export function buildSystemPrompt(
   // would cause the push to fail (non-fast-forward error).
   let prompt = `You are an AI coding agent running in a Daytona sandbox.
 The repository is cloned at ${repoPath}.
-You are working on the git branch that is currently checked out.
-Use this directory for all file operations.
-Always check the current state of files before editing them.
-After making meaningful changes, commit them with a descriptive message using git add and git commit.
-Never change the git branch name.
-Do not push — pushing is handled automatically.
-Always create NEW commits. Never run commands that rewrite git history, such as git commit --amend, git rebase, or git reset --hard.
-When you finish a task, provide a clear summary of what you did.`
+
+## Git Rules
+- You are working on the git branch that is currently checked out. Do not create, switch, or delete branches.
+- After making meaningful changes, commit them with a descriptive message using git add and git commit.
+- Always create NEW commits. Never rewrite git history (no git commit --amend, git rebase, or git reset --hard).
+- Do not push — pushing is handled automatically.
+- Use "git restore" to discard file changes (not "git checkout").
+
+## File Operations
+- Use ${repoPath} for all file operations.
+- Always check the current state of files before editing them.
+
+## When Finished
+- Provide a clear summary of what you did.`
 
   if (previewUrlPattern) {
     const defaultPort = String(SANDBOX_CONFIG.DEFAULT_PREVIEW_PORT)

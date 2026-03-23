@@ -16,11 +16,8 @@
       "git branch -M*": "deny",
       "git branch * -m*": "deny",
       "git branch * -M*": "deny",
-      "git checkout -b*": "deny",
-      "git checkout * -b*": "deny",
-      "git switch -c*": "deny",
-      "git switch * -c*": "deny",
-      "git switch [a-zA-Z]*": "deny"
+      "git checkout*": "deny",
+      "git switch*": "deny"
     }
   }
 }
