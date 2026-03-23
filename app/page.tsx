@@ -46,7 +46,7 @@ export default function Home() {
     credentials,
     isAdmin,
     loaded,
-    messagesLoading,
+    messagesLoadingBranchIds,
     refreshQuota,
     refreshCredentials,
     loadBranchMessages,
@@ -393,7 +393,7 @@ export default function Home() {
                   onForceSave={() => {}}
                   onCommitsDetected={() => setGitHistoryRefreshTrigger((n) => n + 1)}
                   onBranchFromCommit={(hash) => setPendingStartCommit(hash)}
-                  messagesLoading={messagesLoading}
+                  messagesLoading={messagesLoadingBranchIds.has(activeBranch.id)}
                   isMobile={true}
                   streamingMessageIdRef={streamingMessageIdRef}
                   credentials={credentials}
@@ -444,7 +444,7 @@ export default function Home() {
               onForceSave={() => {}}
               onCommitsDetected={() => setGitHistoryRefreshTrigger((n) => n + 1)}
               onBranchFromCommit={(hash) => setPendingStartCommit(hash)}
-              messagesLoading={messagesLoading}
+              messagesLoading={messagesLoadingBranchIds.has(activeBranch.id)}
               streamingMessageIdRef={streamingMessageIdRef}
               credentials={credentials}
               onOpenSettings={() => setSettingsOpen(true)}

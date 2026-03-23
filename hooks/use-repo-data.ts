@@ -24,11 +24,13 @@ export function useRepoData({ isAuthenticated }: UseRepoDataOptions) {
   // Keep a ref to repos for callbacks that need to read current value without re-creating
   const reposRef = useRef(repos)
   reposRef.current = repos
+  // Per-branch request sequencing to ignore stale/out-of-order responses.
+  const messageLoadSeqRef = useRef(new Map<string, number>())
   const [quota, setQuota] = useState<Quota | null>(null)
   const [credentials, setCredentials] = useState<UserCredentials | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [loaded, setLoaded] = useState(false)
-  const [messagesLoading, setMessagesLoading] = useState(false)
+  const [loadingMessageBranchIds, setLoadingMessageBranchIds] = useState<Set<string>>(new Set())
 
   // Fetch user data on mount
   useEffect(() => {
@@ -146,12 +148,21 @@ export function useRepoData({ isAuthenticated }: UseRepoDataOptions) {
       branch.messages.every(m => m.contentLoaded !== false)
     if (skipIfHasMessages && hasFullContent) return
 
-    setMessagesLoading(true)
+    const seq = (messageLoadSeqRef.current.get(branchId) || 0) + 1
+    messageLoadSeqRef.current.set(branchId, seq)
+    setLoadingMessageBranchIds((prev) => {
+      const next = new Set(prev)
+      next.add(branchId)
+      return next
+    })
     try {
       // Fetch FULL messages (no summary param) when user views a branch
       const res = await fetch(`/api/branches/messages?branchId=${branchId}`)
       if (!res.ok) throw new Error(`Failed to fetch messages: ${res.status}`)
       const data = await res.json()
+      if (messageLoadSeqRef.current.get(branchId) !== seq) {
+        return
+      }
 
       if (data.messages && data.messages.length > 0) {
         setRepos((prev) =>
@@ -173,7 +184,13 @@ export function useRepoData({ isAuthenticated }: UseRepoDataOptions) {
     } catch (err) {
       console.error("Failed to load messages:", err)
     } finally {
-      setMessagesLoading(false)
+      if (messageLoadSeqRef.current.get(branchId) === seq) {
+        setLoadingMessageBranchIds((prev) => {
+          const next = new Set(prev)
+          next.delete(branchId)
+          return next
+        })
+      }
     }
   }, [])
 
@@ -187,7 +204,8 @@ export function useRepoData({ isAuthenticated }: UseRepoDataOptions) {
     setCredentials,
     isAdmin,
     loaded,
-    messagesLoading,
+    messagesLoading: loadingMessageBranchIds.size > 0,
+    messagesLoadingBranchIds: loadingMessageBranchIds,
 
     // Actions
     refreshQuota,
