@@ -14,13 +14,20 @@ const OPENCODE_PERMISSIONS = JSON.parse(
   fs.readFileSync(path.join(HOOKS_DIR, "opencode-permissions.json"), "utf-8")
 )
 
+// OpenCode config path - used for OPENCODE_CONFIG env var
+export const OPENCODE_CONFIG_PATH = PATHS.MCP_CONFIG["opencode"]
+
 /**
  * Sets up OpenCode permissions in a sandbox.
- * Writes the permissions config to the repo root where OpenCode will find it.
+ * Writes the permissions config to ~/.config/opencode/opencode.jsonc
+ * The OPENCODE_CONFIG env var must be set when running opencode to use this config.
  */
-export async function setupOpenCodePermissions(sandbox: Sandbox, repoPath: string): Promise<void> {
-  // Write config to repo root - OpenCode checks project root first
-  const configPath = `${repoPath}/opencode.json`
+export async function setupOpenCodePermissions(sandbox: Sandbox): Promise<void> {
+  const configPath = OPENCODE_CONFIG_PATH
+  const configDir = configPath.substring(0, configPath.lastIndexOf("/"))
+
+  // Create the config directory
+  await sandbox.process.executeCommand(`mkdir -p ${configDir}`)
 
   // Read existing config if present
   const existingResult = await sandbox.process.executeCommand(

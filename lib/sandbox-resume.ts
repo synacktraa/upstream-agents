@@ -6,7 +6,7 @@ import { buildMcpConfig, getMcpConfigWriteCommand } from "@/lib/mcp-config"
 import { decrypt } from "@/lib/encryption"
 import type { Agent } from "@/lib/types"
 import { setupClaudeHooks } from "@/lib/claude-hooks"
-import { setupOpenCodePermissions } from "@/lib/opencode-permissions"
+import { setupOpenCodePermissions, OPENCODE_CONFIG_PATH } from "@/lib/opencode-permissions"
 import { setupCodexRules } from "@/lib/codex-rules"
 
 /**
@@ -198,8 +198,7 @@ export async function ensureSandboxReady(
   // Set up OpenCode permissions on every resume to ensure they're always present
   if (agent === "opencode") {
     t0 = Date.now()
-    const repoPath = `${PATHS.SANDBOX_HOME}/${repoName}`
-    await setupOpenCodePermissions(sandbox, repoPath)
+    await setupOpenCodePermissions(sandbox)
     console.log(`[ensureSandboxReady] opencode permissions written, took ${Date.now() - t0}ms`)
   }
 
@@ -252,7 +251,12 @@ export async function ensureSandboxReady(
   const repoEnv = await getRepoEnvVars(repoId)
 
   // Merge: repo env vars first, then API keys (API keys take precedence if same key)
-  const env = { ...repoEnv, ...apiKeyEnv }
+  const env: Record<string, string> = { ...repoEnv, ...apiKeyEnv }
+
+  // For OpenCode, set the config path env var so it finds the permissions config
+  if (agent === "opencode") {
+    env.OPENCODE_CONFIG = OPENCODE_CONFIG_PATH
+  }
 
   return {
     sandbox,
