@@ -198,7 +198,8 @@ export async function ensureSandboxReady(
   // Set up OpenCode permissions on every resume to ensure they're always present
   if (agent === "opencode") {
     t0 = Date.now()
-    await setupOpenCodePermissions(sandbox)
+    const repoPath = `${PATHS.SANDBOX_HOME}/${repoName}`
+    await setupOpenCodePermissions(sandbox, repoPath)
     console.log(`[ensureSandboxReady] opencode permissions written, took ${Date.now() - t0}ms`)
   }
 
