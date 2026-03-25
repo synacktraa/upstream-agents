@@ -80,7 +80,7 @@ export async function POST(req: Request) {
   const result = await generateWithUserLLM({ userId, prompt })
 
   if (result.error === "no_api_key") {
-    return badRequest("No API key configured. Please add an Anthropic or OpenAI API key in settings.")
+    return badRequest("No API key available. Please add an Anthropic or OpenAI API key in settings, or ensure the server has OpenRouter configured.")
   }
 
   if (result.error || !result.text) {

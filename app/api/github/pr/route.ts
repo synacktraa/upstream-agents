@@ -2,6 +2,73 @@ import { prisma } from "@/lib/prisma"
 import { requireGitHubAuth, isGitHubAuthError, badRequest, internalError } from "@/lib/api-helpers"
 import { compareBranches, createPullRequest, isGitHubApiError } from "@/lib/github-client"
 import { createPRSchema, validateBody, isValidationError } from "@/lib/schemas"
+import { generateWithUserLLM } from "@/lib/llm"
+
+const PR_TITLE_PROMPT = `Based on the branch name and commit messages below, generate a concise pull request title.
+
+Requirements:
+- Keep it under 72 characters
+- Use sentence case (capitalize first letter only)
+- Focus on WHAT the PR accomplishes, not HOW
+- Do not include PR number or branch name prefixes like "feat:" or "fix:"
+- Make it descriptive but concise
+- Do not include any quotes around the title
+
+Branch name: {branchName}
+
+Commit messages:
+{commits}
+
+Reply with ONLY the PR title, nothing else. Examples:
+Add dark mode toggle to settings page
+Fix authentication timeout on slow connections
+Refactor API client for better error handling`
+
+/**
+ * Generate a PR title using AI, with fallback to simple branch name formatting
+ */
+async function generatePRTitle(
+  userId: string,
+  branchName: string,
+  commits: string[]
+): Promise<string> {
+  // Always have a fallback title from branch name
+  const fallbackTitle = branchName
+    .replace(/^(feat|fix|refactor|docs|test|chore)\//, "")
+    .replace(/[-_]/g, " ")
+    .replace(/\b\w/g, (c: string) => c.toUpperCase())
+
+  // If no commits, just use fallback
+  if (commits.length === 0) {
+    return fallbackTitle
+  }
+
+  const prompt = PR_TITLE_PROMPT
+    .replace("{branchName}", branchName)
+    .replace("{commits}", commits.map((c) => `- ${c}`).join("\n"))
+
+  try {
+    const result = await generateWithUserLLM({ userId, prompt })
+
+    if (result.error || !result.text) {
+      console.log("[generatePRTitle] AI generation failed, using fallback:", result.error)
+      return fallbackTitle
+    }
+
+    // Sanitize the AI-generated title
+    const sanitizedTitle = result.text
+      .replace(/^["'`]|["'`]$/g, "") // Remove quotes
+      .replace(/`/g, "") // Remove backticks
+      .split("\n")[0] // Take first line only
+      .trim()
+      .slice(0, 72) // Limit length
+
+    return sanitizedTitle || fallbackTitle
+  } catch (error) {
+    console.error("[generatePRTitle] Error:", error)
+    return fallbackTitle
+  }
+}
 
 export async function POST(req: Request) {
   const auth = await requireGitHubAuth()
@@ -16,12 +83,14 @@ export async function POST(req: Request) {
   const { owner, repo, head, base } = validation.data
 
   try {
-    // Get commits between base and head for PR body
+    // Get commits between base and head for PR body and title generation
     let prBody = ""
+    let commitMessages: string[] = []
     try {
       const compareData = await compareBranches(auth.token, owner, repo, base, head)
       const commits = compareData.commits || []
       if (commits.length > 0) {
+        commitMessages = commits.map((c) => c.commit.message)
         prBody = commits
           .map((c) => `- ${c.commit.message}`)
           .join("\n")
@@ -30,10 +99,8 @@ export async function POST(req: Request) {
       // Ignore compare errors, just use empty body
     }
 
-    // Generate title from branch name
-    const title = head
-      .replace(/[-_]/g, " ")
-      .replace(/\b\w/g, (c: string) => c.toUpperCase())
+    // Generate AI-powered PR title (falls back to branch name formatting)
+    const title = await generatePRTitle(auth.userId, head, commitMessages)
 
     // Create the PR
     const prData = await createPullRequest(auth.token, owner, repo, {
