@@ -9,26 +9,8 @@ import {
 } from "@/lib/api-helpers"
 import { generateWithUserLLM } from "@/lib/llm"
 
-const SUGGESTION_PROMPT = `Based on the conversation below, suggest a concise Git branch name that describes the work being done.
-
-Requirements:
-- Use 2-4 words maximum (not counting the prefix)
-- All lowercase
-- Words separated by hyphens
-- Choose the CORRECT prefix based on the type of work:
-  - fix/ = fixing a bug or issue
-  - feat/ = adding a new feature or capability
-  - refactor/ = restructuring code without changing behavior
-  - docs/ = documentation changes
-  - test/ = adding or updating tests
-  - chore/ = maintenance tasks, dependencies, config
-- Be specific but concise
-- Do NOT use "fix" in the description if using feat/ prefix (and vice versa)
-
-Conversation:
-{conversation}
-
-Reply with ONLY the branch name, nothing else. Examples: fix/auth-validation, feat/dark-mode, refactor/api-client`
+const SUGGESTION_PROMPT = `Reply with exactly one git branch name, one line, no markdown or quotes — format prefix/slug like feat/dark-mode or fix/auth-timeout (lowercase, hyphens). Prefix must be fix, feat, refactor, docs, test, or chore; slug is 2–4 words.
+{conversation}`
 
 /**
  * POST /api/branches/suggest-name
@@ -52,11 +34,10 @@ export async function POST(req: Request) {
     return notFound("Branch not found")
   }
 
-  // Get messages for this branch (limit to first few for context)
   const messages = await prisma.message.findMany({
     where: { branchId },
     orderBy: { createdAt: "asc" },
-    take: 10, // First 10 messages should be enough context
+    take: 6,
     select: {
       role: true,
       content: true,
@@ -67,10 +48,9 @@ export async function POST(req: Request) {
     return badRequest("No conversation history to generate suggestion from")
   }
 
-  // Build conversation summary (truncate long messages)
   const conversationSummary = messages
     .map((m) => {
-      const content = m.content.length > 500 ? m.content.slice(0, 500) + "..." : m.content
+      const content = m.content.length > 320 ? m.content.slice(0, 320) + "..." : m.content
       return `${m.role}: ${content}`
     })
     .join("\n\n")
