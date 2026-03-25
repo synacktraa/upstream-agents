@@ -37,7 +37,7 @@ export async function POST(req: Request) {
   const messages = await prisma.message.findMany({
     where: { branchId },
     orderBy: { createdAt: "asc" },
-    take: 6,
+    take: 4,
     select: {
       role: true,
       content: true,
@@ -50,7 +50,7 @@ export async function POST(req: Request) {
 
   const conversationSummary = messages
     .map((m) => {
-      const content = m.content.length > 320 ? m.content.slice(0, 320) + "..." : m.content
+      const content = m.content.length > 220 ? m.content.slice(0, 220) + "..." : m.content
       return `${m.role}: ${content}`
     })
     .join("\n\n")
