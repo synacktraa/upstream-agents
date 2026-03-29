@@ -13,6 +13,15 @@ function createPrismaClient() {
     throw new Error("DATABASE_URL environment variable is not set")
   }
 
+  // Use Neon adapter for Neon/serverless PostgreSQL, standard client for local PostgreSQL
+  const isLocalPostgres = connectionString.includes("localhost") || connectionString.includes("127.0.0.1")
+
+  if (isLocalPostgres) {
+    return new PrismaClient({
+      log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
+    })
+  }
+
   const adapter = new PrismaNeon({ connectionString })
 
   return new PrismaClient({
