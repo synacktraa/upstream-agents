@@ -55,7 +55,6 @@ export function useExecutionPolling({
   // Store the branch context at polling start time to avoid using wrong branch data
   // when the user switches branches during execution. These are ONLY updated when
   // polling starts, not on every render.
-  const pollingBranchNameRef = useRef<string | null>(null)
   const pollingBranchSandboxIdRef = useRef<string | undefined>(undefined)
   const pollingBranchMessagesRef = useRef<Message[]>([])
   const pollingLastShownCommitHashRef = useRef<string | null>(null)
@@ -63,11 +62,6 @@ export function useExecutionPolling({
   // Track the currently viewed branch (used for determining unread status)
   const activeBranchIdRef = useRef(branch.id)
   activeBranchIdRef.current = branch.id
-
-  // Track the current branch name (updated on every render)
-  // This is used for branch validation during push - we need fresh state, not stale polling refs
-  const currentBranchNameRef = useRef(branch.name)
-  currentBranchNameRef.current = branch.name
 
   // Loop mode refs - track loop state without recreating callbacks
   const loopEnabledRef = useRef(branch.loopEnabled)
@@ -89,9 +83,7 @@ export function useExecutionPolling({
     commitDetectionRunningRef.current = true
 
     // Use the branch context captured at polling start, not the currently viewed branch
-    // EXCEPT for branch name - use fresh state to avoid race condition with auto-rename
     const currentSandboxId = pollingBranchSandboxIdRef.current
-    const currentBranchName = currentBranchNameRef.current
     const targetBranchId = pollingBranchIdRef.current
 
     if (!currentSandboxId || !targetBranchId) {
@@ -109,7 +101,7 @@ export function useExecutionPolling({
             sandboxId: currentSandboxId,
             repoPath: `${PATHS.SANDBOX_HOME}/${repoName}`,
             action: "auto-commit-push",
-            branchName: currentBranchName,
+            branchId: targetBranchId,
           }),
         })
 
@@ -220,7 +212,6 @@ export function useExecutionPolling({
     // Capture the branch context at polling start time
     // This ensures we use the correct branch data even if the user switches branches
     pollingBranchIdRef.current = branch.id
-    pollingBranchNameRef.current = branch.name
     pollingBranchSandboxIdRef.current = branch.sandboxId
     pollingBranchMessagesRef.current = branch.messages
     pollingLastShownCommitHashRef.current = branch.lastShownCommitHash || null
@@ -554,13 +545,13 @@ export function useExecutionPolling({
 
     poll()
     pollingRef.current = setInterval(poll, 500)
-  // Note: We intentionally access branch.id, branch.name, branch.sandboxId, and branch.messages directly
+  // Note: We intentionally access branch.id, branch.sandboxId, and branch.messages directly
   // (not through refs) because we want to capture their values at the moment startPolling is called.
   // However, we don't include branch.messages in deps because it changes on every message update,
   // which would cause the callback to be recreated and reset the polling interval.
   // The branch context is captured once when startPolling is called and stored in refs.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [branch.id, branch.name, branch.sandboxId, repoName, onUpdateMessage, onUpdateBranch, onAddMessage, onForceSave, streamingMessageIdRef, detectAndShowCommits])
+  }, [branch.id, branch.sandboxId, repoName, onUpdateMessage, onUpdateBranch, onAddMessage, onForceSave, streamingMessageIdRef, detectAndShowCommits])
 
   startPollingRef.current = startPolling
 
