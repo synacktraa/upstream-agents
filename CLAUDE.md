@@ -1,30 +1,51 @@
 # Claude Instructions
 
-## Daytona Sandbox Environment
+## Starting the Development Server (Daytona Sandbox)
 
-When running inside a Daytona sandbox:
+`GITHUB_PAT` and `DAYTONA_API_KEY` are already set in the sandbox environment.
 
-### Environment Variables
-`GITHUB_PAT` and `DAYTONA_API_KEY` are already set in the environment — don't add them to `.env`. Only add local-specific config (database URL, NextAuth settings, etc.) to `.env`.
+### 1. Install PostgreSQL and Create Database
 
-**CRITICAL:** Set `NEXTAUTH_URL` to the Daytona proxy URL. Using `localhost:3000` will cause redirect errors:
-```
-NEXTAUTH_URL="https://{port}-{sandbox-id}.daytonaproxy01.net"
-```
-
-### Preview URL
-The app is accessible via the Daytona proxy URL pattern:
-```
-https://{port}-{sandbox-id}.daytonaproxy01.net
+```bash
+sudo apt-get update && sudo apt-get install -y postgresql postgresql-contrib
+sudo service postgresql start
+sudo -u postgres psql -c "CREATE USER sandboxed WITH PASSWORD 'sandboxed123';"
+sudo -u postgres psql -c "CREATE DATABASE sandboxed_agents OWNER sandboxed;"
 ```
 
-The `allowedDevOrigins` wildcard (`**.daytonaproxy01.net`) in `next.config.mjs` handles this automatically.
+### 2. Create Environment File
 
-### Running Servers
-Start web servers with `nohup` so they persist:
+Create `packages/web/.env` with the Daytona proxy URL (replace `{sandbox-id}` with actual ID):
+
+```bash
+cat > packages/web/.env << 'EOF'
+DATABASE_URL="postgresql://sandboxed:sandboxed123@localhost:5432/sandboxed_agents"
+DATABASE_URL_UNPOOLED="postgresql://sandboxed:sandboxed123@localhost:5432/sandboxed_agents"
+NEXTAUTH_URL="https://3000-{sandbox-id}.daytonaproxy01.net"
+NEXTAUTH_SECRET="dev-secret"
+GITHUB_CLIENT_ID="placeholder"
+GITHUB_CLIENT_SECRET="placeholder"
+ENCRYPTION_KEY="0000000000000000000000000000000000000000000000000000000000000000"
+EOF
+```
+
+**CRITICAL:** `NEXTAUTH_URL` must be the Daytona proxy URL, not `localhost:3000`.
+
+### 3. Install, Build, and Initialize
+
+```bash
+npm install
+npm run build:sdk
+cd packages/web && npx prisma db push && cd ../..
+```
+
+### 4. Start the Server
+
 ```bash
 nohup npm run dev > server.log 2>&1 &
 ```
+
+The app is accessible at: `https://3000-{sandbox-id}.daytonaproxy01.net`
 
 ## Testing
 
