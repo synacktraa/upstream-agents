@@ -29,8 +29,9 @@ export const INCLUDE_BRANCH_WITH_MESSAGES = {
 
 /**
  * Branch include for list views - no messages, just counts
+ * (used internally in INCLUDE_REPO_FOR_LIST)
  */
-export const INCLUDE_BRANCH_FOR_LIST = {
+const INCLUDE_BRANCH_FOR_LIST = {
   sandbox: true,
   messages: false,
   _count: {
@@ -138,10 +139,6 @@ export const INCLUDE_EXECUTION_WITH_CONTEXT = {
 
 export type BranchWithMessages = Prisma.BranchGetPayload<{
   include: typeof INCLUDE_BRANCH_WITH_MESSAGES
-}>
-
-export type BranchForList = Prisma.BranchGetPayload<{
-  include: typeof INCLUDE_BRANCH_FOR_LIST
 }>
 
 export type BranchWithRepo = Prisma.BranchGetPayload<{
