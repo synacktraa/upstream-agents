@@ -294,8 +294,14 @@ export async function POST(req: Request) {
       }
 
       case "merge": {
-        if (!githubToken || !targetBranch || !currentBranch || !repoOwner || !repoApiName) {
-          return badRequest("Missing required fields for merge")
+        if (!githubToken) {
+          return badRequest("GitHub account required for merge (link GitHub in settings)")
+        }
+        if (!targetBranch || !currentBranch) {
+          return badRequest("Missing branch names for merge")
+        }
+        if (!repoOwner || !repoApiName) {
+          return badRequest("Missing repository owner or name for merge")
         }
 
         // Get current branch in sandbox to determine if we need to pull after

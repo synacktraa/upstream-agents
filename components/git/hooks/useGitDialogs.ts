@@ -82,12 +82,17 @@ export function useGitDialogs({
     }
   }, [repoOwner, repoName, branch, branchName, branchBaseName])
 
-  // Fetch branches when merge or rebase dialog opens
+  // Reset merge UI only when a dialog opens — not when fetchBranches identity changes
   useEffect(() => {
     if (mergeOpen || rebaseOpen) {
       setSelectedBranch("")
       setMergeDirection("from-current")
       setSquashMerge(false)
+    }
+  }, [mergeOpen, rebaseOpen])
+
+  useEffect(() => {
+    if (mergeOpen || rebaseOpen) {
       fetchBranches()
     }
   }, [mergeOpen, rebaseOpen, fetchBranches])
@@ -110,6 +115,10 @@ export function useGitDialogs({
     const sourceBranch = mergeDirection === "from-current" ? branchName : selectedBranch
     const targetBranch = mergeDirection === "from-current" ? selectedBranch : branchName
 
+    const [ownerFromFull, repoFromFull] = repoFullName.split("/")
+    const apiOwner = repoOwner || ownerFromFull || ""
+    const apiRepo = repoName || repoFromFull || ""
+
     try {
       const res = await fetch("/api/sandbox/git", {
         method: "POST",
@@ -121,8 +130,8 @@ export function useGitDialogs({
           targetBranch: targetBranch,
           currentBranch: sourceBranch,
           squash: squashMerge,
-          repoOwner: repoOwner,
-          repoApiName: repoName,
+          repoOwner: apiOwner,
+          repoApiName: apiRepo,
         }),
       })
       const data = await res.json()
@@ -135,11 +144,15 @@ export function useGitDialogs({
     } finally {
       setActionLoading(false)
     }
-  }, [selectedBranch, branch, sandboxId, branchName, repoName, repoOwner, addSystemMessage, mergeDirection, squashMerge])
+  }, [selectedBranch, branch, sandboxId, branchName, repoName, repoOwner, repoFullName, addSystemMessage, mergeDirection, squashMerge])
 
   const handleRebase = useCallback(async () => {
     if (!selectedBranch || !branch || !sandboxId) return
     setActionLoading(true)
+
+    const [ownerFromFull, repoFromFull] = repoFullName.split("/")
+    const apiOwner = repoOwner || ownerFromFull || ""
+    const apiRepo = repoName || repoFromFull || ""
 
     try {
       const res = await fetch("/api/sandbox/git", {
@@ -151,8 +164,8 @@ export function useGitDialogs({
           action: "rebase",
           targetBranch: selectedBranch,
           currentBranch: branchName,
-          repoOwner: repoOwner,
-          repoApiName: repoName,
+          repoOwner: apiOwner,
+          repoApiName: apiRepo,
         }),
       })
       const data = await res.json()
@@ -165,7 +178,7 @@ export function useGitDialogs({
     } finally {
       setActionLoading(false)
     }
-  }, [selectedBranch, branch, sandboxId, branchName, repoOwner, repoName, addSystemMessage])
+  }, [selectedBranch, branch, sandboxId, branchName, repoOwner, repoName, repoFullName, addSystemMessage])
 
   const handleTag = useCallback(async () => {
     const name = tagNameInput.trim()
