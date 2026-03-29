@@ -10,7 +10,7 @@ const nextConfig = {
   serverExternalPackages: [
     "ssh2",
     "cpu-features",
-    "agents",
+    "@sandboxed-agents/sdk",
   ],
   // Empty turbopack config to acknowledge we're using webpack
   turbopack: {},
@@ -25,7 +25,7 @@ const nextConfig = {
         ...externals,
         "cpu-features",
         "ssh2",
-        "agents",
+        "@sandboxed-agents/sdk",
       ]
     }
 
