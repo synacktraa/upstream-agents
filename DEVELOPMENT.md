@@ -18,7 +18,8 @@ For local development, you only need **two** environment variables:
 | `DAYTONA_API_KEY` | Daytona API key for sandboxes | Get from [Daytona](https://www.daytona.io/) |
 
 When `GITHUB_PAT` is set:
-- Authentication is bypassed (no GitHub OAuth app needed)
+- The login page auto-creates a session and redirects to the app
+- No GitHub OAuth app needed
 - A dev user is auto-created in the database
 - The PAT is used for all GitHub operations
 
@@ -94,15 +95,19 @@ npm run dev
 
 The app will be available at http://localhost:3000
 
-## What Happens on First Request
+## What Happens on First Visit
 
-When you make your first API request with `GITHUB_PAT` set:
+When you visit the app with `GITHUB_PAT` set:
 
-1. A warning is logged: `WARNING: Running in dev mode (GITHUB_PAT is set)`
-2. A dev user is auto-created in the database with:
+1. The login page detects dev mode and auto-redirects
+2. A session is created for the dev user
+3. A warning is logged: `WARNING: Running in dev mode (GITHUB_PAT is set)`
+4. A dev user is auto-created in the database with:
    - Admin privileges
    - 100 sandbox quota
    - Default credentials
+
+You'll be logged in automatically — no OAuth flow needed.
 
 ## Verifying It Works
 
