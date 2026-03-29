@@ -29,6 +29,8 @@ interface MergeDialogProps {
   actionLoading: boolean
   onMerge: () => void
   onCancel: () => void
+  squashMerge: boolean
+  onSquashMergeChange: (squash: boolean) => void
 }
 
 export function MergeDialog({
@@ -44,6 +46,8 @@ export function MergeDialog({
   actionLoading,
   onMerge,
   onCancel,
+  squashMerge,
+  onSquashMergeChange,
 }: MergeDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -110,6 +114,17 @@ export function MergeDialog({
                 {branchName}
               </div>
             )}
+
+            {/* Squash merge checkbox */}
+            <label className="flex items-center gap-2 w-full mt-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={squashMerge}
+                onChange={(e) => onSquashMergeChange(e.target.checked)}
+                className="h-4 w-4 rounded border-input accent-primary cursor-pointer"
+              />
+              <span className="text-sm text-muted-foreground">Squash on merge</span>
+            </label>
           </div>
         )}
         <DialogFooter>

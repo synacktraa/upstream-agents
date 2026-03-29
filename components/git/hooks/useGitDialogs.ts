@@ -45,6 +45,7 @@ export function useGitDialogs({
 
   // Merge-specific state
   const [mergeDirection, setMergeDirection] = useState<"into-current" | "from-current">("from-current")
+  const [squashMerge, setSquashMerge] = useState(false)
 
   // Tag-specific state
   const [tagNameInput, setTagNameInput] = useState("")
@@ -86,6 +87,7 @@ export function useGitDialogs({
     if (mergeOpen || rebaseOpen) {
       setSelectedBranch("")
       setMergeDirection("from-current")
+      setSquashMerge(false)
       fetchBranches()
     }
   }, [mergeOpen, rebaseOpen, fetchBranches])
@@ -118,11 +120,14 @@ export function useGitDialogs({
           action: "merge",
           targetBranch: targetBranch,
           currentBranch: sourceBranch,
+          squash: squashMerge,
+          repoOwner: repoOwner,
+          repoApiName: repoName,
         }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      addSystemMessage(`Merged **${sourceBranch}** into **${targetBranch}** and pushed.`)
+      addSystemMessage(`${squashMerge ? "Squash merged" : "Merged"} **${sourceBranch}** into **${targetBranch}** and pushed.`)
       setMergeOpen(false)
     } catch (err: unknown) {
       addSystemMessage(`Merge failed: ${err instanceof Error ? err.message : "Unknown error"}`)
@@ -130,7 +135,7 @@ export function useGitDialogs({
     } finally {
       setActionLoading(false)
     }
-  }, [selectedBranch, branch, sandboxId, branchName, repoName, addSystemMessage, mergeDirection])
+  }, [selectedBranch, branch, sandboxId, branchName, repoName, repoOwner, addSystemMessage, mergeDirection, squashMerge])
 
   const handleRebase = useCallback(async () => {
     if (!selectedBranch || !branch || !sandboxId) return
@@ -215,6 +220,8 @@ export function useGitDialogs({
     // Merge state
     mergeDirection,
     toggleMergeDirection,
+    squashMerge,
+    setSquashMerge,
 
     // Tag state
     tagNameInput,

@@ -27,6 +27,8 @@ export function GitDialogs({ gitDialogs }: GitDialogsProps) {
         actionLoading={gitDialogs.actionLoading}
         onMerge={gitDialogs.handleMerge}
         onCancel={() => gitDialogs.setMergeOpen(false)}
+        squashMerge={gitDialogs.squashMerge}
+        onSquashMergeChange={gitDialogs.setSquashMerge}
       />
 
       <RebaseDialog
