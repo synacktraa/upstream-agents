@@ -1,13 +1,44 @@
 "use client"
 
 import { signIn } from "next-auth/react"
-import { Github } from "lucide-react"
-import { useSearchParams } from "next/navigation"
-import { Suspense } from "react"
+import { Github, Loader2 } from "lucide-react"
+import { useSearchParams, useRouter } from "next/navigation"
+import { Suspense, useEffect, useState } from "react"
 
 function LoginContents() {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const forceConsent = searchParams.get("consent") === "1"
+  const [checkingDevMode, setCheckingDevMode] = useState(true)
+
+  // Check for dev mode and auto-redirect
+  useEffect(() => {
+    async function checkDevMode() {
+      try {
+        const res = await fetch("/api/auth/dev-mode")
+        const { enabled } = await res.json()
+        if (enabled) {
+          // Redirect to dev session endpoint which creates the session
+          router.push("/api/auth/dev-session")
+          return
+        }
+      } catch {
+        // Ignore errors, just show normal login
+      }
+      setCheckingDevMode(false)
+    }
+    checkDevMode()
+  }, [router])
+
+  // Show loading while checking dev mode
+  if (checkingDevMode) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background">
       <div className="flex flex-col items-center gap-6 p-8">

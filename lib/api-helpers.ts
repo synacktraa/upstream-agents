@@ -8,6 +8,13 @@ import {
   INCLUDE_SANDBOX_WITH_USER_CREDENTIALS,
   INCLUDE_BRANCH_WITH_REPO,
 } from "@/lib/prisma-includes"
+import {
+  isAuthSkipped,
+  ensureDevUserExists,
+  warnAboutSkippedAuth,
+  getDevGitHubToken,
+  DEV_USER_ID,
+} from "@/lib/dev-auth"
 
 // =============================================================================
 // Types
@@ -121,8 +128,18 @@ export function internalError(error: unknown) {
 /**
  * Gets the authenticated user's ID from the session
  * Returns null if not authenticated
+ *
+ * When GITHUB_PAT is set (development only), returns the dev user ID
+ * and ensures the dev user exists in the database.
  */
 export async function getAuthUserId(): Promise<string | null> {
+  // Check for dev auth bypass
+  if (isAuthSkipped()) {
+    warnAboutSkippedAuth()
+    await ensureDevUserExists()
+    return DEV_USER_ID
+  }
+
   const session = await getServerSession(authOptions)
   return session?.user?.id ?? null
 }
@@ -203,6 +220,12 @@ export interface GitHubAuthResult {
 }
 
 async function getPreferredGitHubToken(userId: string): Promise<string | null> {
+  // Dev mode: use PAT from environment
+  const devToken = getDevGitHubToken()
+  if (devToken) {
+    return devToken
+  }
+
   const [user, accounts] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
@@ -229,20 +252,34 @@ async function getPreferredGitHubToken(userId: string): Promise<string | null> {
  * Gets the authenticated user's GitHub token
  * Returns userId and token or an error Response
  * Combines session check, account lookup, and token validation in one call
+ *
+ * When GITHUB_PAT is set (development only), uses the dev user and the PAT
+ * for all GitHub operations.
  */
 export async function requireGitHubAuth(): Promise<GitHubAuthResult | Response> {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.id) {
+  let userId: string | null = null
+
+  // Check for dev auth bypass
+  if (isAuthSkipped()) {
+    warnAboutSkippedAuth()
+    await ensureDevUserExists()
+    userId = DEV_USER_ID
+  } else {
+    const session = await getServerSession(authOptions)
+    userId = session?.user?.id ?? null
+  }
+
+  if (!userId) {
     return unauthorized()
   }
 
-  const token = await getPreferredGitHubToken(session.user.id)
+  const token = await getPreferredGitHubToken(userId)
 
   if (!token) {
     return Response.json({ error: "GitHub account not linked" }, { status: 401 })
   }
 
-  return { userId: session.user.id, token }
+  return { userId, token }
 }
 
 /**
