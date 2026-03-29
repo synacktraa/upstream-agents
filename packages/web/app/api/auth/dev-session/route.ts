@@ -33,16 +33,15 @@ export async function GET() {
 
     // Set the session cookie
     const cookieStore = await cookies()
-    const isSecure = process.env.NEXTAUTH_URL?.startsWith("https") ?? false
 
-    // NextAuth uses different cookie names for secure vs non-secure contexts
-    const cookieName = isSecure
-      ? "__Secure-next-auth.session-token"
-      : "next-auth.session-token"
+    // In dev mode behind a proxy (like Daytona), we can't use __Secure- cookies
+    // because the proxy terminates TLS and the backend sees HTTP.
+    // Always use non-secure cookie name in dev mode.
+    const cookieName = "next-auth.session-token"
 
     cookieStore.set(cookieName, token, {
       httpOnly: true,
-      secure: isSecure,
+      secure: false, // Dev mode - proxy handles HTTPS
       sameSite: "lax",
       path: "/",
       maxAge: 30 * 24 * 60 * 60, // 30 days
