@@ -10,7 +10,7 @@ import { createBranchWithSandbox } from "@/lib/git/branch-actions"
 import { StatusDot } from "@/components/ui/status-dot"
 import { Plus, LogOut, Settings, Box, ChevronDown, Check, Loader2, GitBranch, Trash2 } from "lucide-react"
 import { AgentIcon } from "@/components/icons/agent-icons"
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
 import {
   DropdownMenu,
@@ -103,6 +103,9 @@ export function MobileSidebarDrawer({
   const [githubBranchesLoading, setGithubBranchesLoading] = useState(false)
 
   const activeRepo = repos.find(r => r.id === activeRepoId)
+  // Ref to access current repos state in callbacks (avoids stale closures)
+  const reposRef = useRef(repos)
+  reposRef.current = repos
   const fallbackDeleteRepo: Repo = {
     id: "__fallback__",
     name: "",
@@ -206,6 +209,15 @@ export function MobileSidebarDrawer({
         },
         {
           onDone: (result) => {
+            // Get the current branch state from the ref to preserve any agent/model
+            // changes the user made during sandbox creation. We use the ref instead of
+            // result.agent because result.agent is the default from the database,
+            // which would overwrite the user's selection.
+            const currentRepo = reposRef.current.find(r => r.id === activeRepoId)
+            const currentBranch = currentRepo?.branches.find(b => b.id === branchId)
+            const currentAgent = currentBranch?.agent
+            const currentModel = currentBranch?.model
+
             onUpdateBranch(branchId, {
               id: result.branchId,
               status: BRANCH_STATUS.IDLE,
@@ -213,7 +225,10 @@ export function MobileSidebarDrawer({
               contextId: result.contextId,
               previewUrlPattern: result.previewUrlPattern,
               startCommit: result.startCommit,
-              agent: result.agent,
+              // Include agent/model so they get persisted to the database
+              // This preserves any changes the user made during sandbox creation
+              ...(currentAgent && { agent: currentAgent }),
+              ...(currentModel && { model: currentModel }),
             })
             onQuotaRefresh?.()
           },

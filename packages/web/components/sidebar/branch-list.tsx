@@ -74,6 +74,9 @@ export function BranchList({
   const [githubBranches, setGithubBranches] = useState<string[]>([])
   const [githubBranchesLoading, setGithubBranchesLoading] = useState(false)
   const isResizing = useRef(false)
+  // Ref to access current repo state in callbacks (avoids stale closures)
+  const repoRef = useRef(repo)
+  repoRef.current = repo
 
   const filtered = repo.branches
     .filter((b) => b.name.toLowerCase().includes(search.toLowerCase()))
@@ -197,6 +200,14 @@ export function BranchList({
         },
         {
           onDone: (result) => {
+            // Get the current branch state from the ref to preserve any agent/model
+            // changes the user made during sandbox creation. We use the ref instead of
+            // result.agent because result.agent is the default from the database,
+            // which would overwrite the user's selection.
+            const currentBranch = repoRef.current.branches.find(b => b.id === branchId)
+            const currentAgent = currentBranch?.agent
+            const currentModel = currentBranch?.model
+
             onUpdateBranch(branchId, {
               id: result.branchId,
               status: BRANCH_STATUS.IDLE,
@@ -204,7 +215,10 @@ export function BranchList({
               contextId: result.contextId,
               previewUrlPattern: result.previewUrlPattern,
               startCommit: result.startCommit,
-              agent: result.agent,
+              // Include agent/model so they get persisted to the database
+              // This preserves any changes the user made during sandbox creation
+              ...(currentAgent && { agent: currentAgent }),
+              ...(currentModel && { model: currentModel }),
             })
             onQuotaRefresh?.()
           },
