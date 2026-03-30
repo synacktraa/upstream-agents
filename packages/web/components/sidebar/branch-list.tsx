@@ -33,6 +33,7 @@ interface BranchListProps {
   onSelectBranch: (branchId: string) => void
   onAddBranch: (branch: Branch) => void
   onRemoveBranch: (branchId: string, deleteRemote?: boolean) => void
+  onSwitchAwayFromBranchBeforeDelete?: (branchId: string) => void
   onUpdateBranch: (branchId: string, updates: Partial<Branch>) => void
   onQuotaRefresh?: () => void
   quota?: { current: number; max: number; remaining: number } | null
@@ -51,6 +52,7 @@ export function BranchList({
   onSelectBranch,
   onAddBranch,
   onRemoveBranch,
+  onSwitchAwayFromBranchBeforeDelete,
   onUpdateBranch,
   onQuotaRefresh,
   quota,
@@ -130,7 +132,11 @@ export function BranchList({
   }, [fetchGithubBranches])
 
   // Delete branch dialog hook - handles pre-check and state
-  const deleteDialog = useDeleteBranchDialog({ repo, onRemoveBranch })
+  const deleteDialog = useDeleteBranchDialog({
+    repo,
+    onRemoveBranch,
+    onSwitchAwayFromBranchBeforeDelete,
+  })
 
   function startResize() {
     isResizing.current = true
@@ -331,21 +337,22 @@ export function BranchList({
                       </div>
                     </div>
                   </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      deleteDialog.handleDeleteClick(branch.id)
-                    }}
-                    disabled={isDeleting || isCreating}
-                    className={cn(
-                      "absolute right-2 top-1/2 -translate-y-1/2 flex h-5 w-5 cursor-pointer items-center justify-center rounded text-muted-foreground/60 transition-all hover:bg-muted-foreground/10 hover:text-foreground",
-                      isDeleting ? "opacity-100" : "opacity-0 group-hover:opacity-100",
-                      (isDeleting || isCreating) && "cursor-not-allowed"
-                    )}
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
+                  {!isDeleting && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        deleteDialog.handleDeleteClick(branch.id)
+                      }}
+                      disabled={isCreating}
+                      className={cn(
+                        "absolute right-2 top-1/2 -translate-y-1/2 flex h-5 w-5 cursor-pointer items-center justify-center rounded text-muted-foreground/60 transition-all hover:bg-muted-foreground/10 hover:text-foreground opacity-0 group-hover:opacity-100",
+                        isCreating && "cursor-not-allowed"
+                      )}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               )
             })}

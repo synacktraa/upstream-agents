@@ -67,6 +67,7 @@ interface MobileSidebarDrawerProps {
   onQuotaRefresh?: () => void
   credentials?: UserCredentialFlags | null
   onRemoveBranch?: (branchId: string, deleteRemote?: boolean) => void
+  onSwitchAwayFromBranchBeforeDelete?: (branchId: string) => void
 }
 
 export function MobileSidebarDrawer({
@@ -90,6 +91,7 @@ export function MobileSidebarDrawer({
   onQuotaRefresh,
   credentials,
   onRemoveBranch,
+  onSwitchAwayFromBranchBeforeDelete,
 }: MobileSidebarDrawerProps) {
   const [removeModalRepo, setRemoveModalRepo] = useState<Repo | null>(null)
   const [baseBranchOpen, setBaseBranchOpen] = useState(false)
@@ -114,6 +116,7 @@ export function MobileSidebarDrawer({
   const deleteDialog = useDeleteBranchDialog({
     repo: deleteDialogRepo,
     onRemoveBranch: onRemoveBranch ?? (() => {}),
+    onSwitchAwayFromBranchBeforeDelete,
   })
 
   const canDeleteBranch = !!activeRepo && !!onRemoveBranch
@@ -509,14 +512,14 @@ export function MobileSidebarDrawer({
                           </div>
                         </button>
 
-                        {canDeleteBranch && (
+                        {canDeleteBranch && !isDeleting && (
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation()
                               deleteDialog.handleDeleteClick(branch.id)
                             }}
-                            disabled={branch.status === BRANCH_STATUS.CREATING || isDeleting}
+                            disabled={branch.status === BRANCH_STATUS.CREATING}
                             className="absolute right-2 top-1/2 -translate-y-1/2 flex h-5 w-5 cursor-pointer items-center justify-center rounded text-muted-foreground/60 transition-colors hover:bg-muted-foreground/10 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                             title="Delete branch"
                           >

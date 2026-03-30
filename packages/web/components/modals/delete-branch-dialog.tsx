@@ -231,12 +231,18 @@ export function DeleteBranchDialog({
 interface UseDeleteBranchDialogOptions {
   repo: Repo
   onRemoveBranch: (branchId: string, deleteRemote?: boolean) => Promise<void> | void
+  /** If the branch being deleted is selected, move selection before the async delete (e.g. another branch or none). */
+  onSwitchAwayFromBranchBeforeDelete?: (branchId: string) => void
 }
 
 /**
  * Hook to manage delete branch dialog state and logic
  */
-export function useDeleteBranchDialog({ repo, onRemoveBranch }: UseDeleteBranchDialogOptions) {
+export function useDeleteBranchDialog({
+  repo,
+  onRemoveBranch,
+  onSwitchAwayFromBranchBeforeDelete,
+}: UseDeleteBranchDialogOptions) {
   const [deletingBranch, setDeletingBranch] = useState<Branch | null>(null)
   const [deletingBranchId, setDeletingBranchId] = useState<string | null>(null)
 
@@ -259,6 +265,7 @@ export function useDeleteBranchDialog({ repo, onRemoveBranch }: UseDeleteBranchD
   const handleConfirm = useCallback(
     async (branchId: string, deleteRemote: boolean) => {
       setDeletingBranch(null)
+      onSwitchAwayFromBranchBeforeDelete?.(branchId)
       setDeletingBranchId(branchId)
       try {
         await onRemoveBranch(branchId, deleteRemote)
@@ -266,7 +273,7 @@ export function useDeleteBranchDialog({ repo, onRemoveBranch }: UseDeleteBranchD
         setDeletingBranchId(null)
       }
     },
-    [onRemoveBranch]
+    [onRemoveBranch, onSwitchAwayFromBranchBeforeDelete]
   )
 
   return {

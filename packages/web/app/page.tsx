@@ -108,6 +108,21 @@ export default function Home() {
     setActiveBranchId,
   })
 
+  const switchAwayFromBranchBeforeDelete = useCallback(
+    (branchId: string) => {
+      if (activeBranchId !== branchId) return
+      const remaining = activeRepo?.branches.filter((b) => b.id !== branchId) ?? []
+      const next = remaining[0]?.id
+      if (next) {
+        handleUpdateBranch(next, { unread: false })
+        selectBranch(next)
+      } else {
+        setActiveBranchId(null)
+      }
+    },
+    [activeBranchId, activeRepo, handleUpdateBranch, selectBranch, setActiveBranchId]
+  )
+
   // Streaming state ref - signals when a message is actively being streamed
   // This is used to prevent sync from overwriting streaming content
   const streamingMessageIdRef = useRef<string | null>(null)
@@ -322,6 +337,7 @@ export default function Home() {
             onQuotaRefresh={refreshQuota}
             credentials={credentials}
             onRemoveBranch={(branchId, deleteRemote) => handleRemoveBranch(branchId, deleteRemote, activeBranchId ?? undefined)}
+            onSwitchAwayFromBranchBeforeDelete={switchAwayFromBranchBeforeDelete}
           />
         )}
 
@@ -338,6 +354,7 @@ export default function Home() {
               }}
               onAddBranch={handleAddBranch}
               onRemoveBranch={(branchId, deleteRemote) => handleRemoveBranch(branchId, deleteRemote, activeBranchId ?? undefined)}
+              onSwitchAwayFromBranchBeforeDelete={switchAwayFromBranchBeforeDelete}
               onUpdateBranch={handleUpdateBranch}
               onQuotaRefresh={refreshQuota}
               width={branchListWidth}
