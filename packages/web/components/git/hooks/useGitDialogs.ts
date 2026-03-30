@@ -197,7 +197,7 @@ export function useGitDialogs({
           .map((f: string) => `- \`${f}\``)
           .join("\n")
         addSystemMessage(
-          `⚠️ **Merge conflict detected**\n\n` +
+          `::icon-warning:: **Merge conflict detected**\n\n` +
             `Merging **${sourceBranch}** into **${targetBranch}** resulted in conflicts.\n\n` +
             `**Conflicted files:**\n${fileList}\n\n` +
             `You can ask the agent to resolve these conflicts, or click **Abort Merge** to cancel.`
@@ -206,10 +206,10 @@ export function useGitDialogs({
         return
       }
       if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Merge failed")
-      addSystemMessage(`${squashMerge ? "Squash merged" : "Merged"} **${sourceBranch}** into **${targetBranch}** and pushed.`)
+      addSystemMessage(`::icon-success:: ${squashMerge ? "Squash merged" : "Merged"} **${sourceBranch}** into **${targetBranch}** and pushed.`)
       setMergeOpen(false)
     } catch (err: unknown) {
-      addSystemMessage(`Merge failed: ${err instanceof Error ? err.message : "Unknown error"}`)
+      addSystemMessage(`::icon-error:: Merge failed: ${err instanceof Error ? err.message : "Unknown error"}`)
       setMergeOpen(false)
     } finally {
       setActionLoading(false)
@@ -257,7 +257,7 @@ export function useGitDialogs({
           .join('\n')
 
         addSystemMessage(
-          `⚠️ **Rebase conflict detected**\n\n` +
+          `::icon-warning:: **Rebase conflict detected**\n\n` +
           `Rebasing **${branchName}** onto **${selectedBranch}** resulted in conflicts.\n\n` +
           `**Conflicted files:**\n${fileList}\n\n` +
           `You can ask the agent to resolve these conflicts, or click **Abort Rebase** to cancel.`
@@ -283,7 +283,7 @@ export function useGitDialogs({
             repoApiName: apiRepo,
           }
           const content =
-            `⚠️ **Rebase finished locally** but the remote branch could not be updated.\n\n${errMsg}`
+            `::icon-warning:: **Rebase finished locally** but the remote branch could not be updated.\n\n${errMsg}`
           await upsertPushErrorSystemMessage(branchId, branch.messages, content, pushError, {
             onUpdateMessage,
             onAddMessage,
@@ -295,11 +295,11 @@ export function useGitDialogs({
         throw new Error(errMsg)
       }
       addSystemMessage(
-        `Rebased **${branchName}** onto **${selectedBranch}**. The branch on GitHub now points at your rebased commits.`
+        `::icon-success:: Rebased **${branchName}** onto **${selectedBranch}**. The branch on GitHub now points at your rebased commits.`
       )
       setRebaseOpen(false)
     } catch (err: unknown) {
-      addSystemMessage(`Rebase failed: ${err instanceof Error ? err.message : "Unknown error"}`)
+      addSystemMessage(`::icon-error:: Rebase failed: ${err instanceof Error ? err.message : "Unknown error"}`)
       setRebaseOpen(false)
     } finally {
       setActionLoading(false)
@@ -328,11 +328,11 @@ export function useGitDialogs({
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      addSystemMessage(`Tag **${name}** created and pushed.`)
+      addSystemMessage(`::icon-success:: Tag **${name}** created and pushed.`)
       setTagOpen(false)
       setTagNameInput("")
     } catch (err: unknown) {
-      addSystemMessage(`Tag failed: ${err instanceof Error ? err.message : "Unknown error"}`)
+      addSystemMessage(`::icon-error:: Tag failed: ${err instanceof Error ? err.message : "Unknown error"}`)
     } finally {
       setActionLoading(false)
     }
@@ -361,11 +361,11 @@ export function useGitDialogs({
       if (branchId && sandboxId) putRebaseConflictInCache(sandboxId, branchId, cleared)
       addSystemMessage(
         isMerge
-          ? `Merge aborted. Your branch is back to its previous state.`
-          : `Rebase aborted. Your branch is back to its previous state.`
+          ? `::icon-success:: Merge aborted. Your branch is back to its previous state.`
+          : `::icon-success:: Rebase aborted. Your branch is back to its previous state.`
       )
     } catch (err: unknown) {
-      addSystemMessage(`Abort failed: ${err instanceof Error ? err.message : "Unknown error"}`)
+      addSystemMessage(`::icon-error:: Abort failed: ${err instanceof Error ? err.message : "Unknown error"}`)
     } finally {
       setActionLoading(false)
     }
