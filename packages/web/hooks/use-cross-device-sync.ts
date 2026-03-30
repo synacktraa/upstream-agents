@@ -1,6 +1,10 @@
 "use client"
 
-import { useEffect, useRef, useCallback } from "react"
+import { useRef, useCallback } from "react"
+import { useQuery } from "@tanstack/react-query"
+import { useSession } from "next-auth/react"
+import { queryKeys } from "@/lib/api/query-keys"
+import { apiFetch } from "@/lib/api/fetcher"
 
 interface SyncBranch {
   id: string
@@ -36,74 +40,67 @@ interface UseCrossDeviceSyncOptions {
   onSyncData?: (data: SyncData, lastData: SyncData | null) => void
 }
 
+/**
+ * Fetch sync data from the API
+ */
+async function fetchSyncData(): Promise<SyncData> {
+  return apiFetch<SyncData>("/api/sync")
+}
+
+/**
+ * Cross-device sync using TanStack Query polling
+ *
+ * Features:
+ * - Automatic polling at configurable interval
+ * - Pauses when tab is hidden (refetchIntervalInBackground: false)
+ * - Immediate refetch when tab becomes visible
+ * - Change detection via onSyncData callback
+ */
 export function useCrossDeviceSync({
   enabled = true,
   interval = 5000, // 5 seconds default
   onSyncData,
 }: UseCrossDeviceSyncOptions) {
-  const lastSyncRef = useRef<SyncData | null>(null)
-  const pollingRef = useRef<NodeJS.Timeout | null>(null)
-  const isVisibleRef = useRef(true)
+  const { status } = useSession()
+  const isAuthenticated = status === "authenticated"
 
-  const sync = useCallback(async () => {
-    if (!enabled || !isVisibleRef.current) return
+  // Track previous data for change detection
+  const prevDataRef = useRef<SyncData | null>(null)
 
-    try {
-      const res = await fetch("/api/sync")
-      if (!res.ok) return
+  // Store callback in ref to avoid recreating query
+  const onSyncDataRef = useRef(onSyncData)
+  onSyncDataRef.current = onSyncData
 
-      const data: SyncData = await res.json()
-      const lastSync = lastSyncRef.current
+  const query = useQuery({
+    queryKey: queryKeys.sync.data(),
+    queryFn: async () => {
+      const data = await fetchSyncData()
 
-      // Call the sync handler with both current and last data
-      // Let the consumer decide what changed and how to handle it
-      onSyncData?.(data, lastSync)
-
-      lastSyncRef.current = data
-    } catch {
-      // Silently fail - network issues are expected
-    }
-  }, [enabled, onSyncData])
-
-  // Handle visibility changes - pause polling when tab is hidden
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      isVisibleRef.current = document.visibilityState === "visible"
-
-      // If becoming visible, sync immediately
-      if (isVisibleRef.current) {
-        sync()
+      // Call handler with previous data for comparison
+      if (onSyncDataRef.current) {
+        onSyncDataRef.current(data, prevDataRef.current)
       }
-    }
+      prevDataRef.current = data
 
-    document.addEventListener("visibilitychange", handleVisibilityChange)
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange)
-  }, [sync])
+      return data
+    },
+    enabled: enabled && isAuthenticated,
+    // Polling configuration
+    refetchInterval: interval,
+    // Pause polling when tab is hidden
+    refetchIntervalInBackground: false,
+    // Refetch immediately when window regains focus
+    refetchOnWindowFocus: true,
+    // Data is considered fresh for slightly less than the polling interval
+    staleTime: interval - 1000,
+    // Don't retry on error - next poll will try again
+    retry: false,
+  })
 
-  // Start/stop polling
-  useEffect(() => {
-    if (!enabled) {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current)
-        pollingRef.current = null
-      }
-      lastSyncRef.current = null
-      return
-    }
-
-    // Initial sync
-    sync()
-
-    // Start polling
-    pollingRef.current = setInterval(sync, interval)
-
-    return () => {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current)
-        pollingRef.current = null
-      }
-    }
-  }, [enabled, interval, sync])
+  // Manual sync trigger
+  const sync = useCallback(() => {
+    query.refetch()
+  }, [query])
 
   return { sync }
 }

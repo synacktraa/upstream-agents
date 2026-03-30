@@ -1,4 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from "react"
+"use client"
+
+import { useCallback, useRef, useEffect, useState } from "react"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   DbMessage,
   DbMessageSummary,
@@ -11,205 +14,249 @@ import {
   transformMessageSummary,
 } from "@/lib/db/db-types"
 import { BRANCH_STATUS } from "@/lib/shared/constants"
+import { queryKeys } from "@/lib/api/query-keys"
+import { apiFetch } from "@/lib/api/fetcher"
+
+/**
+ * Response shape from /api/user/me
+ */
+interface UserMeResponse {
+  user: {
+    id: string
+    name: string
+    email: string
+    isAdmin?: boolean
+  }
+  repos: DbRepo[]
+  quota: Quota
+  credentials: UserCredentials
+}
+
+/**
+ * Response shape from /api/branches/messages
+ */
+interface BranchMessagesResponse<T = DbMessage> {
+  messages: T[]
+  pagination: {
+    totalCount: number
+    hasMore: boolean
+    nextCursor: string | null
+  }
+}
+
+/**
+ * Fetch user data from /api/user/me
+ */
+async function fetchUserMe(): Promise<UserMeResponse> {
+  return apiFetch<UserMeResponse>("/api/user/me")
+}
+
+/**
+ * Fetch messages for a branch
+ */
+async function fetchBranchMessages(branchId: string, summary: true): Promise<BranchMessagesResponse<DbMessageSummary>>
+async function fetchBranchMessages(branchId: string, summary?: false): Promise<BranchMessagesResponse<DbMessage>>
+async function fetchBranchMessages(branchId: string, summary: boolean = false): Promise<BranchMessagesResponse<DbMessage | DbMessageSummary>> {
+  const url = summary
+    ? `/api/branches/messages?branchId=${branchId}&summary=true`
+    : `/api/branches/messages?branchId=${branchId}`
+  return apiFetch<BranchMessagesResponse<DbMessage | DbMessageSummary>>(url)
+}
 
 interface UseRepoDataOptions {
   isAuthenticated: boolean
 }
 
 /**
- * Manages fetching and state for repos, quota, and credentials
+ * Manages fetching and state for repos, quota, and credentials.
+ * Uses TanStack Query for initial fetch and quota/credentials,
+ * but local state for repos to avoid transform/untransform issues during streaming.
  */
 export function useRepoData({ isAuthenticated }: UseRepoDataOptions) {
+  const queryClient = useQueryClient()
+
+  // Local state for repos - avoids transform/untransform issues with TanStack Query cache
   const [repos, setRepos] = useState<TransformedRepo[]>([])
-  // Keep a ref to repos for callbacks that need to read current value without re-creating
-  const reposRef = useRef(repos)
-  reposRef.current = repos
+  const [loaded, setLoaded] = useState(false)
+
   // Per-branch request sequencing to ignore stale/out-of-order responses.
   const messageLoadSeqRef = useRef(new Map<string, number>())
-  const [quota, setQuota] = useState<Quota | null>(null)
-  const [credentials, setCredentials] = useState<UserCredentials | null>(null)
-  const [isAdmin, setIsAdmin] = useState(false)
-  const [loaded, setLoaded] = useState(false)
   const [loadingMessageBranchIds, setLoadingMessageBranchIds] = useState<Set<string>>(new Set())
 
-  // Fetch user data on mount
+  // Keep a ref to repos for callbacks that need current value without re-creating
+  const reposRef = useRef(repos)
+  reposRef.current = repos
+
+  // Main user data query - only for initial fetch and quota/credentials
+  const {
+    data: userData,
+    isSuccess,
+  } = useQuery({
+    queryKey: queryKeys.user.me(),
+    queryFn: fetchUserMe,
+    enabled: isAuthenticated,
+    staleTime: 30 * 1000,
+    refetchOnWindowFocus: true,
+  })
+
+  // Initialize repos from query data on first success
   useEffect(() => {
-    if (!isAuthenticated) return
+    if (!isSuccess || !userData?.repos || loaded) return
 
-    fetch("/api/user/me", { cache: "no-store" })
-      .then((r) => {
-        if (!r.ok) throw new Error(`Failed to fetch user data: ${r.status}`)
-        return r.json()
-      })
-      .then(async (data) => {
-        if (data.repos) {
-          // Repos are already returned in the correct order from the API
-          const transformedRepos: TransformedRepo[] = data.repos.map(transformRepo)
-          setRepos(transformedRepos)
+    const transformedRepos = userData.repos.map(transformRepo)
+    setRepos(transformedRepos)
+    setLoaded(true)
 
-          // Eagerly load messages for any running branches to prevent race conditions
-          // This ensures messages are available when chat-panel checks for active executions
-          const runningBranches = transformedRepos.flatMap((r: TransformedRepo) =>
-            r.branches.filter((b) => b.status === BRANCH_STATUS.RUNNING).map((b) => ({ repoId: r.id, branch: b }))
-          )
+    // Load message summaries for running branches
+    const runningBranches = transformedRepos.flatMap((r) =>
+      r.branches
+        .filter((b) => b.status === BRANCH_STATUS.RUNNING)
+        .map((b) => ({ repoId: r.id, branch: b }))
+    )
 
-          if (runningBranches.length > 0) {
-            // Load message SUMMARIES for running branches (lazy loading optimization)
-            // Full content is loaded on-demand when user actually views the branch
-            // This reduces Neon network transfer by ~80%
-            const messagePromises = runningBranches.map(async ({ repoId, branch }: { repoId: string; branch: { id: string } }) => {
-              try {
-                const res = await fetch(`/api/branches/messages?branchId=${branch.id}&summary=true`)
-                if (!res.ok) return null
-                const msgData = await res.json()
-                return { repoId, branchId: branch.id, messages: msgData.messages || [] }
-              } catch {
-                return null
-              }
-            })
+    if (runningBranches.length === 0) return
 
-            const results = await Promise.all(messagePromises)
-            const validResults = results.filter((r): r is { repoId: string; branchId: string; messages: DbMessageSummary[] } => r !== null && r.messages.length > 0)
-
-            if (validResults.length > 0) {
-              setRepos((prev) =>
-                prev.map((r) => {
-                  const branchUpdates = validResults.filter(u => u.repoId === r.id)
-                  if (branchUpdates.length === 0) return r
-                  return {
-                    ...r,
-                    branches: r.branches.map((b) => {
-                      const update = branchUpdates.find(u => u.branchId === b.id)
-                      if (!update) return b
-                      return {
-                        ...b,
-                        messages: update.messages.map(transformMessageSummary),
-                      }
-                    }),
-                  }
-                })
-              )
-            }
-          }
-        }
-        if (data.quota) {
-          setQuota(data.quota)
-        }
-        if (data.credentials) {
-          setCredentials(data.credentials)
-        }
-        if (data.user?.isAdmin) {
-          setIsAdmin(data.user.isAdmin)
-        }
-        setLoaded(true)
-      })
-      .catch((err) => {
-        console.error("Failed to fetch user data:", err)
-        setLoaded(true)
-      })
-  }, [isAuthenticated])
-
-  // Refresh quota from server
-  const refreshQuota = useCallback(() => {
-    fetch("/api/user/quota")
-      .then((r) => r.json())
-      .then((q) => setQuota(q))
-      .catch(() => {})
-  }, [])
-
-  // Refresh credentials from server
-  const refreshCredentials = useCallback(() => {
-    fetch("/api/user/me")
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.credentials) {
-          setCredentials(data.credentials)
+    Promise.all(
+      runningBranches.map(async ({ repoId, branch }) => {
+        try {
+          const msgData = await fetchBranchMessages(branch.id, true)
+          return { repoId, branchId: branch.id, messages: msgData.messages || [] }
+        } catch {
+          return null
         }
       })
-      .catch(() => {})
-  }, [])
+    ).then((results) => {
+      const validResults = results.filter(
+        (r): r is { repoId: string; branchId: string; messages: DbMessageSummary[] } =>
+          r !== null && r.messages.length > 0
+      )
 
-  // Load messages for a specific branch
-  // Uses reposRef to avoid recreating this callback when repos changes,
-  // which would cause unnecessary refetches via the useEffect in app/page.tsx
-  const loadBranchMessages = useCallback(async (
-    branchId: string,
-    repoId: string,
-    skipIfHasMessages: boolean = true
-  ) => {
-    // Check if branch already has FULL messages (read from ref to avoid dependency)
-    const repo = reposRef.current.find((r) => r.id === repoId)
-    const branch = repo?.branches.find((b) => b.id === branchId)
-    if (!branch) return
-
-    // Skip if we already have messages with full content loaded
-    // Check contentLoaded flag - if any message has contentLoaded=false, we need to fetch
-    const hasFullContent = branch.messages.length > 0 &&
-      branch.messages.every(m => m.contentLoaded !== false)
-    if (skipIfHasMessages && hasFullContent) return
-
-    const seq = (messageLoadSeqRef.current.get(branchId) || 0) + 1
-    messageLoadSeqRef.current.set(branchId, seq)
-    setLoadingMessageBranchIds((prev) => {
-      const next = new Set(prev)
-      next.add(branchId)
-      return next
-    })
-    try {
-      // Fetch FULL messages (no summary param) when user views a branch
-      const res = await fetch(`/api/branches/messages?branchId=${branchId}`)
-      if (!res.ok) throw new Error(`Failed to fetch messages: ${res.status}`)
-      const data = await res.json()
-      if (messageLoadSeqRef.current.get(branchId) !== seq) {
-        return
-      }
-
-      if (data.messages && data.messages.length > 0) {
+      if (validResults.length > 0) {
         setRepos((prev) =>
           prev.map((r) => {
-            if (r.id !== repoId) return r
+            const branchUpdates = validResults.filter((u) => u.repoId === r.id)
+            if (branchUpdates.length === 0) return r
             return {
               ...r,
               branches: r.branches.map((b) => {
-                if (b.id !== branchId) return b
+                const update = branchUpdates.find((u) => u.branchId === b.id)
+                if (!update) return b
                 return {
                   ...b,
-                  messages: data.messages.map(transformMessage),
+                  messages: update.messages.map(transformMessageSummary),
                 }
               }),
             }
           })
         )
       }
+    })
+  }, [isSuccess, userData?.repos, loaded])
+
+  // Refresh user data from server - refetches and resets local state
+  const refresh = useCallback(() => {
+    setLoaded(false) // Allow re-initialization from query
+    queryClient.invalidateQueries({ queryKey: queryKeys.user.me() })
+  }, [queryClient])
+
+  // Refresh just quota without resetting repos (uses lightweight endpoint)
+  const refreshQuotaOnly = useCallback(async () => {
+    try {
+      const quota = await apiFetch<Quota>("/api/user/quota")
+      queryClient.setQueryData<UserMeResponse>(queryKeys.user.me(), (old) => {
+        if (!old) return old
+        return { ...old, quota }
+      })
     } catch (err) {
-      console.error("Failed to load messages:", err)
-    } finally {
-      if (messageLoadSeqRef.current.get(branchId) === seq) {
-        setLoadingMessageBranchIds((prev) => {
-          const next = new Set(prev)
-          next.delete(branchId)
-          return next
-        })
-      }
+      console.error("Failed to refresh quota:", err)
     }
-  }, [])
+  }, [queryClient])
+
+  // Load messages for a specific branch
+  const loadBranchMessages = useCallback(
+    async (branchId: string, repoId: string, skipIfHasMessages: boolean = true) => {
+      const currentRepos = reposRef.current
+      const repo = currentRepos.find((r) => r.id === repoId)
+      const branch = repo?.branches.find((b) => b.id === branchId)
+      if (!branch) return
+
+      // Skip if we already have messages with full content loaded
+      const hasFullContent =
+        branch.messages.length > 0 && branch.messages.every((m) => m.contentLoaded !== false)
+      if (skipIfHasMessages && hasFullContent) return
+
+      const seq = (messageLoadSeqRef.current.get(branchId) || 0) + 1
+      messageLoadSeqRef.current.set(branchId, seq)
+      setLoadingMessageBranchIds((prev) => {
+        const next = new Set(prev)
+        next.add(branchId)
+        return next
+      })
+
+      try {
+        const data = await fetchBranchMessages(branchId, false)
+        if (messageLoadSeqRef.current.get(branchId) !== seq) {
+          return
+        }
+
+        if (data.messages && data.messages.length > 0) {
+          setRepos((prev) =>
+            prev.map((r) => {
+              if (r.id !== repoId) return r
+              return {
+                ...r,
+                branches: r.branches.map((b) => {
+                  if (b.id !== branchId) return b
+                  return {
+                    ...b,
+                    messages: data.messages.map(transformMessage),
+                  }
+                }),
+              }
+            })
+          )
+        }
+      } catch (err) {
+        console.error("Failed to load messages:", err)
+      } finally {
+        if (messageLoadSeqRef.current.get(branchId) === seq) {
+          setLoadingMessageBranchIds((prev) => {
+            const next = new Set(prev)
+            next.delete(branchId)
+            return next
+          })
+        }
+      }
+    },
+    []
+  )
 
   return {
     // State
     repos,
     setRepos,
-    quota,
-    setQuota,
-    credentials,
-    setCredentials,
-    isAdmin,
+    quota: userData?.quota ?? null,
+    setQuota: (quota: Quota | null) => {
+      queryClient.setQueryData<UserMeResponse>(queryKeys.user.me(), (old) => {
+        if (!old) return old
+        return { ...old, quota: quota! }
+      })
+    },
+    credentials: userData?.credentials ?? null,
+    setCredentials: (credentials: UserCredentials | null) => {
+      queryClient.setQueryData<UserMeResponse>(queryKeys.user.me(), (old) => {
+        if (!old) return old
+        return { ...old, credentials: credentials! }
+      })
+    },
+    isAdmin: userData?.user?.isAdmin ?? false,
     loaded,
     messagesLoading: loadingMessageBranchIds.size > 0,
     messagesLoadingBranchIds: loadingMessageBranchIds,
 
     // Actions
-    refreshQuota,
-    refreshCredentials,
+    refresh,
+    refreshQuotaOnly,
     loadBranchMessages,
   }
 }

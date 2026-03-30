@@ -16,8 +16,7 @@ interface UseRepoOperationsOptions {
   activeRepoId: string | null
   activeRepo: TransformedRepo | null
   selectRepo: (repoId: string) => void
-  setActiveBranchId: React.Dispatch<React.SetStateAction<string | null>>
-  refreshQuota: () => void
+  setActiveBranchId: (branchId: string | null) => void
 }
 
 /**
@@ -30,7 +29,6 @@ export function useRepoOperations({
   activeRepo,
   selectRepo,
   setActiveBranchId,
-  refreshQuota,
 }: UseRepoOperationsOptions) {
   // Add a new repo (persists to DB, then updates state and selection)
   const handleAddRepo = useCallback(
@@ -167,9 +165,9 @@ export function useRepoOperations({
       setActiveBranchId(remainingAfterDeletion[0]?.id ?? null)
     }
 
-    // Refresh quota
-    refreshQuota()
-  }, [activeRepo, setRepos, setActiveBranchId, refreshQuota])
+    // Note: Don't call refresh() here - local state is already correct.
+    // Cross-device sync will handle eventual consistency if needed.
+  }, [activeRepo, setRepos, setActiveBranchId])
 
   return {
     handleAddRepo,
