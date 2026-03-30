@@ -75,9 +75,26 @@ export function ChatHeader({
           : "border-border"
       )}
     >
+      {/* GitHub icon - positioned before branch name */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <a
+            href={`https://github.com/${repoFullName}/tree/${branch.name}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex cursor-pointer h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground ml-2.5"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+            </svg>
+          </a>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="text-xs">Open on GitHub</TooltipContent>
+      </Tooltip>
+
       {/* Branch name section */}
       {renaming.renaming ? (
-        <div className="flex items-center gap-1.5 min-w-0 ml-2.5">
+        <div className="flex items-center gap-1.5 min-w-0">
           <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="shrink-0 text-muted-foreground">
             <path fillRule="evenodd" d="M11.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zm-2.25.75a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.493 2.493 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25zM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zM3.5 3.25a.75.75 0 1 1 1.5 0 .75.75 0 0 1-1.5 0z" />
           </svg>
@@ -100,7 +117,7 @@ export function ChatHeader({
           {(renaming.renameLoading || renaming.suggesting) && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground shrink-0" />}
         </div>
       ) : (
-        <div className="flex items-center gap-1 min-w-0 ml-2.5 group/branch-section">
+        <div className="flex items-center gap-1 min-w-0 group/branch-section">
           <button
             onClick={renaming.startRenaming}
             className="flex items-center gap-1.5 min-w-0 py-1 cursor-pointer"
@@ -150,22 +167,6 @@ export function ChatHeader({
             <TooltipContent side="bottom" className="text-xs">
               {branch.status === BRANCH_STATUS.STOPPED ? "Start sandbox" : "Pause sandbox"}
             </TooltipContent>
-          </Tooltip>
-          <div className="mx-1.5 h-4 w-px bg-border shrink-0" />
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <a
-                href={`https://github.com/${repoFullName}/tree/${branch.name}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex cursor-pointer h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-              >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
-                </svg>
-              </a>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs">Open on GitHub</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -241,31 +242,34 @@ export function ChatHeader({
           }
 
           return (
-            <Tooltip key={action.label}>
-              <TooltipTrigger asChild>
-                <button
-                  onClick={() => gitActions.handleHeaderAction(action.action)}
-                  disabled={!isReady || (isBusy && !canUseWhileBusy) || isPRLoading}
-                  className={cn(
-                    "flex cursor-pointer h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors disabled:opacity-30 disabled:cursor-not-allowed",
-                    hasPR || hasDiffChanges
-                      ? "text-green-400"
-                      : isActive
-                      ? "bg-accent text-foreground"
-                      : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                  )}
-                >
-                  {isPRLoading ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <action.icon className="h-3.5 w-3.5" />
-                  )}
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="text-xs">
-                {hasPR ? "Open PR" : action.label}
-              </TooltipContent>
-            </Tooltip>
+            <span key={action.label} className="contents">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => gitActions.handleHeaderAction(action.action)}
+                    disabled={!isReady || (isBusy && !canUseWhileBusy) || isPRLoading}
+                    className={cn(
+                      "flex cursor-pointer h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors disabled:opacity-30 disabled:cursor-not-allowed",
+                      hasPR || hasDiffChanges
+                        ? "text-green-400"
+                        : isActive
+                        ? "bg-accent text-foreground"
+                        : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                    )}
+                  >
+                    {isPRLoading ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <action.icon className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  {hasPR ? "Open PR" : action.label}
+                </TooltipContent>
+              </Tooltip>
+              {action.action === "rebase" && <div className="mx-1.5 h-4 w-px bg-border shrink-0" />}
+            </span>
           )
         })}
       </div>
