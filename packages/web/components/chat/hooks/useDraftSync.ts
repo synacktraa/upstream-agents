@@ -20,9 +20,16 @@ const AUTOSAVE_DEBOUNCE_MS = 1000
  * 4. Loads draft from DB when switching to a new branch
  */
 export function useDraftSync({ branch, onSaveDraftForBranch }: UseDraftSyncOptions) {
-  const [input, setInput] = useState(branch.draftPrompt ?? "")
+  const [input, setInputState] = useState(branch.draftPrompt ?? "")
   const inputRef = useRef(input)
-  inputRef.current = input
+
+  // Wrapper that updates ref immediately (before React re-renders)
+  // This ensures inputRef.current is always current, even if the component
+  // unmounts before the next render (e.g., when switching branches quickly)
+  const setInput = useCallback((value: string) => {
+    inputRef.current = value
+    setInputState(value)
+  }, [])
 
   // Track the branch we're currently editing
   const branchIdRef = useRef(branch.id)
@@ -126,7 +133,7 @@ export function useDraftSync({ branch, onSaveDraftForBranch }: UseDraftSyncOptio
       prevBranchIdRef.current = branch.id
       prevBranchNameRef.current = branch.name
     }
-  }, [branch.id, branch.name, branch.draftPrompt])
+  }, [branch.id, branch.name, branch.draftPrompt, setInput])
 
   // Save draft on page unload/close
   useEffect(() => {
