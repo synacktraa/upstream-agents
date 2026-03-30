@@ -33,14 +33,6 @@ function rebaseConflictCacheKey(sandboxId: string, branchId: string): string {
   return `${sandboxId}::${branchId}`
 }
 
-function logRebaseConflict(message: string, data?: Record<string, unknown>) {
-  if (data !== undefined) {
-    console.log(`[rebase-conflict] ${message}`, data)
-  } else {
-    console.log(`[rebase-conflict] ${message}`)
-  }
-}
-
 /**
  * Shared hook for git dialog operations: merge, rebase, tag
  * Used by both mobile and desktop interfaces
@@ -91,29 +83,6 @@ export function useGitDialogs({
     return REBASE_CONFLICT_CACHE.get(key) ?? rebaseConflictState
   }, [branchId, sandboxId, rebaseConflictState])
 
-  useEffect(() => {
-    const cached =
-      branchId && sandboxId
-        ? REBASE_CONFLICT_CACHE.get(rebaseConflictCacheKey(sandboxId, branchId))
-        : undefined
-    logRebaseConflict("merged display snapshot", {
-      branchId: branchId || "(none)",
-      branchName: branchName || "(none)",
-      cacheHit: branchId ? cached !== undefined : false,
-      cacheInRebase: cached?.inRebase,
-      stateInRebase: rebaseConflictState.inRebase,
-      mergedInRebase: rebaseConflict.inRebase,
-      cacheKeys: [...REBASE_CONFLICT_CACHE.keys()],
-    })
-  }, [
-    branchId,
-    branchName,
-    sandboxId,
-    rebaseConflict.inRebase,
-    rebaseConflict.conflictedFiles.length,
-    rebaseConflictState.inRebase,
-  ])
-
   const prevSandboxForRebaseRef = useRef<string | null>(null)
 
   const putRebaseConflictInCache = useCallback(
@@ -121,7 +90,6 @@ export function useGitDialogs({
       if (!sid || !bid) return
       const key = rebaseConflictCacheKey(sid, bid)
       REBASE_CONFLICT_CACHE.set(key, next)
-      logRebaseConflict("cache SET", { key, inRebase: next.inRebase, files: next.conflictedFiles.length })
     },
     []
   )
@@ -383,14 +351,8 @@ export function useGitDialogs({
   const checkRebaseStatus = useCallback(async () => {
     if (!sandboxId) return
 
-    const startedAt = performance.now()
     const branchAtStart = branchIdRef.current
     const sandboxAtStart = sandboxId
-    logRebaseConflict("checkRebaseStatus: start", {
-      sandboxId: sandboxAtStart,
-      branchId: branchAtStart,
-      repoName,
-    })
 
     try {
       const res = await fetch("/api/sandbox/git", {
@@ -403,7 +365,6 @@ export function useGitDialogs({
         }),
       })
       const data = await res.json()
-      const ms = Math.round(performance.now() - startedAt)
       if (res.ok) {
         const next: RebaseConflictState = {
           inRebase: data.inRebase || false,
@@ -411,51 +372,22 @@ export function useGitDialogs({
         }
         const idNow = branchIdRef.current
         const sidNow = sandboxIdRef.current
-        const branchMismatch = branchAtStart !== idNow
-        const sandboxMismatch = sandboxAtStart !== sidNow
-        logRebaseConflict("checkRebaseStatus: ok", {
-          ms,
-          branchIdAtStart: branchAtStart,
-          branchIdNow: idNow,
-          branchMismatch,
-          sandboxAtStart,
-          sandboxIdNow: sidNow,
-          sandboxMismatch,
-          inRebase: next.inRebase,
-          files: next.conflictedFiles.length,
-        })
-        if (branchMismatch || sandboxMismatch) {
-          logRebaseConflict("checkRebaseStatus: stale response ignored", {
-            branchMismatch,
-            sandboxMismatch,
-          })
+        if (branchAtStart !== idNow || sandboxAtStart !== sidNow) {
           return
         }
         setRebaseConflictState(next)
         if (idNow && sidNow) putRebaseConflictInCache(sidNow, idNow, next)
-      } else {
-        logRebaseConflict("checkRebaseStatus: HTTP not ok", { ms, status: res.status, data })
       }
-    } catch (err) {
-      logRebaseConflict("checkRebaseStatus: error", {
-        ms: Math.round(performance.now() - startedAt),
-        err: err instanceof Error ? err.message : String(err),
-      })
+    } catch {
+      // Best-effort; next navigation or manual check will retry
     }
   }, [sandboxId, repoName, putRebaseConflictInCache])
 
   // Re-fetch when sandbox or active branch changes. Display comes from cache + useMemo (first paint); this only syncs React state and verifies with git.
   useEffect(() => {
-    logRebaseConflict("effect: branch/sandbox deps", {
-      sandboxId: sandboxId || "(empty)",
-      branchId: branchId || "(empty)",
-      branchName: branchName || "(empty)",
-    })
-
     if (!sandboxId) {
       setRebaseConflictState({ inRebase: false, conflictedFiles: [] })
       prevSandboxForRebaseRef.current = null
-      logRebaseConflict("effect: no sandboxId, cleared state")
       return
     }
     if (
@@ -465,13 +397,7 @@ export function useGitDialogs({
     ) {
       const prev = prevSandboxForRebaseRef.current
       const staleKey = rebaseConflictCacheKey(prev, branchId)
-      if (REBASE_CONFLICT_CACHE.delete(staleKey)) {
-        logRebaseConflict("effect: sandbox changed, removed stale cache key for this branch", {
-          from: prev,
-          to: sandboxId,
-          staleKey,
-        })
-      }
+      REBASE_CONFLICT_CACHE.delete(staleKey)
     }
     prevSandboxForRebaseRef.current = sandboxId
 
@@ -479,18 +405,13 @@ export function useGitDialogs({
       branchId && sandboxId
         ? REBASE_CONFLICT_CACHE.get(rebaseConflictCacheKey(sandboxId, branchId))
         : undefined
-    logRebaseConflict("effect: cache lookup", {
-      branchId,
-      cacheHit: cached !== undefined,
-      cachedInRebase: cached?.inRebase,
-    })
     if (cached) {
       setRebaseConflictState(cached)
     } else {
       setRebaseConflictState({ inRebase: false, conflictedFiles: [] })
     }
     void checkRebaseStatus()
-  }, [sandboxId, branchId, branchName, checkRebaseStatus])
+  }, [sandboxId, branchId, checkRebaseStatus])
 
   return {
     // Dialog open states
