@@ -15,6 +15,8 @@ export interface MessageLike {
   content?: string
   toolCalls?: unknown[]
   contentBlocks?: unknown[]
+  /** Ephemeral UI (e.g. push retry); not persisted — must win over API in sync merge */
+  pushError?: unknown
   // Allow additional properties from the full Message type
   [key: string]: unknown
 }
@@ -49,6 +51,10 @@ export function isLocalRicher(
   local: MessageLike,
   api: { content?: string; toolCalls?: unknown[]; contentBlocks?: unknown[] }
 ): boolean {
+  // Ephemeral UI state not in DB — without this, the next sync refetch drops pushError
+  // after a few seconds when merge prefers the API row (same content length).
+  if (local.pushError != null) return true
+
   // Compare content length
   const localContentLength = local.content?.length ?? 0
   const apiContentLength = api.content?.length ?? 0

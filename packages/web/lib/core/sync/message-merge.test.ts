@@ -19,6 +19,16 @@ describe('isLocalRicher', () => {
   it('returns false when equal or api is richer', () => {
     expect(isLocalRicher({ id: '1', content: 'same' }, { content: 'same' })).toBe(false)
   })
+
+  it('returns true when local has pushError (same content as API)', () => {
+    const pushError = { errorMessage: 'x', branchName: 'b', sandboxId: 's', repoPath: 'p', repoOwner: 'o', repoApiName: 'r' }
+    expect(
+      isLocalRicher(
+        { id: '1', content: 'same', pushError },
+        { content: 'same' }
+      )
+    ).toBe(true)
+  })
 })
 
 describe('mergeMessages', () => {
@@ -34,6 +44,14 @@ describe('mergeMessages', () => {
     const api: ApiMessage[] = [{ id: 'api-1', role: 'user', content: 'from db' }]
     const result = mergeMessages(local, api)
     expect(result).toHaveLength(2)
+  })
+
+  it('keeps local pushError when API has same content', () => {
+    const pushError = { errorMessage: 'Force push failed', branchName: 'b', sandboxId: 's', repoPath: 'p', repoOwner: 'o', repoApiName: 'r' }
+    const local: MessageLike[] = [{ id: '1', role: 'assistant', content: '⚠️ push failed', pushError }]
+    const api: ApiMessage[] = [{ id: '1', role: 'assistant', content: '⚠️ push failed' }]
+    const result = mergeMessages(local, api)
+    expect(result[0].pushError).toEqual(pushError)
   })
 })
 
