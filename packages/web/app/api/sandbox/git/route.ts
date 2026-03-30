@@ -653,7 +653,7 @@ export async function POST(req: Request) {
         const sha = shaResult.result.trim()
 
         // Step 1: Create and checkout a temp branch at current HEAD
-        const tempBranch = `temp-force-push-${Date.now()}`
+        const tempBranch = `_cleanup/force-push-${Date.now()}`
         const createBranchResult = await sandbox.process.executeCommand(
           `cd ${repoPath} && git checkout -b ${tempBranch} 2>&1`
         )
@@ -690,17 +690,21 @@ export async function POST(req: Request) {
           }
         )
 
-        // Step 5: Delete the temp remote branch (best effort)
-        await fetch(
-          `https://api.github.com/repos/${repoOwner}/${repoApiName}/git/refs/heads/${tempBranch}`,
-          {
-            method: "DELETE",
-            headers: {
-              Authorization: `Bearer ${githubToken}`,
-              Accept: "application/vnd.github.v3+json",
-            },
-          }
-        ).catch(() => {})
+        // Step 5: Delete the temp remote branch (retry up to 3 times)
+        for (let i = 0; i < 3; i++) {
+          const deleteRes = await fetch(
+            `https://api.github.com/repos/${repoOwner}/${repoApiName}/git/refs/heads/${tempBranch}`,
+            {
+              method: "DELETE",
+              headers: {
+                Authorization: `Bearer ${githubToken}`,
+                Accept: "application/vnd.github.v3+json",
+              },
+            }
+          )
+          if (deleteRes.ok || deleteRes.status === 404) break
+          if (i < 2) await new Promise(r => setTimeout(r, 500 * (i + 1)))
+        }
 
         if (!refRes.ok) {
           const refData = await refRes.json().catch(() => ({}))
