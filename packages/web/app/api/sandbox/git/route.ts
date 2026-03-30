@@ -165,6 +165,15 @@ export async function POST(req: Request) {
             inRebase: true,
           }, { status: 409 })
         }
+        const mergeHeadCheckAc = await sandbox.process.executeCommand(
+          `test -f ${repoPath}/.git/MERGE_HEAD && echo "yes" || echo "no"`
+        )
+        if (mergeHeadCheckAc.result.trim() === "yes") {
+          return Response.json({
+            error: "Merge in progress - resolve conflicts before pushing",
+            inMerge: true,
+          }, { status: 409 })
+        }
         // Look up the current branch name from DB using branchId
         // This avoids race conditions where client has stale branch name after rename
         const branchId = body.branchId
@@ -344,6 +353,70 @@ export async function POST(req: Request) {
           const mergeData = await mergeRes.json().catch(() => ({}))
           const errorMessage = (mergeData as { message?: string }).message || `Status ${mergeRes.status}`
           if (mergeRes.status === 409) {
+            // Squash merges cannot be reproduced locally the same way; surface GitHub error only.
+            if (squash) {
+              return Response.json({ error: "Merge conflict: " + errorMessage }, { status: 409 })
+            }
+            // Replicate merge in sandbox so conflicts can be resolved like rebase (MERGE_HEAD).
+            const preStatus = await sandbox.git.status(repoPath)
+            const preBranch = preStatus.currentBranch
+            const preHeadResult = await sandbox.process.executeCommand(
+              `cd ${repoPath} && git rev-parse HEAD 2>&1`
+            )
+            const preSha = preHeadResult.exitCode ? "" : preHeadResult.result.trim()
+
+            await sandbox.process.executeCommand(`cd ${repoPath} && git fetch origin 2>&1`)
+
+            const co = await sandbox.process.executeCommand(
+              `cd ${repoPath} && git checkout ${targetBranch} 2>&1`
+            )
+            if (co.exitCode) {
+              return Response.json(
+                { error: `Merge conflict on GitHub. Could not check out ${targetBranch}: ${co.result}` },
+                { status: 409 }
+              )
+            }
+            try {
+              await sandbox.git.pull(repoPath, "x-access-token", githubToken)
+            } catch {
+              // best-effort
+            }
+
+            const mergeLocal = await sandbox.process.executeCommand(
+              `cd ${repoPath} && git merge origin/${currentBranch} 2>&1`
+            )
+
+            const mergeHeadCheck = await sandbox.process.executeCommand(
+              `test -f ${repoPath}/.git/MERGE_HEAD && echo "yes" || echo "no"`
+            )
+            const hasMergeHead = mergeHeadCheck.result.trim() === "yes"
+
+            if (hasMergeHead) {
+              const conflictResult = await sandbox.process.executeCommand(
+                `cd ${repoPath} && git diff --name-only --diff-filter=U 2>&1`
+              )
+              const conflictedFiles = conflictResult.result
+                .trim()
+                .split("\n")
+                .filter(Boolean)
+              return Response.json(
+                {
+                  conflict: true,
+                  inMerge: true,
+                  conflictedFiles,
+                  targetBranch,
+                  currentBranch,
+                  message: mergeLocal.result,
+                },
+                { status: 409 }
+              )
+            }
+
+            // Clean merge locally despite GitHub 409 — restore previous branch/state
+            if (preBranch && preSha) {
+              await sandbox.process.executeCommand(`cd ${repoPath} && git checkout ${preBranch} 2>&1`)
+              await sandbox.process.executeCommand(`cd ${repoPath} && git reset --hard ${preSha} 2>&1`)
+            }
             return Response.json({ error: "Merge conflict: " + errorMessage }, { status: 409 })
           }
           return Response.json({ error: "Merge failed: " + errorMessage }, { status: 500 })
@@ -439,22 +512,37 @@ export async function POST(req: Request) {
         return Response.json({ success: true })
       }
 
+      case "abort-merge": {
+        const abortMergeResult = await sandbox.process.executeCommand(
+          `cd ${repoPath} && git merge --abort 2>&1`
+        )
+        if (abortMergeResult.exitCode) {
+          return Response.json({ error: "Abort failed: " + abortMergeResult.result }, { status: 500 })
+        }
+        return Response.json({ success: true })
+      }
+
       case "check-rebase-status": {
-        // Check if repo is in a rebase-in-progress state
+        // Rebase or merge in progress (merge uses MERGE_HEAD)
         const rebaseCheck = await sandbox.process.executeCommand(
           `test -d ${repoPath}/.git/rebase-merge -o -d ${repoPath}/.git/rebase-apply && echo "yes" || echo "no"`
         )
         const inRebase = rebaseCheck.result.trim() === "yes"
 
+        const mergeHeadCheck = await sandbox.process.executeCommand(
+          `test -f ${repoPath}/.git/MERGE_HEAD && echo "yes" || echo "no"`
+        )
+        const inMerge = mergeHeadCheck.result.trim() === "yes"
+
         let conflictedFiles: string[] = []
-        if (inRebase) {
+        if (inRebase || inMerge) {
           const conflictResult = await sandbox.process.executeCommand(
             `cd ${repoPath} && git diff --name-only --diff-filter=U 2>&1`
           )
-          conflictedFiles = conflictResult.result.trim().split('\n').filter(Boolean)
+          conflictedFiles = conflictResult.result.trim().split("\n").filter(Boolean)
         }
 
-        return Response.json({ inRebase, conflictedFiles })
+        return Response.json({ inRebase, inMerge, conflictedFiles })
       }
 
       case "reset": {

@@ -365,7 +365,8 @@ export default function Home() {
             className={cn(
               "flex flex-1 flex-col min-h-0 min-w-0 w-full max-w-full overflow-hidden",
               activeBranch &&
-                mobileGitDialogs.rebaseConflict?.inRebase &&
+                (mobileGitDialogs.rebaseConflict?.inRebase ||
+                  mobileGitDialogs.rebaseConflict?.inMerge) &&
                 "border border-red-700 dark:border-red-600"
             )}
           >
@@ -387,7 +388,7 @@ export default function Home() {
               onUpdateBranch={handleUpdateBranch}
               credentials={credentials}
               rebaseConflict={mobileGitDialogs.rebaseConflict}
-              onAbortRebase={mobileGitDialogs.handleAbortRebase}
+              onAbortConflict={mobileGitDialogs.handleAbortConflict}
               abortLoading={mobileGitDialogs.actionLoading}
             />
 

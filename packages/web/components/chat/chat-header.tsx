@@ -49,7 +49,7 @@ interface ChatHeaderProps {
   gitActions: UseGitActionsReturn
   renaming: UseBranchRenamingReturn
   rebaseConflict?: RebaseConflictState
-  onAbortRebase?: () => void
+  onAbortConflict?: () => void
 }
 
 export function ChatHeader({
@@ -59,11 +59,12 @@ export function ChatHeader({
   gitActions,
   renaming,
   rebaseConflict,
-  onAbortRebase,
+  onAbortConflict,
 }: ChatHeaderProps) {
   const isReady = branch.sandboxId && (branch.status !== BRANCH_STATUS.CREATING)
   const isBusy = branch.status === BRANCH_STATUS.RUNNING || branch.status === BRANCH_STATUS.CREATING
-  const inConflict = rebaseConflict?.inRebase ?? false
+  const inConflict = !!(rebaseConflict?.inRebase || rebaseConflict?.inMerge)
+  const mergeConflict = rebaseConflict?.inMerge ?? false
 
   return (
     <header
@@ -199,7 +200,7 @@ export function ChatHeader({
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
-                  onClick={onAbortRebase}
+                  onClick={onAbortConflict}
                   disabled={gitActions.gitDialogs.actionLoading}
                   className="flex cursor-pointer h-7 px-2 shrink-0 items-center justify-center gap-1.5 rounded-md bg-red-500/20 text-red-500 hover:bg-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -208,11 +209,15 @@ export function ChatHeader({
                   ) : (
                     <XCircle className="h-3.5 w-3.5" />
                   )}
-                  <span className="text-xs font-medium">Abort Rebase</span>
+                  <span className="text-xs font-medium">
+                    {mergeConflict ? "Abort Merge" : "Abort Rebase"}
+                  </span>
                 </button>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="text-xs">
-                Abort the rebase and return to the previous state
+                {mergeConflict
+                  ? "Abort the merge and return to the previous state"
+                  : "Abort the rebase and return to the previous state"}
               </TooltipContent>
             </Tooltip>
             <div className="mx-1.5 h-4 w-px bg-border shrink-0" />

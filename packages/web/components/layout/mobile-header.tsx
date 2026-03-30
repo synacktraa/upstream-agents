@@ -48,7 +48,7 @@ interface MobileHeaderProps {
   onUpdateBranch: (branchId: string, updates: Partial<Branch>) => void
   credentials?: UserCredentialFlags | null
   rebaseConflict?: RebaseConflictState
-  onAbortRebase?: () => void
+  onAbortConflict?: () => void
   abortLoading?: boolean
 }
 
@@ -69,7 +69,7 @@ export function MobileHeader({
   onUpdateBranch,
   credentials,
   rebaseConflict,
-  onAbortRebase,
+  onAbortConflict,
   abortLoading,
 }: MobileHeaderProps) {
   const isStopped = branch?.status === BRANCH_STATUS.STOPPED
@@ -77,7 +77,8 @@ export function MobileHeader({
   const hasPR = !!branch?.prUrl
   const hasSandbox = !!branch?.sandboxId
   const showMenu = !!(repoOwner && repoName && branch)
-  const inConflict = rebaseConflict?.inRebase ?? false
+  const inConflict = !!(rebaseConflict?.inRebase || rebaseConflict?.inMerge)
+  const mergeConflict = rebaseConflict?.inMerge ?? false
 
   const [renaming, setRenaming] = useState(false)
   const [renameValue, setRenameValue] = useState("")
@@ -357,7 +358,7 @@ export function MobileHeader({
               <span className="text-[10px] font-medium">Conflict</span>
             </div>
             <button
-              onClick={onAbortRebase}
+              onClick={onAbortConflict}
               disabled={abortLoading}
               className="flex h-8 px-2 items-center justify-center gap-1 rounded-md bg-red-500/20 text-red-500 hover:bg-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed mr-1"
             >
@@ -366,7 +367,9 @@ export function MobileHeader({
               ) : (
                 <XCircle className="h-3.5 w-3.5" />
               )}
-              <span className="text-xs font-medium">Abort</span>
+              <span className="text-xs font-medium">
+                {mergeConflict ? "Abort merge" : "Abort rebase"}
+              </span>
             </button>
           </>
         )}

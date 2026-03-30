@@ -8,9 +8,10 @@ import { ASSISTANT_SOURCE, PATHS } from "@/lib/shared/constants"
 // Export the return type for use in components
 export type UseGitDialogsReturn = ReturnType<typeof useGitDialogs>
 
-// Conflict state type
+// Conflict state type (rebase and/or merge in progress with conflicts)
 export interface RebaseConflictState {
   inRebase: boolean
+  inMerge: boolean
   conflictedFiles: string[]
 }
 
@@ -74,6 +75,7 @@ export function useGitDialogs({
   // Internal state; display uses module cache synchronously (see rebaseConflict below) so first paint after branch switch is never blocked on useEffect.
   const [rebaseConflictState, setRebaseConflictState] = useState<RebaseConflictState>({
     inRebase: false,
+    inMerge: false,
     conflictedFiles: [],
   })
 
@@ -180,7 +182,27 @@ export function useGitDialogs({
         }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error)
+      if (res.status === 409 && data.conflict && data.inMerge) {
+        const next: RebaseConflictState = {
+          inRebase: false,
+          inMerge: true,
+          conflictedFiles: data.conflictedFiles || [],
+        }
+        setRebaseConflictState(next)
+        if (branchId && sandboxId) putRebaseConflictInCache(sandboxId, branchId, next)
+        const fileList = (data.conflictedFiles || [])
+          .map((f: string) => `- \`${f}\``)
+          .join("\n")
+        addSystemMessage(
+          `⚠️ **Merge conflict detected**\n\n` +
+            `Merging **${sourceBranch}** into **${targetBranch}** resulted in conflicts.\n\n` +
+            `**Conflicted files:**\n${fileList}\n\n` +
+            `You can ask the agent to resolve these conflicts, or click **Abort Merge** to cancel.`
+        )
+        setMergeOpen(false)
+        return
+      }
+      if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Merge failed")
       addSystemMessage(`${squashMerge ? "Squash merged" : "Merged"} **${sourceBranch}** into **${targetBranch}** and pushed.`)
       setMergeOpen(false)
     } catch (err: unknown) {
@@ -189,7 +211,7 @@ export function useGitDialogs({
     } finally {
       setActionLoading(false)
     }
-  }, [selectedBranch, branch, sandboxId, branchName, repoName, repoOwner, repoFullName, addSystemMessage, mergeDirection, squashMerge])
+  }, [selectedBranch, branch, sandboxId, branchName, branchId, repoName, repoOwner, repoFullName, addSystemMessage, mergeDirection, squashMerge, putRebaseConflictInCache])
 
   const handleRebase = useCallback(async () => {
     if (!selectedBranch || !branch || !sandboxId) return
@@ -220,6 +242,7 @@ export function useGitDialogs({
         // Set conflict state
         const next: RebaseConflictState = {
           inRebase: true,
+          inMerge: false,
           conflictedFiles: data.conflictedFiles || [],
         }
         setRebaseConflictState(next)
@@ -317,9 +340,9 @@ export function useGitDialogs({
     }
   }, [tagNameInput, branch, sandboxId, repoFullName, repoName, addSystemMessage])
 
-  // Abort an in-progress rebase
-  const handleAbortRebase = useCallback(async () => {
+  const handleAbortConflict = useCallback(async () => {
     if (!sandboxId) return
+    const isMerge = rebaseConflictState.inMerge
     setActionLoading(true)
 
     try {
@@ -329,23 +352,26 @@ export function useGitDialogs({
         body: JSON.stringify({
           sandboxId,
           repoPath: `${PATHS.SANDBOX_HOME}/${repoName}`,
-          action: "abort-rebase",
+          action: isMerge ? "abort-merge" : "abort-rebase",
         }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
 
-      // Clear conflict state
-      const cleared: RebaseConflictState = { inRebase: false, conflictedFiles: [] }
+      const cleared: RebaseConflictState = { inRebase: false, inMerge: false, conflictedFiles: [] }
       setRebaseConflictState(cleared)
       if (branchId && sandboxId) putRebaseConflictInCache(sandboxId, branchId, cleared)
-      addSystemMessage(`Rebase aborted. Your branch is back to its previous state.`)
+      addSystemMessage(
+        isMerge
+          ? `Merge aborted. Your branch is back to its previous state.`
+          : `Rebase aborted. Your branch is back to its previous state.`
+      )
     } catch (err: unknown) {
       addSystemMessage(`Abort failed: ${err instanceof Error ? err.message : "Unknown error"}`)
     } finally {
       setActionLoading(false)
     }
-  }, [sandboxId, repoName, addSystemMessage, branchId, putRebaseConflictInCache])
+  }, [sandboxId, repoName, addSystemMessage, branchId, putRebaseConflictInCache, rebaseConflictState.inMerge])
 
   // Check if repo is currently in a rebase state (for live detection)
   const checkRebaseStatus = useCallback(async () => {
@@ -368,6 +394,7 @@ export function useGitDialogs({
       if (res.ok) {
         const next: RebaseConflictState = {
           inRebase: data.inRebase || false,
+          inMerge: data.inMerge || false,
           conflictedFiles: data.conflictedFiles || [],
         }
         const idNow = branchIdRef.current
@@ -386,7 +413,7 @@ export function useGitDialogs({
   // Re-fetch when sandbox or active branch changes. Display comes from cache + useMemo (first paint); this only syncs React state and verifies with git.
   useEffect(() => {
     if (!sandboxId) {
-      setRebaseConflictState({ inRebase: false, conflictedFiles: [] })
+      setRebaseConflictState({ inRebase: false, inMerge: false, conflictedFiles: [] })
       prevSandboxForRebaseRef.current = null
       return
     }
@@ -408,7 +435,7 @@ export function useGitDialogs({
     if (cached) {
       setRebaseConflictState(cached)
     } else {
-      setRebaseConflictState({ inRebase: false, conflictedFiles: [] })
+      setRebaseConflictState({ inRebase: false, inMerge: false, conflictedFiles: [] })
     }
     void checkRebaseStatus()
   }, [sandboxId, branchId, checkRebaseStatus])
@@ -448,10 +475,10 @@ export function useGitDialogs({
     handleMerge,
     handleRebase,
     handleTag,
-    handleAbortRebase,
+    handleAbortConflict,
     checkRebaseStatus,
 
-    // Rebase conflict state
+    // Rebase / merge conflict state
     rebaseConflict,
   }
 }

@@ -244,8 +244,9 @@ export function ChatPanel({
   })
 
   useEffect(() => {
-    onRebaseConflictChange?.(!!gitActions.gitDialogs.rebaseConflict?.inRebase)
-  }, [gitActions.gitDialogs.rebaseConflict?.inRebase, onRebaseConflictChange])
+    const r = gitActions.gitDialogs.rebaseConflict
+    onRebaseConflictChange?.(!!(r?.inRebase || r?.inMerge))
+  }, [gitActions.gitDialogs.rebaseConflict?.inRebase, gitActions.gitDialogs.rebaseConflict?.inMerge, onRebaseConflictChange])
 
   const canSuggestName = !!(
     credentials?.hasAnthropicApiKey ||
@@ -589,7 +590,7 @@ export function ChatPanel({
             gitActions={gitActions}
             renaming={renaming}
             rebaseConflict={gitActions.gitDialogs.rebaseConflict}
-            onAbortRebase={gitActions.gitDialogs.handleAbortRebase}
+            onAbortConflict={gitActions.gitDialogs.handleAbortConflict}
           />
         )}
 
@@ -623,7 +624,9 @@ export function ChatPanel({
           defaultLoopMaxIterations={defaultLoopMaxIterations}
           loopUntilFinishedEnabled={loopUntilFinishedEnabled}
           isMobile={isMobile}
-          inRebaseConflict={!!gitActions.gitDialogs.rebaseConflict?.inRebase}
+          inRebaseConflict={
+            !!(gitActions.gitDialogs.rebaseConflict?.inRebase || gitActions.gitDialogs.rebaseConflict?.inMerge)
+          }
         />
       </div>
 
