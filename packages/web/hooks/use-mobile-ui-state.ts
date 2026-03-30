@@ -1,14 +1,30 @@
-import { useState } from "react"
+"use client"
+
+import { useUIStore } from "@/lib/stores"
 
 /**
  * Manages mobile-specific UI state (modals, drawers, loading states)
+ * Now uses Zustand for state management.
+ *
  * Note: merge/rebase/tag dialogs are now handled by the shared useGitDialogs hook
  */
 export function useMobileUIState() {
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
-  const [mobileSandboxToggleLoading, setMobileSandboxToggleLoading] = useState(false)
-  const [mobilePrLoading, setMobilePrLoading] = useState(false)
-  const [mobileDiffOpen, setMobileDiffOpen] = useState(false)
+  const {
+    // Sidebar
+    mobileSidebarOpen,
+    setMobileSidebarOpen,
+
+    // Loading states
+    mobileSandboxToggleLoading,
+    setMobileSandboxToggleLoading,
+    mobilePrLoading,
+    setMobilePrLoading,
+
+    // Diff modal
+    mobileDiffOpen,
+    openMobileDiff,
+    closeMobileDiff,
+  } = useUIStore()
 
   return {
     // Sidebar
@@ -25,7 +41,7 @@ export function useMobileUIState() {
 
     // Diff modal
     mobileDiffOpen,
-    setMobileDiffOpen,
+    setMobileDiffOpen: (open: boolean) => (open ? openMobileDiff() : closeMobileDiff()),
   }
 }
 

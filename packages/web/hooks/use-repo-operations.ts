@@ -16,7 +16,7 @@ interface UseRepoOperationsOptions {
   activeRepoId: string | null
   activeRepo: TransformedRepo | null
   selectRepo: (repoId: string) => void
-  setActiveBranchId: React.Dispatch<React.SetStateAction<string | null>>
+  setActiveBranchId: (branchId: string | null) => void
   refreshQuota: () => void
 }
 

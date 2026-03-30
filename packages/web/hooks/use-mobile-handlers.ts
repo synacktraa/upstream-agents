@@ -8,9 +8,9 @@ interface UseMobileHandlersOptions {
   activeRepo: TransformedRepo | null
   handleUpdateBranch: (branchId: string, updates: Partial<Branch>) => void
   mobileSandboxToggleLoading: boolean
-  setMobileSandboxToggleLoading: React.Dispatch<React.SetStateAction<boolean>>
+  setMobileSandboxToggleLoading: (loading: boolean) => void
   mobilePrLoading: boolean
-  setMobilePrLoading: React.Dispatch<React.SetStateAction<boolean>>
+  setMobilePrLoading: (loading: boolean) => void
 }
 
 /**

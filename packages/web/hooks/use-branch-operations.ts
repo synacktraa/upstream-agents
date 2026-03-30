@@ -1,4 +1,7 @@
+"use client"
+
 import { useCallback } from "react"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
 import type { Branch, Message } from "@/lib/shared/types"
 import type { TransformedRepo } from "@/lib/db/db-types"
 import { BRANCH_STATUS } from "@/lib/shared/constants"
@@ -7,17 +10,19 @@ import {
   updateMessageInBranch,
   addMessageToBranch,
 } from "@/lib/shared/state-utils"
+import { queryKeys } from "@/lib/api/query-keys"
+import { apiPatch, apiPost } from "@/lib/api/fetcher"
 
 interface UseBranchOperationsOptions {
   repos: TransformedRepo[]
   setRepos: React.Dispatch<React.SetStateAction<TransformedRepo[]>>
   activeRepo: TransformedRepo | null
   activeBranchIdRef: React.MutableRefObject<string | null>
-  setActiveBranchId: React.Dispatch<React.SetStateAction<string | null>>
+  setActiveBranchId: (branchId: string | null) => void
 }
 
 /**
- * Provides update operations for branches and messages
+ * Provides update operations for branches and messages using TanStack Query mutations
  */
 export function useBranchOperations({
   repos,
@@ -26,11 +31,77 @@ export function useBranchOperations({
   activeBranchIdRef,
   setActiveBranchId,
 }: UseBranchOperationsOptions) {
+  const queryClient = useQueryClient()
+
+  // Mutation for updating branch
+  const updateBranchMutation = useMutation({
+    mutationFn: async ({ branchId, updates }: { branchId: string; updates: Partial<Branch> }) => {
+      return apiPatch<{ success: boolean }>("/api/branches", {
+        branchId,
+        ...updates,
+      })
+    },
+    onError: (error) => {
+      console.error("Failed to update branch:", error)
+    },
+  })
+
+  // Mutation for saving draft
+  const saveDraftMutation = useMutation({
+    mutationFn: async ({ branchId, draftPrompt }: { branchId: string; draftPrompt: string }) => {
+      return apiPatch<{ success: boolean }>("/api/branches", {
+        branchId,
+        draftPrompt,
+      })
+    },
+    onError: (error) => {
+      console.error("Failed to save draft:", error)
+    },
+  })
+
+  // Mutation for adding message
+  const addMessageMutation = useMutation({
+    mutationFn: async ({ branchId, message }: { branchId: string; message: Message }) => {
+      return apiPost<{ message: { id: string } }>("/api/branches/messages", {
+        branchId,
+        role: message.role,
+        content: message.content,
+        toolCalls: message.toolCalls,
+        contentBlocks: message.contentBlocks,
+        timestamp: message.timestamp,
+        commitHash: message.commitHash,
+        commitMessage: message.commitMessage,
+        ...(message.role === "assistant" && {
+          assistantSource:
+            message.assistantSource ?? (message.commitHash ? "commit" : "model"),
+        }),
+        ...(message.pushError != null && { pushError: message.pushError }),
+      })
+    },
+    onError: (error) => {
+      console.error("Failed to add message:", error)
+    },
+  })
+
+  // Mutation for updating message
+  const updateMessageMutation = useMutation({
+    mutationFn: async ({ messageId, updates }: { messageId: string; updates: Partial<Message> }) => {
+      return apiPatch<{ success: boolean }>("/api/branches/messages", {
+        messageId,
+        ...(updates.content !== undefined && { content: updates.content }),
+        ...(updates.toolCalls !== undefined && { toolCalls: updates.toolCalls }),
+        ...(updates.contentBlocks !== undefined && { contentBlocks: updates.contentBlocks }),
+        ...("pushError" in updates && { pushError: updates.pushError ?? null }),
+      })
+    },
+    onError: (error) => {
+      console.error("Failed to update message:", error)
+    },
+  })
+
   // Update branch properties
   const handleUpdateBranch = useCallback((branchId: string, updates: Partial<Branch>) => {
     // Use functional update to always access the latest state
-    // This is critical for async callbacks like onDone from createBranchWithSandbox
-    // where the closure's repos might be stale
     let isBeingCreated = false
     let foundRepo = false
 
@@ -46,10 +117,10 @@ export function useBranchOperations({
       return updateBranchInRepo(prev, targetRepo.id, branchId, updates)
     })
 
-    // Early return if branch wasn't found (foundRepo stays false)
+    // Early return if branch wasn't found
     if (!foundRepo) return
 
-    // The actual ID to use for database operations (might be a new server-side ID)
+    // The actual ID to use for database operations
     const dbBranchId = updates.id || branchId
 
     // Also update activeBranchId if it's being replaced
@@ -58,18 +129,14 @@ export function useBranchOperations({
     }
 
     // Only update in database if branch exists there (not during creation)
-    // When id is provided, we're transitioning from client-side to server-side ID
     const shouldPersist = !isBeingCreated || updates.id
     const hasFieldsToPersist = updates.status || updates.prUrl || updates.name || updates.draftPrompt !== undefined ||
       updates.loopEnabled !== undefined || updates.loopCount !== undefined || updates.loopMaxIterations !== undefined
+
     if (shouldPersist && hasFieldsToPersist) {
-      fetch("/api/branches", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ branchId: dbBranchId, ...updates }),
-      }).catch(() => {})
+      updateBranchMutation.mutate({ branchId: dbBranchId, updates })
     }
-  }, [setRepos, activeBranchIdRef, setActiveBranchId])
+  }, [setRepos, activeBranchIdRef, setActiveBranchId, updateBranchMutation])
 
   // Save draft prompt for a specific branch
   const handleSaveDraftForBranch = useCallback((branchId: string, draftPrompt: string) => {
@@ -78,21 +145,17 @@ export function useBranchOperations({
     setRepos((prev) => updateBranchInRepo(prev, activeRepo.id, branchId, { draftPrompt }))
 
     // Persist to database
-    fetch("/api/branches", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ branchId, draftPrompt }),
-    }).catch(() => {})
-  }, [activeRepo, setRepos])
+    saveDraftMutation.mutate({ branchId, draftPrompt })
+  }, [activeRepo, setRepos, saveDraftMutation])
 
   // Add a message to a branch
   const handleAddMessage = useCallback(async (branchId: string, message: Message): Promise<string> => {
-    // Find which repo actually contains this branch (may not be activeRepo for background polling)
+    // Find which repo actually contains this branch
     const targetRepo = repos.find(r => r.branches.some(b => b.id === branchId))
     if (!targetRepo) return message.id
 
     const now = Date.now()
-    // Add message and bump branch to top of list (lastActivityTs drives sort order)
+    // Add message and bump branch to top of list
     setRepos((prev) =>
       updateBranchInRepo(
         addMessageToBranch(prev, targetRepo.id, branchId, message),
@@ -104,32 +167,7 @@ export function useBranchOperations({
 
     // Save message to database and get the real DB ID
     try {
-      const res = await fetch("/api/branches/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          branchId,
-          role: message.role,
-          content: message.content,
-          toolCalls: message.toolCalls,
-          contentBlocks: message.contentBlocks,
-          timestamp: message.timestamp,
-          commitHash: message.commitHash,
-          commitMessage: message.commitMessage,
-          ...(message.role === "assistant" && {
-            assistantSource:
-              message.assistantSource ?? (message.commitHash ? "commit" : "model"),
-          }),
-          ...(message.pushError != null && { pushError: message.pushError }),
-        }),
-      })
-
-      if (!res.ok) {
-        const errorText = await res.text().catch(() => res.statusText)
-        throw new Error(`Failed to save message: ${errorText}`)
-      }
-
-      const data = await res.json()
+      const data = await addMessageMutation.mutateAsync({ branchId, message })
       const dbId = data.message?.id
 
       if (dbId && dbId !== message.id) {
@@ -140,35 +178,18 @@ export function useBranchOperations({
       return message.id
     } catch (error) {
       console.error("Error saving message to database:", error)
-      // Re-throw so caller knows message wasn't saved - prevents foreign key errors
       throw error
     }
-  }, [repos, setRepos])
+  }, [repos, setRepos, addMessageMutation])
 
-  // Update an existing message. Returns a promise that resolves when the DB PATCH completes (for awaiting final save on completion).
+  // Update an existing message
   const handleUpdateMessage = useCallback((branchId: string, messageId: string, updates: Partial<Message>): void | Promise<void> => {
     if (!activeRepo) return
 
     setRepos((prev) => updateMessageInBranch(prev, activeRepo.id, branchId, messageId, updates))
 
-    const patchBody: Record<string, unknown> = {
-      messageId,
-      ...(updates.content !== undefined && { content: updates.content }),
-      ...(updates.toolCalls !== undefined && { toolCalls: updates.toolCalls }),
-      ...(updates.contentBlocks !== undefined && { contentBlocks: updates.contentBlocks }),
-      ...("pushError" in updates && { pushError: updates.pushError ?? null }),
-    }
-
-    return fetch("/api/branches/messages", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(patchBody),
-    })
-      .then(() => {})
-      .catch((error) => {
-        console.error("Error updating message in database:", error)
-      })
-  }, [activeRepo, setRepos])
+    return updateMessageMutation.mutateAsync({ messageId, updates }).then(() => {})
+  }, [activeRepo, setRepos, updateMessageMutation])
 
   return {
     handleUpdateBranch,

@@ -33,11 +33,41 @@ import {
   useRepoNavigation,
 } from "@/hooks"
 
+// Import Zustand stores
+import { useUIStore } from "@/lib/stores"
+
 export default function Home() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const isMobile = useIsMobile()
   const { repoFromUrl, updateUrlToRepo } = useRepoNavigation()
+
+  // Zustand UI state
+  const {
+    settingsOpen,
+    settingsHighlightField,
+    openSettings,
+    closeSettings,
+    clearSettingsHighlight,
+    addRepoOpen,
+    openAddRepo,
+    closeAddRepo,
+    repoSettingsOpen,
+    openRepoSettings,
+    closeRepoSettings,
+    repoEnvVars,
+    setRepoEnvVars,
+    gitHistoryOpen,
+    toggleGitHistory,
+    closeGitHistory,
+    gitHistoryRefreshTrigger,
+    triggerGitHistoryRefresh,
+    pendingStartCommit,
+    setPendingStartCommit,
+    clearPendingStartCommit,
+    desktopRebaseConflict,
+    setDesktopRebaseConflict,
+  } = useUIStore()
 
   // Core data state
   const {
@@ -127,7 +157,7 @@ export default function Home() {
   // This is used to prevent sync from overwriting streaming content
   const streamingMessageIdRef = useRef<string | null>(null)
 
-  // Mobile UI state
+  // Mobile UI state (now using Zustand)
   const mobileUI = useMobileUIState()
 
   // Mobile handlers
@@ -159,29 +189,18 @@ export default function Home() {
     onSyncData: handleSyncData,
   })
 
-  // UI state for desktop components
+  // Local UI state (kept local as it's not needed elsewhere)
   const [branchListWidth, setBranchListWidth] = useState(260)
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  const [settingsHighlightField, setSettingsHighlightField] = useState<string | null>(null)
-  const [addRepoOpen, setAddRepoOpen] = useState(false)
-  const [gitHistoryOpen, setGitHistoryOpen] = useState(false)
-  const [gitHistoryRefreshTrigger, setGitHistoryRefreshTrigger] = useState(0)
-  const [pendingStartCommit, setPendingStartCommit] = useState<string | null>(null)
-  const [repoSettingsOpen, setRepoSettingsOpen] = useState(false)
-  const [repoEnvVars, setRepoEnvVars] = useState<Record<string, boolean> | null>(null)
-  const [desktopRebaseConflict, setDesktopRebaseConflict] = useState(false)
 
   // Handler to open settings with a specific field highlighted
   const handleOpenSettingsWithHighlight = useCallback((field: string) => {
-    setSettingsHighlightField(field)
-    setSettingsOpen(true)
-  }, [])
+    openSettings(field)
+  }, [openSettings])
 
   // Handler to close settings and clear highlight
   const handleSettingsClose = useCallback(() => {
-    setSettingsOpen(false)
-    setSettingsHighlightField(null)
-  }, [])
+    closeSettings()
+  }, [closeSettings])
 
   // Handler to open repo settings
   const handleOpenRepoSettings = useCallback(async () => {
@@ -198,14 +217,13 @@ export default function Home() {
     } catch {
       setRepoEnvVars({})
     }
-    setRepoSettingsOpen(true)
-  }, [activeRepoId])
+    openRepoSettings()
+  }, [activeRepoId, setRepoEnvVars, openRepoSettings])
 
   // Handler to close repo settings
   const handleRepoSettingsClose = useCallback(() => {
-    setRepoSettingsOpen(false)
-    setRepoEnvVars(null)
-  }, [])
+    closeRepoSettings()
+  }, [closeRepoSettings])
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -248,7 +266,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!activeBranch) setDesktopRebaseConflict(false)
-  }, [activeBranch])
+  }, [activeBranch, setDesktopRebaseConflict])
 
   // Dynamic page title with org/repo and notification counts
   useEffect(() => {
@@ -269,8 +287,6 @@ export default function Home() {
       document.title = "Upstream Agents"
     }
   }, [repos, activeRepo])
-
-  // No longer auto-open settings - users can use OpenCode with free models without API keys
 
   // Loading state
   if (status === "loading" || !loaded) {
@@ -304,8 +320,8 @@ export default function Home() {
             onSelectRepo={selectRepo}
             onRemoveRepo={handleRemoveRepo}
             onReorderRepos={handleReorderRepos}
-            onOpenSettings={() => setSettingsOpen(true)}
-            onOpenAddRepo={() => setAddRepoOpen(true)}
+            onOpenSettings={() => openSettings()}
+            onOpenAddRepo={openAddRepo}
             onSignOut={() => signOut({ callbackUrl: "/login" })}
             quota={quota}
             isAdmin={isAdmin}
@@ -329,8 +345,8 @@ export default function Home() {
                 selectBranch(branchId)
               }}
             onRemoveRepo={handleRemoveRepo}
-            onOpenSettings={() => setSettingsOpen(true)}
-            onOpenAddRepo={() => setAddRepoOpen(true)}
+            onOpenSettings={() => openSettings()}
+            onOpenAddRepo={openAddRepo}
             onSignOut={() => signOut({ callbackUrl: "/login" })}
             quota={quota}
             onAddBranch={handleAddBranch}
@@ -361,7 +377,7 @@ export default function Home() {
               width={branchListWidth}
               onWidthChange={setBranchListWidth}
               pendingStartCommit={pendingStartCommit}
-              onClearPendingCommit={() => setPendingStartCommit(null)}
+              onClearPendingCommit={clearPendingStartCommit}
               quota={quota}
               credentials={credentials}
               onOpenRepoSettings={handleOpenRepoSettings}
@@ -394,7 +410,7 @@ export default function Home() {
               repoName={activeRepo?.name || null}
               branch={activeBranch}
               onOpenSidebar={() => mobileUI.setMobileSidebarOpen(true)}
-              onToggleGitHistory={() => setGitHistoryOpen((v) => !v)}
+              onToggleGitHistory={toggleGitHistory}
               onOpenDiff={() => mobileUI.setMobileDiffOpen(true)}
               onCreatePR={handleMobileCreatePR}
               onSandboxToggle={handleMobileSandboxToggle}
@@ -419,19 +435,19 @@ export default function Home() {
                   repoName={activeRepo.name}
                   repoOwner={activeRepo.owner}
                   gitHistoryOpen={gitHistoryOpen}
-                  onToggleGitHistory={() => setGitHistoryOpen((v) => !v)}
+                  onToggleGitHistory={toggleGitHistory}
                   onAddMessage={handleAddMessage}
                   onUpdateMessage={handleUpdateMessage}
                   onUpdateBranch={handleUpdateBranch}
                   onSaveDraftForBranch={handleSaveDraftForBranch}
                   onForceSave={() => {}}
-                  onCommitsDetected={() => setGitHistoryRefreshTrigger((n) => n + 1)}
-                  onBranchFromCommit={(hash) => setPendingStartCommit(hash)}
+                  onCommitsDetected={triggerGitHistoryRefresh}
+                  onBranchFromCommit={setPendingStartCommit}
                   messagesLoading={messagesLoadingBranchIds.has(activeBranch.id)}
                   isMobile={true}
                   streamingMessageIdRef={streamingMessageIdRef}
                   credentials={credentials}
-                  onOpenSettings={() => setSettingsOpen(true)}
+                  onOpenSettings={() => openSettings()}
                   onOpenSettingsWithHighlight={handleOpenSettingsWithHighlight}
                   defaultLoopMaxIterations={credentials?.defaultLoopMaxIterations}
                   loopUntilFinishedEnabled={credentials?.loopUntilFinishedEnabled}
@@ -447,7 +463,7 @@ export default function Home() {
         {isMobile && activeBranch?.sandboxId && activeRepo && (
           <GitHistorySheet
             open={gitHistoryOpen}
-            onOpenChange={setGitHistoryOpen}
+            onOpenChange={(open) => open ? null : closeGitHistory()}
             sandboxId={activeBranch.sandboxId}
             repoName={activeRepo.name}
             baseBranch={activeBranch.baseBranch}
@@ -455,7 +471,7 @@ export default function Home() {
             onScrollToCommit={(shortHash) => {
               document.getElementById(`commit-${shortHash}`)?.scrollIntoView({ behavior: "smooth", block: "center" })
             }}
-            onBranchFromCommit={(commitHash) => setPendingStartCommit(commitHash)}
+            onBranchFromCommit={setPendingStartCommit}
           />
         )}
 
@@ -474,18 +490,18 @@ export default function Home() {
               repoName={activeRepo.name}
               repoOwner={activeRepo.owner}
               gitHistoryOpen={gitHistoryOpen}
-              onToggleGitHistory={() => setGitHistoryOpen((v) => !v)}
+              onToggleGitHistory={toggleGitHistory}
               onAddMessage={handleAddMessage}
               onUpdateMessage={handleUpdateMessage}
               onUpdateBranch={handleUpdateBranch}
               onSaveDraftForBranch={handleSaveDraftForBranch}
               onForceSave={() => {}}
-              onCommitsDetected={() => setGitHistoryRefreshTrigger((n) => n + 1)}
-              onBranchFromCommit={(hash) => setPendingStartCommit(hash)}
+              onCommitsDetected={triggerGitHistoryRefresh}
+              onBranchFromCommit={setPendingStartCommit}
               messagesLoading={messagesLoadingBranchIds.has(activeBranch.id)}
               streamingMessageIdRef={streamingMessageIdRef}
               credentials={credentials}
-              onOpenSettings={() => setSettingsOpen(true)}
+              onOpenSettings={() => openSettings()}
               onOpenSettingsWithHighlight={handleOpenSettingsWithHighlight}
               defaultLoopMaxIterations={credentials?.defaultLoopMaxIterations}
               loopUntilFinishedEnabled={credentials?.loopUntilFinishedEnabled}
@@ -500,12 +516,12 @@ export default function Home() {
               sandboxId={activeBranch.sandboxId}
               repoName={activeRepo.name}
               baseBranch={activeBranch.baseBranch}
-              onClose={() => setGitHistoryOpen(false)}
+              onClose={closeGitHistory}
               refreshTrigger={gitHistoryRefreshTrigger}
               onScrollToCommit={(shortHash) => {
                 document.getElementById(`commit-${shortHash}`)?.scrollIntoView({ behavior: "smooth", block: "center" })
               }}
-              onBranchFromCommit={(commitHash) => setPendingStartCommit(commitHash)}
+              onBranchFromCommit={setPendingStartCommit}
             />
           )}
         </div>
@@ -518,11 +534,11 @@ export default function Home() {
         credentials={credentials}
         onCredentialsUpdate={refreshCredentials}
         highlightField={settingsHighlightField}
-        onClearHighlight={() => setSettingsHighlightField(null)}
+        onClearHighlight={clearSettingsHighlight}
       />
       <AddRepoModal
         open={addRepoOpen}
-        onClose={() => setAddRepoOpen(false)}
+        onClose={closeAddRepo}
         githubUser={session?.user?.githubLogin || null}
         existingRepos={repos}
         onAddRepo={handleAddRepo}
