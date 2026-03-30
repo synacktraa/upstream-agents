@@ -9,18 +9,7 @@
  */
 
 // UI Store - modal states, sidebar, loading states
-export {
-  useUIStore,
-  useMobileSidebar,
-  useMobileLoadingStates,
-  useSettingsModal,
-  useGitHistoryPanel,
-} from "./ui-store"
+export { useUIStore } from "./ui-store"
 
 // Selection Store - active repo/branch selection
-export {
-  useSelectionStore,
-  useActiveIds,
-  getSelectionState,
-  subscribeToSelectionChanges,
-} from "./selection-store"
+export { useSelectionStore } from "./selection-store"
