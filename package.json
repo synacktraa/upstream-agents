@@ -5,7 +5,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "cd packages/web && next dev --webpack",
+    "dev": "cd packages/web && prisma generate && next dev --webpack",
     "build": "npm run build -w @upstream/agents && npm run build -w @upstream/web",
     "build:sdk": "npm run build -w @upstream/agents",
     "build:web": "npm run build -w @upstream/web",
