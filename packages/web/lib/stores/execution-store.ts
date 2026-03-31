@@ -205,8 +205,10 @@ let pollInFlight = false
 
 /**
  * Fetches execution status from the API
+ * Note: We only use messageId since it uniquely identifies the execution.
+ * The executionId field in the DB schema is optional and may not be set.
  */
-async function fetchExecutionStatus(executionId: string, messageId: string): Promise<{
+async function fetchExecutionStatus(messageId: string): Promise<{
   status: string
   snapshotVersion: number
   content: string
@@ -219,7 +221,7 @@ async function fetchExecutionStatus(executionId: string, messageId: string): Pro
     const res = await fetch("/api/agent/status", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messageId, executionId }),
+      body: JSON.stringify({ messageId }),
     })
 
     if (!res.ok) {
@@ -250,7 +252,7 @@ async function processExecution(
 
   const { callbacks } = store
 
-  const data = await fetchExecutionStatus(execution.executionId, messageId)
+  const data = await fetchExecutionStatus(messageId)
 
   // Handle not found
   if (data === null) {
