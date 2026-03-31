@@ -54,6 +54,12 @@ async function pushWithRetry(
       if (expectedBranch) {
         const branchError = await ensureCorrectBranch(sandbox, repoPath, expectedBranch)
         if (branchError) {
+          // Retry on branch mismatch - this can happen during branch rename operations
+          // where DB is updated before git branch -m completes
+          if (attempt < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)))
+            continue
+          }
           return { success: false, error: branchError }
         }
       }
