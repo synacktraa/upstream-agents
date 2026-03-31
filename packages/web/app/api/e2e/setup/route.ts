@@ -47,6 +47,10 @@ async function setSessionCookie() {
 }
 
 export async function POST(req: Request) {
+  if (process.env.NODE_ENV === "production") {
+    return Response.json({ error: "Not available in production" }, { status: 404 })
+  }
+
   const body = await req.json()
   const count: number = body.count ?? 3
   const singleRepo: boolean = body.singleRepo ?? false
@@ -150,6 +154,10 @@ export async function POST(req: Request) {
 }
 
 export async function DELETE(req: Request) {
+  if (process.env.NODE_ENV === "production") {
+    return Response.json({ error: "Not available in production" }, { status: 404 })
+  }
+
   const body = await req.json().catch(() => ({}))
   const sandboxIds: string[] = body.sandboxIds || []
 
