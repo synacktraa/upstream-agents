@@ -28,8 +28,13 @@ async function main() {
   console.log(`   Sandbox created: ${sandbox.id}\n`)
 
   try {
-    // 2. Get SSH access for background execution
-    console.log("2. Establishing SSH connection...")
+    // 2. Install codex CLI
+    console.log("2. Installing codex CLI...")
+    await sandbox.process.executeCommand("npm install -g @openai/codex", undefined, undefined, 120)
+    console.log("   Codex installed.\n")
+
+    // 3. Get SSH access for background execution
+    console.log("3. Establishing SSH connection...")
     const { token } = await sandbox.createSshAccess(60)
     const ssh = new Client()
     await new Promise<void>((resolve, reject) => {
@@ -39,11 +44,12 @@ async function main() {
     })
     console.log("   SSH connected.\n")
 
-    // 4. Start slow command in background via SSH (returns immediately)
-    console.log("4. Starting slow command in background...")
+    // 4. Start codex in background via SSH (returns immediately)
+    console.log("4. Starting Codex in background...")
     const outputFile = "/tmp/codex-output.jsonl"
-    // Use a simple slow command that outputs JSON lines (simulating codex)
-    const command = `for i in 1 2 3 4 5; do echo '{"type":"event","count":'$i',"ts":'$(date +%s)'}'; sleep 1; done`
+    const prompt = "Write a hello world Python script and run it"
+    const apiKey = cleanEnv(process.env.OPENAI_API_KEY!).replace(/'/g, "'\\''")
+    const command = `OPENAI_API_KEY='${apiKey}' codex exec --json --skip-git-repo-check --yolo "${prompt}"`
     const safeCmd = command.replace(/'/g, "'\\''")
     const wrapper = `nohup sh -c '${safeCmd} >> ${outputFile} 2>&1; echo 1 > ${outputFile}.done' > /dev/null 2>&1 & echo $!`
 
