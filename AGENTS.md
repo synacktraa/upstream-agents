@@ -12,7 +12,7 @@ Typical laptop development (not the Daytona sandbox VM below):
 - **DB:** `cd packages/web && npx prisma db push` — configure `packages/web/.env` first (see root **README** for full local env).
 - **Dev server:** `npm run dev` — app at http://localhost:3000 (usually needs `GITHUB_PAT` + `DAYTONA_API_KEY` in `packages/web/.env`).
 - **SDK tests:** `npm run test -w @upstream/agents`
-- **Web E2E:** `cd packages/web && npm run test:e2e` — use `packages/web/.env.e2e` + `DAYTONA_API_KEY`; details in root **README** (*End-to-end tests*).
+- **Web E2E (Playwright):** `cd packages/web && npm run test:e2e` — env and commands are in *Web E2E (Playwright)* under Testing below.
 
 ---
 
@@ -88,7 +88,38 @@ DAYTONA_API_KEY=dtn_... ANTHROPIC_API_KEY=sk-ant-... npm run test -w @upstream/a
 DAYTONA_API_KEY=dtn_... ANTHROPIC_API_KEY=sk-ant-... npm run test -w @upstream/agents
 ```
 
-Web app E2E (Playwright) is documented in the root **README** (*End-to-end tests*).
+### Web E2E (Playwright)
+
+These tests start a real Next.js dev server, a dedicated PostgreSQL database, real Daytona sandboxes, and drive the same UI as production (chat, polling, sync). Setup uses `POST /api/e2e/setup` (that route returns 404 when `NODE_ENV=production`).
+
+**Prerequisites**
+
+- `DAYTONA_API_KEY` in the environment (Playwright loads repo root `.env` via `playwright.config.ts`).
+- `packages/web/.env.e2e` with at least `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `NEXTAUTH_SECRET`, and `ENCRYPTION_KEY`. Use a database separate from your normal dev DB.
+
+**Run** (from `packages/web`):
+
+```bash
+npm run test:e2e
+```
+
+**Run a subset:**
+
+```bash
+npx playwright test e2e/app/single-agent.spec.ts
+npx playwright test e2e/app
+npx playwright test e2e/regression
+```
+
+**Layout**
+
+| Path | Purpose |
+|------|---------|
+| `e2e/fixtures/` | Shared fixture (`agent-fixture.ts`) and named timeouts (`timeouts.ts`) |
+| `e2e/app/` | Full-app flows: `single-agent.spec.ts`, `multi-agent.spec.ts` |
+| `e2e/regression/` | Targeted regressions, e.g. `active-branch-stuck.spec.ts` |
+
+Config: `packages/web/playwright.config.ts` — dev server on port 3001, `NEXT_DIST_DIR=.next-e2e`, `workers: 1`.
 
 ### Manual SDK testing
 
