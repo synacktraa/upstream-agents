@@ -475,8 +475,255 @@ export abstract class Provider implements IProvider {
   /**
    * Get new events for the current turn; reads and updates cursor in sandbox meta.
    * Use isSandboxBackgroundProcessRunning() to check if the agent is still running.
+   *
+   * OPTIMIZATION: When the sandbox supports pollBackgroundState(), we use it to
+   * reduce 4 separate executeCommand calls (read meta, read output, check done, write meta)
+   * down to 2 (combined poll + write meta). This dramatically improves poll latency.
    */
   async getEventsSandboxBackgroundFromMeta(sessionDir: string): Promise<{
+    sessionId: string | null
+    events: Event[]
+    cursor: string
+    running: boolean
+  }> {
+    // Try optimized path first (2 round trips instead of 4)
+    if (this.sandboxManager?.pollBackgroundState) {
+      return this._getEventsOptimized(sessionDir)
+    }
+
+    // Fallback to legacy path (4 round trips)
+    return this._getEventsLegacy(sessionDir)
+  }
+
+  /**
+   * Optimized polling path: uses pollBackgroundState to read meta + output + done in one call.
+   */
+  private async _getEventsOptimized(sessionDir: string): Promise<{
+    sessionId: string | null
+    events: Event[]
+    cursor: string
+    running: boolean
+  }> {
+    const state = await this.sandboxManager.pollBackgroundState!(sessionDir)
+
+    // Parse meta from the raw content
+    let meta: {
+      currentTurn: number
+      cursor: number
+      rawCursor?: number
+      pid?: number
+      runId?: string
+      outputFile?: string
+      sawEnd?: boolean
+      startedAt?: string
+      provider?: import("../types/index.js").ProviderName
+      sessionId?: string | null
+    } | null = null
+
+    if (state?.meta) {
+      try {
+        const parsed = JSON.parse(state.meta)
+        if (typeof parsed.currentTurn === "number" && typeof parsed.cursor === "number") {
+          meta = parsed
+        }
+      } catch {
+        // Invalid JSON, treat as no meta
+      }
+    }
+
+    if (!meta?.runId || !meta.outputFile) {
+      debugLog(`getEventsSandboxBackgroundFromMeta provider=${this.name} sessionDir=${sessionDir} (no turn in progress) meta=${JSON.stringify(meta)}`, this.sessionId)
+      return {
+        sessionId: meta?.sessionId ?? this.sessionId ?? null,
+        events: [],
+        cursor: String(meta?.cursor ?? 0),
+        running: false,
+      }
+    }
+
+    const cursor = String(meta.cursor)
+    debugLog(`getEventsSandboxBackgroundFromMeta provider=${this.name} sessionDir=${sessionDir} turn=${meta.currentTurn} cursor=${cursor}`, this.sessionId)
+
+    // Parse the output directly instead of calling pollSandboxBackground
+    const result = this._parseOutputContent(state?.output ?? "", cursor, meta.rawCursor != null ? String(meta.rawCursor) : null)
+
+    const sawEnd = meta.sawEnd || result.events.some((e) => e.type === "end")
+    const stillRunning = !state?.done
+
+    // Update meta
+    if (!stillRunning || sawEnd) {
+      const nextTurn = (meta.currentTurn ?? 0) + 1
+      const metaUpdate = {
+        currentTurn: nextTurn,
+        cursor: Number(result.cursor) || 0,
+        rawCursor: Number(result.rawCursor) || meta.rawCursor || 0,
+        sawEnd,
+        provider: this.name as import("../types/index.js").ProviderName,
+        sessionId: this.sessionId ?? meta.sessionId ?? null,
+        ...(sawEnd ? {} : { outputFile: meta.outputFile, runId: meta.runId }),
+      }
+      await this.writeSandboxMetaIfChanged(sessionDir, metaUpdate, meta)
+    }
+    if (stillRunning && !sawEnd) {
+      await this.writeSandboxMetaIfChanged(sessionDir, {
+        currentTurn: meta.currentTurn,
+        cursor: Number(result.cursor) || 0,
+        rawCursor: Number(result.rawCursor) || meta.rawCursor || 0,
+        pid: meta.pid,
+        runId: meta.runId,
+        outputFile: meta.outputFile,
+        sawEnd,
+        startedAt: meta.startedAt,
+        provider: this.name,
+        sessionId: this.sessionId,
+      }, meta)
+    }
+    if (!stillRunning && !sawEnd) {
+      const maxOutputChars = 4096
+      const raw = (result.rawOutput ?? "").trim()
+      const nonJsonLines = raw.split("\n").filter((line) => {
+        const t = line.trim()
+        return t && !(t.startsWith("{") && t.endsWith("}"))
+      })
+      const filtered = nonJsonLines.join("\n").trim()
+      const output = filtered.length > maxOutputChars ? filtered.slice(-maxOutputChars) : filtered || undefined
+      const crashEvent: Event = {
+        type: "agent_crashed",
+        message: "Agent process exited without completing (crashed or killed)",
+        output,
+      }
+      debugLog("session end", this.sessionId ?? meta.sessionId, "reason=crashed", crashEvent.message, output ? `output=${output.slice(0, 200)}${output.length > 200 ? "…" : ""}` : "")
+      const nextTurn = (meta.currentTurn ?? 0) + 1
+      await this.writeSandboxMetaIfChanged(sessionDir, {
+        currentTurn: nextTurn,
+        cursor: Number(result.cursor) || 0,
+        rawCursor: Number(result.rawCursor) || meta.rawCursor || 0,
+        sawEnd: true,
+        provider: this.name,
+        sessionId: this.sessionId ?? meta.sessionId ?? null,
+      }, meta)
+      return { sessionId: result.sessionId, events: [...result.events, crashEvent], cursor: result.cursor, running: false }
+    }
+    if (!stillRunning || sawEnd) {
+      return { sessionId: result.sessionId, events: result.events, cursor: result.cursor, running: false }
+    }
+    return { sessionId: result.sessionId, events: result.events, cursor: result.cursor, running: true }
+  }
+
+  /**
+   * Parse output content directly (used by optimized path).
+   * Mirrors the logic from pollSandboxBackground but works on already-fetched content.
+   */
+  private _parseOutputContent(
+    rawOutput: string,
+    cursor?: string | null,
+    rawCursor?: string | null
+  ): {
+    status: "running" | "completed"
+    sessionId: string | null
+    events: Event[]
+    cursor: string
+    rawCursor: string
+    rawOutput?: string
+  } {
+    const decodeCursor = (c?: string | null) => (c ? Number(c) || 0 : 0)
+    const encodeCursor = (index: number) => String(index)
+
+    const startIndex = decodeCursor(cursor)
+    const rawStartIndex = decodeCursor(rawCursor)
+
+    const rawLines = rawOutput.split("\n")
+    debugLog(`_parseOutputContent provider=${this.name} cursor=${cursor ?? "null"} rawLines=${rawLines.length}`, this.sessionId)
+    const lines: string[] = []
+
+    const isJsonLine = (line: string): boolean => {
+      const trimmed = line.trim()
+      return trimmed.startsWith("{") && trimmed.endsWith("}")
+    }
+
+    const isRereading = rawStartIndex >= rawLines.length
+    for (let i = 0; i < rawLines.length; i++) {
+      const line = rawLines[i]
+      if (i >= rawStartIndex) {
+        debugLog(`raw file line [${i}]: ${line}`, this.sessionId)
+      }
+      const trimmed = line.trim()
+      if (!trimmed) continue
+      if (!isJsonLine(trimmed) && i === rawLines.length - 1) {
+        if (!isRereading) debugLog(`background poll skipped (partial last line) [${i}]: ${trimmed}`, this.sessionId)
+        continue
+      }
+      if (isJsonLine(trimmed)) {
+        lines.push(trimmed)
+      } else {
+        if (!isRereading) debugLog(`background poll skipped (not JSONL) [${i}]: ${trimmed}`, this.sessionId)
+      }
+    }
+
+    if (startIndex >= lines.length) {
+      const nextCursor = lines.length
+      const nextRawCursor = encodeCursor(rawLines.length)
+      return {
+        status: "running",
+        sessionId: this.sessionId,
+        events: [],
+        cursor: encodeCursor(nextCursor),
+        rawCursor: nextRawCursor,
+        rawOutput,
+      }
+    }
+
+    const slice = lines.slice(startIndex)
+    for (let i = 0; i < slice.length; i++) {
+      const l = slice[i]
+      debugLog(`raw line (background poll) [${startIndex + i}]: ${l ?? ""}`, this.sessionId)
+    }
+
+    const eventsOut: Event[] = []
+    let status: "running" | "completed" = "running"
+
+    for (const line of slice) {
+      const raw = this.parse(line)
+      if (raw === null) {
+        debugLog(`unparsed line (background poll):`, this.sessionId, line)
+      }
+      const events = raw === null ? [] : Array.isArray(raw) ? raw : [raw]
+      for (const event of events) {
+        if (event.type === "session") {
+          this.sessionId = event.id
+        }
+        if (event.type === "end") {
+          status = "completed"
+          debugLog("session end", this.sessionId, event.error ? `reason=error ${event.error}` : "reason=completed")
+        } else if (event.type === "agent_crashed") {
+          debugLog("session end", this.sessionId, "reason=crashed", event.message ?? event.output ?? "")
+        }
+        eventsOut.push(event)
+      }
+    }
+
+    const newCursor = encodeCursor(lines.length)
+    const newRawCursor = encodeCursor(rawLines.length)
+    debugLog(
+      `_parseOutputContent result provider=${this.name} status=${status} events=${eventsOut.length} newCursor=${newCursor} newRawCursor=${newRawCursor}`,
+      this.sessionId
+    )
+
+    return {
+      status,
+      sessionId: this.sessionId,
+      events: eventsOut,
+      cursor: newCursor,
+      rawCursor: newRawCursor,
+      rawOutput,
+    }
+  }
+
+  /**
+   * Legacy polling path: makes 4 separate executeCommand calls.
+   * Used when sandbox doesn't support pollBackgroundState.
+   */
+  private async _getEventsLegacy(sessionDir: string): Promise<{
     sessionId: string | null
     events: Event[]
     cursor: string

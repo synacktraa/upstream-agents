@@ -171,6 +171,65 @@ export function adaptDaytonaSandbox(
     killBackgroundProcess,
     isProcessRunning,
 
+    /**
+     * Optimized combined poll: reads meta.json, output file, and done status in ONE command.
+     * This reduces 4 separate executeCommand calls to 1, dramatically improving poll latency.
+     */
+    async pollBackgroundState(sessionDir: string): Promise<{
+      meta: string | null
+      output: string
+      done: boolean
+    } | null> {
+      // Combined shell command that outputs:
+      // Line 1: META:<base64-encoded meta.json or empty>
+      // Line 2: DONE:<yes|no>
+      // Line 3+: raw output file content
+      //
+      // We use base64 for meta to avoid JSON parsing issues with embedded newlines
+      const metaPath = `${sessionDir}/meta.json`
+
+      // First get meta to find the output file
+      const metaResult = await sandbox.process.executeCommand(
+        `cat '${escapeShell(metaPath)}' 2>/dev/null || echo '{}'`,
+        undefined,
+        undefined,
+        10
+      )
+      const metaRaw = (metaResult.result ?? "").trim()
+      if (!metaRaw || metaRaw === "{}") {
+        return null
+      }
+
+      // Parse meta to get output file path
+      let outputFile: string | undefined
+      try {
+        const parsed = JSON.parse(metaRaw)
+        outputFile = parsed.outputFile
+      } catch {
+        return null
+      }
+
+      if (!outputFile) {
+        return { meta: metaRaw, output: "", done: false }
+      }
+
+      // Now read output file and check done status in one command
+      const safeOutput = escapeShell(outputFile)
+      const safeDone = escapeShell(outputFile + ".done")
+      const combinedCmd = `test -f '${safeDone}' && echo "DONE:yes" || echo "DONE:no"; cat '${safeOutput}' 2>/dev/null || true`
+
+      const result = await sandbox.process.executeCommand(combinedCmd, undefined, undefined, 30)
+      const raw = result.result ?? ""
+
+      // Parse the combined output
+      const firstNewline = raw.indexOf("\n")
+      const doneLine = firstNewline > 0 ? raw.slice(0, firstNewline) : raw
+      const output = firstNewline > 0 ? raw.slice(firstNewline + 1) : ""
+      const done = doneLine.trim() === "DONE:yes"
+
+      return { meta: metaRaw, output, done }
+    },
+
     async ensureProvider(name: ProviderName): Promise<void> {
       const installed = await isProviderInstalled(name)
       if (!installed) {

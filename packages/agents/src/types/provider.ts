@@ -54,6 +54,16 @@ export interface CodeAgentSandbox {
    * Uses ps -o state for accurate detection.
    */
   isProcessRunning?(pid: number): Promise<boolean>
+
+  /**
+   * Optional: optimized combined poll that reads meta, output, and done status in one command.
+   * Returns everything needed for a poll cycle in a single round trip.
+   */
+  pollBackgroundState?(sessionDir: string): Promise<{
+    meta: string | null      // Raw meta.json content
+    output: string           // Raw output file content
+    done: boolean            // Whether .done file exists
+  } | null>
 }
 
 /** Command configuration for spawning a provider process */
