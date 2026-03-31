@@ -425,6 +425,50 @@ export function ChatPanel({
     }
   }, [startExecutionPolling, repoName, repoOwner])
 
+  // Recovery: If branch shows as RUNNING but we're not polling, check server for active execution
+  // This handles page refresh, tab close/reopen, or switching to a branch that's running
+  useEffect(() => {
+    // Only check if branch is marked as running but we're not already tracking it
+    if (branch.status !== BRANCH_STATUS.RUNNING) return
+
+    // Check if we already have an active execution for any message in this branch
+    const lastAssistantMsg = branch.messages
+      .filter(m => m.role === "assistant")
+      .slice(-1)[0]
+
+    if (lastAssistantMsg && isStreaming(lastAssistantMsg.id)) {
+      // Already tracking this execution
+      return
+    }
+
+    // Ask server if there's an active execution for this branch
+    const checkActiveExecution = async () => {
+      try {
+        const res = await fetch("/api/agent/execution/active", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ branchId: branch.id }),
+        })
+
+        if (!res.ok) return
+
+        const data = await res.json()
+        if (data.execution?.messageId && data.execution?.status === "running") {
+          console.log("[ChatPanel] Recovering active execution after refresh", {
+            branchId: branch.id,
+            messageId: data.execution.messageId,
+          })
+          // Resume polling for this execution
+          startPollingRef.current(data.execution.messageId, branch, data.execution.executionId)
+        }
+      } catch (err) {
+        console.error("[ChatPanel] Failed to check for active execution", err)
+      }
+    }
+
+    checkActiveExecution()
+  }, [branch.id, branch.status, branch.messages, isStreaming])
+
   // Update streamingMessageIdRef based on execution store (for cross-device sync)
   useEffect(() => {
     if (streamingMessageIdRef) {
