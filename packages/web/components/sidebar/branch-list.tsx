@@ -337,7 +337,11 @@ export function BranchList({
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation()
-                        deleteDialog.handleDeleteClick(branch.id)
+                        if (e.altKey) {
+                          deleteDialog.handleConfirm(branch.id, false)
+                        } else {
+                          deleteDialog.handleDeleteClick(branch.id)
+                        }
                       }}
                       disabled={isCreating}
                       className={cn(
