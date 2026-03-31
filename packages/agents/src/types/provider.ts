@@ -43,10 +43,17 @@ export interface CodeAgentSandbox {
    */
   executeBackground?(options: ExecuteBackgroundOptions): Promise<{ pid: number }>
   /**
-   * Optional: kill a process by pid. Must use the same execution context that
-   * started it (e.g. SSH); process API kill won't see pids started over SSH.
+   * Optional: kill a process by pid.
+   * @param pid Process ID to kill
+   * @param processName Optional process name for pkill fallback
    */
-  killBackgroundProcess?(pid: number): Promise<void>
+  killBackgroundProcess?(pid: number, processName?: string): Promise<void>
+
+  /**
+   * Optional: check if a process is actually running (not zombie).
+   * Uses ps -o state for accurate detection.
+   */
+  isProcessRunning?(pid: number): Promise<boolean>
 }
 
 /** Command configuration for spawning a provider process */

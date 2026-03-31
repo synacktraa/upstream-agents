@@ -418,18 +418,26 @@ export abstract class Provider implements IProvider {
 
   /**
    * Cancel the current turn's process in the sandbox (kill pid from meta).
-   * Uses killBackgroundProcess when available (same channel as start, e.g. SSH); else executeCommand.
-   * Writes the done file after kill so isRunning() becomes false (the wrapper never gets to write it).
+   * Uses robust multi-step kill: SIGTERM -> SIGKILL -> pkill fallback.
+   * Writes the done file after kill so isRunning() becomes false.
    */
   async cancelSandboxBackground(sessionDir: string): Promise<void> {
     const meta = await this.readSandboxMeta(sessionDir)
     if (meta?.pid == null) return
     const mgr = this.sandboxManager
+
     if (mgr?.killBackgroundProcess) {
-      await mgr.killBackgroundProcess(meta.pid)
+      // Use the robust kill implementation (includes TERM -> KILL -> pkill)
+      await mgr.killBackgroundProcess(meta.pid, this.name)
     } else if (mgr?.executeCommand) {
-      await mgr.executeCommand(`kill ${meta.pid} 2>/dev/null || true`, 10)
+      // Fallback: manual multi-step kill
+      await mgr.executeCommand(`kill -TERM ${meta.pid} 2>/dev/null || true`, 10)
+      await new Promise(r => setTimeout(r, 500))
+      await mgr.executeCommand(`kill -9 ${meta.pid} 2>/dev/null || true`, 10)
+      await mgr.executeCommand(`pkill -9 -f "${this.name}" 2>/dev/null || true`, 10)
     }
+
+    // Write done file so isRunning() returns false
     if (meta.outputFile && mgr?.executeCommand) {
       const donePath = meta.outputFile + ".done"
       const escaped = donePath.replace(/'/g, "'\\''")
