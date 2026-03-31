@@ -194,8 +194,10 @@ export function useSyncData({ setRepos, activeBranchIdRef, streamingMessageIdRef
               )
             }
 
-            // Status change
-            if (lastBranch.status !== syncBranch.status) {
+            // Status change — but never overwrite while the poller owns
+            // this branch's lifecycle. The poller will set the final status
+            // itself after delivering the last content update.
+            if (lastBranch.status !== syncBranch.status && !isBranchPolling(syncBranch.id)) {
               setRepos((prev) =>
                 updateBranchAcrossRepos(prev, syncBranch.id, {
                   status: syncBranch.status as Branch["status"],
