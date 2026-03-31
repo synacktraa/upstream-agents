@@ -36,8 +36,12 @@ export function adaptDaytonaSandbox(
   sandbox: Sandbox,
   options: AdaptSandboxOptions = {}
 ): CodeAgentSandbox {
-  // Simple single-level environment
-  const env: Record<string, string> = { ...options.env }
+  // Two-level environment: session (persistent) + run (cleared between runs)
+  const sessionEnv: Record<string, string> = { ...options.env }
+  const runEnv: Record<string, string> = {}
+
+  // Compute merged env with run-level taking precedence
+  const getEnv = (): Record<string, string> => ({ ...sessionEnv, ...runEnv })
 
   /** Check if provider CLI is installed */
   async function isProviderInstalled(name: ProviderName): Promise<boolean> {
@@ -67,7 +71,7 @@ export function adaptDaytonaSandbox(
 
   /** Execute a command synchronously */
   async function executeCommand(command: string, timeout: number = 60): Promise<{ exitCode: number; output: string }> {
-    const envPrefix = buildEnvPrefix(env)
+    const envPrefix = buildEnvPrefix(getEnv())
     const fullCommand = envPrefix ? `${envPrefix} ${command}` : command
     const result = await sandbox.process.executeCommand(fullCommand, undefined, undefined, timeout)
     return { exitCode: result.exitCode ?? 0, output: result.result ?? "" }
@@ -79,7 +83,7 @@ export function adaptDaytonaSandbox(
    * Creates outputFile.done when command completes.
    */
   async function executeBackground(opts: ExecuteBackgroundOptions): Promise<{ pid: number }> {
-    const envPrefix = buildEnvPrefix(env)
+    const envPrefix = buildEnvPrefix(getEnv())
     const cmd = envPrefix ? `${envPrefix} ${opts.command}` : opts.command
     const safeCmd = escapeShell(cmd)
     const safeOutput = escapeShell(opts.outputFile)
@@ -141,22 +145,25 @@ export function adaptDaytonaSandbox(
   }
 
   return {
-    // Environment management (simplified - single level)
+    // Environment management (two-level: session + run)
     setEnvVars(vars: Record<string, string>): void {
-      Object.assign(env, vars)
+      // Backwards compat: map to session-level
+      Object.assign(sessionEnv, vars)
     },
 
     setSessionEnvVars(vars: Record<string, string>): void {
-      Object.assign(env, vars)
+      Object.assign(sessionEnv, vars)
     },
 
     setRunEnvVars(vars: Record<string, string>): void {
-      Object.assign(env, vars)
+      Object.assign(runEnv, vars)
     },
 
     clearRunEnvVars(): void {
-      // No-op in simplified model - env persists
-      // If caller wants fresh env, they should create new adapter
+      // Clear run-level env between runs
+      for (const key of Object.keys(runEnv)) {
+        delete runEnv[key]
+      }
     },
 
     executeCommand,
@@ -189,7 +196,7 @@ export function adaptDaytonaSandbox(
       command: string,
       timeout: number = 120
     ): AsyncGenerator<string, void, unknown> {
-      const envExports = Object.entries(env)
+      const envExports = Object.entries(getEnv())
         .map(([k, v]) => `export ${k}='${escapeShell(v)}'`)
         .join("; ")
       const timedCommand = timeout > 0 ? `timeout ${timeout}s ${command}` : command
