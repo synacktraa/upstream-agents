@@ -16,7 +16,7 @@ import {
 import { BRANCH_STATUS } from "@/lib/shared/constants"
 import { queryKeys } from "@/lib/api/query-keys"
 import { apiFetch } from "@/lib/api/fetcher"
-import { useExecutionStore } from "@/lib/stores/execution-store"
+import { isBranchPolling } from "@/hooks/use-execution-poller"
 
 /**
  * Response shape from /api/user/me
@@ -181,13 +181,7 @@ export function useRepoData({ isAuthenticated }: UseRepoDataOptions) {
       const branch = repo?.branches.find((b) => b.id === branchId)
       if (!branch) return
 
-      // CRITICAL: Skip loading if there's an active execution for this branch
-      // Loading from DB would wipe out optimistic messages that haven't been saved yet
-      const activeExecutions = useExecutionStore.getState().activeExecutions
-      const hasActiveExecution = Array.from(activeExecutions.values()).some(
-        exec => exec.branchId === branchId
-      )
-      if (hasActiveExecution) {
+      if (isBranchPolling(branchId)) {
         return
       }
 
@@ -210,12 +204,7 @@ export function useRepoData({ isAuthenticated }: UseRepoDataOptions) {
           return
         }
 
-        // Double-check for active execution after fetch (might have started during fetch)
-        const execsAfterFetch = useExecutionStore.getState().activeExecutions
-        const hasActiveExecutionAfterFetch = Array.from(execsAfterFetch.values()).some(
-          exec => exec.branchId === branchId
-        )
-        if (hasActiveExecutionAfterFetch) {
+        if (isBranchPolling(branchId)) {
           return
         }
 

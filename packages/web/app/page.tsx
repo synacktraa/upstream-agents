@@ -34,7 +34,6 @@ import {
 
 // Import Zustand stores
 import { useUIStore } from "@/lib/stores"
-import { useExecutionStore, recoverActiveExecutions } from "@/lib/stores/execution-store"
 
 export default function Home() {
   const { data: session, status } = useSession()
@@ -273,19 +272,41 @@ export default function Home() {
     }
   }, [activeBranchId, activeRepoId, loadBranchMessages])
 
-  // Sync active branch ID to execution store (for unread indicator on background completion)
-  const setActiveBranchIdInStore = useExecutionStore(state => state.setActiveBranchId)
+  // Background heartbeat: trigger server-side polling for running branches that
+  // aren't currently visible (the active branch has its own poller in ChatPanel).
+  // This ensures server-side lease-based polling keeps checking Daytona even when
+  // the user is looking at a different branch.
+  const reposRef = useRef(repos)
+  reposRef.current = repos
   useEffect(() => {
-    setActiveBranchIdInStore(activeBranchId)
-  }, [activeBranchId, setActiveBranchIdInStore])
-
-  // Recover active executions after page refresh
-  // This fetches all running executions from the server and resumes polling
-  useEffect(() => {
-    if (loaded && status === "authenticated") {
-      recoverActiveExecutions()
-    }
-  }, [loaded, status])
+    const interval = setInterval(() => {
+      for (const repo of reposRef.current) {
+        for (const b of repo.branches) {
+          if (b.status !== BRANCH_STATUS.RUNNING) continue
+          if (b.id === activeBranchIdRef.current) continue
+          const lastMsg = b.messages.filter((m: { role: string }) => m.role === "assistant").at(-1)
+          if (!lastMsg || !("id" in lastMsg)) continue
+          fetch("/api/agent/status", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ messageId: lastMsg.id }),
+          }).then(async (res) => {
+            if (!res.ok) return
+            const data = await res.json()
+            if (data.status === "completed" || data.status === "error") {
+              handleUpdateBranch(b.id, {
+                status: BRANCH_STATUS.IDLE,
+                unread: true,
+                lastActivity: "now",
+                lastActivityTs: Date.now(),
+              })
+            }
+          }).catch(() => {})
+        }
+      }
+    }, 10_000)
+    return () => clearInterval(interval)
+  }, [])
 
   useEffect(() => {
     if (!activeBranch) setDesktopRebaseConflict(false)

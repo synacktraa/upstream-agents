@@ -25,5 +25,4 @@ export { useCrossDeviceSync } from "./use-cross-device-sync"
 export { useIsMobile } from "./use-mobile"
 
 // Execution polling
-export { useExecutionManager } from "./use-execution-manager"
-export type { ExecutionManager } from "./use-execution-manager"
+export { useExecutionPoller, isBranchPolling } from "./use-execution-poller"
