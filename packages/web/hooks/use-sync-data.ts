@@ -15,6 +15,7 @@ const pendingDeletes = new Set<string>()
 export function markBranchDeleting(branchId: string) { pendingDeletes.add(branchId) }
 export function unmarkBranchDeleting(branchId: string) { pendingDeletes.delete(branchId) }
 
+
 // Sync data shape from the API
 export interface SyncBranch {
   id: string

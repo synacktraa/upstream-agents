@@ -482,7 +482,8 @@ export function ChatPanel({
 
     setInput("")
 
-    // Show spinner immediately — before any async work
+    // Show spinner immediately — onUpdateBranch sets local state AND persists
+    // to DB, so sync won't revert it back to "idle".
     onUpdateBranch(branch.id, {
       status: BRANCH_STATUS.RUNNING,
       draftPrompt: "",
@@ -537,7 +538,6 @@ export function ChatPanel({
     }
     const messageId = await onAddMessage(branch.id, assistantMsg)
 
-    // startPolling in its own sync block — status is already RUNNING
     startPollingRef.current(messageId)
 
     try {
