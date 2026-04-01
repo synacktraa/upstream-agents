@@ -66,7 +66,7 @@ export async function POST(req: Request) {
   })
 
   const { anthropicApiKey, anthropicAuthToken, anthropicAuthType } =
-    await resolveUserCredentials(userCredentials)
+    await resolveUserCredentials(userCredentials, userId)
   const sandboxAutoStopInterval = userCredentials?.sandboxAutoStopInterval ?? 5
 
   // Check if user has Anthropic credentials - used to determine default agent

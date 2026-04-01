@@ -33,7 +33,29 @@ export async function GET() {
             sandboxAutoStopInterval: true,
             defaultLoopMaxIterations: true,
             loopUntilFinishedEnabled: true,
-            useCredentialsFromUserId: true,
+          },
+        },
+        // Include team membership info
+        teamMembership: {
+          include: {
+            team: {
+              include: {
+                owner: {
+                  select: { id: true, name: true, githubLogin: true, image: true },
+                },
+              },
+            },
+          },
+        },
+        ownedTeam: {
+          include: {
+            members: {
+              include: {
+                user: {
+                  select: { id: true, name: true, githubLogin: true, image: true },
+                },
+              },
+            },
           },
         },
         repos: {
@@ -69,15 +91,6 @@ export async function GET() {
     // Transform credentials to just show existence, not values
     const serverLlmFallback = hasOpenRouterKey()
 
-    // If using shared credentials, fetch source user info
-    let credentialSourceUser: { id: string; name: string | null; githubLogin: string | null } | null = null
-    if (user.credentials?.useCredentialsFromUserId) {
-      credentialSourceUser = await prisma.user.findUnique({
-        where: { id: user.credentials.useCredentialsFromUserId },
-        select: { id: true, name: true, githubLogin: true },
-      })
-    }
-
     const credentials = user.credentials
       ? {
           anthropicAuthType: user.credentials.anthropicAuthType,
@@ -89,12 +102,34 @@ export async function GET() {
           sandboxAutoStopInterval: user.credentials.sandboxAutoStopInterval,
           defaultLoopMaxIterations: user.credentials.defaultLoopMaxIterations,
           loopUntilFinishedEnabled: user.credentials.loopUntilFinishedEnabled,
-          useCredentialsFromUserId: user.credentials.useCredentialsFromUserId,
-          credentialSourceUser,
           ...(serverLlmFallback ? { hasServerLlmFallback: true } : {}),
         }
       : serverLlmFallback
         ? { hasServerLlmFallback: true as const }
+        : null
+
+    // Build team info
+    const team = user.ownedTeam
+      ? {
+          isOwner: true as const,
+          members: user.ownedTeam.members.map((m) => ({
+            id: m.user.id,
+            name: m.user.name,
+            githubLogin: m.user.githubLogin,
+            image: m.user.image,
+            joinedAt: m.createdAt,
+          })),
+        }
+      : user.teamMembership
+        ? {
+            isOwner: false as const,
+            owner: {
+              id: user.teamMembership.team.owner.id,
+              name: user.teamMembership.team.owner.name,
+              githubLogin: user.teamMembership.team.owner.githubLogin,
+              image: user.teamMembership.team.owner.image,
+            },
+          }
         : null
 
     // Apply saved repo order if it exists
@@ -123,6 +158,7 @@ export async function GET() {
         isAdmin: user.isAdmin,
       },
       credentials,
+      team,
       repos: orderedRepos,
       quota,
     })

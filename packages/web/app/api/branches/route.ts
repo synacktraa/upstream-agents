@@ -56,7 +56,7 @@ export async function POST(req: Request) {
   const userCredentials = await prisma.userCredentials.findUnique({
     where: { userId },
   })
-  const { anthropicApiKey, anthropicAuthToken } = await resolveUserCredentials(userCredentials)
+  const { anthropicApiKey, anthropicAuthToken } = await resolveUserCredentials(userCredentials, userId)
   const defaultAgent = getDefaultAgent({
     hasAnthropicApiKey: !!anthropicApiKey,
     hasAnthropicAuthToken: !!anthropicAuthToken,

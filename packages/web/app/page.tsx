@@ -577,7 +577,6 @@ export default function Home() {
         open={settingsOpen}
         onClose={handleSettingsClose}
         credentials={credentials}
-        currentUserId={userId ?? undefined}
         onCredentialsUpdate={refresh}
         highlightField={settingsHighlightField}
         onClearHighlight={clearSettingsHighlight}

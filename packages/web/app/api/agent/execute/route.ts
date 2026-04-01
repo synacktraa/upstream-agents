@@ -44,9 +44,9 @@ export async function POST(req: Request) {
   const daytonaApiKey = getDaytonaApiKey()
   if (isDaytonaKeyError(daytonaApiKey)) return daytonaApiKey
 
-  // Resolve user's credentials (follows sharing pointer if set)
+  // Resolve user's credentials (uses team owner's Claude subscription if member)
   const { anthropicApiKey, anthropicAuthToken, anthropicAuthType, openaiApiKey, opencodeApiKey } =
-    await resolveUserCredentials(sandboxRecord.user.credentials)
+    await resolveUserCredentials(sandboxRecord.user.credentials, auth.userId)
 
   // Determine repo name from database or request
   const actualRepoName = repoName || sandboxRecord.branch?.repo?.name || "repo"

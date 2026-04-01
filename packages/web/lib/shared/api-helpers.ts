@@ -302,7 +302,7 @@ export async function getGitHubTokenForUser(userId: string): Promise<string | nu
 // =============================================================================
 
 /**
- * Raw credentials type from database (includes sharing pointer)
+ * Raw credentials type from database
  */
 interface RawCredentials {
   anthropicApiKey: string | null
@@ -311,15 +311,14 @@ interface RawCredentials {
   openaiApiKey: string | null
   opencodeApiKey: string | null
   daytonaApiKey: string | null
-  useCredentialsFromUserId?: string | null
 }
 
 /**
  * Decrypts user credentials from database format
  * Returns typed credentials object with decrypted values
  *
- * NOTE: This does NOT follow useCredentialsFromUserId pointer.
- * Use resolveUserCredentials() for credential sharing support.
+ * NOTE: This does NOT check team membership.
+ * Use resolveUserCredentials() for team-based credential sharing.
  */
 export function decryptUserCredentials(
   credentials: RawCredentials | null
@@ -359,33 +358,48 @@ export function decryptUserCredentials(
 }
 
 /**
- * Resolves and decrypts user credentials, following the sharing pointer if set.
- * If useCredentialsFromUserId is set, fetches and uses that user's credentials instead.
+ * Resolves and decrypts user credentials, checking team membership.
+ * If user is a team member, uses the team owner's Claude subscription (anthropicAuthToken only).
  *
- * @param credentials - The user's credentials from database (may have sharing pointer)
- * @returns Decrypted credentials (either own or from shared source)
+ * @param credentials - The user's credentials from database
+ * @param userId - The user's ID (needed to check team membership)
+ * @returns Decrypted credentials (with team owner's anthropicAuthToken if member)
  */
 export async function resolveUserCredentials(
-  credentials: RawCredentials | null
+  credentials: RawCredentials | null,
+  userId?: string
 ): Promise<DecryptedCredentials> {
-  // If sharing pointer is set, fetch the source user's credentials
-  if (credentials?.useCredentialsFromUserId) {
-    const sourceCredentials = await prisma.userCredentials.findUnique({
-      where: { userId: credentials.useCredentialsFromUserId },
-    })
+  const ownCredentials = decryptUserCredentials(credentials)
 
-    if (sourceCredentials) {
-      // Decrypt and return the source user's credentials
-      // Don't follow the pointer recursively (prevent chains)
-      return decryptUserCredentials({
-        ...sourceCredentials,
-        useCredentialsFromUserId: null, // Don't follow chains
-      })
-    }
-    // If source user not found, fall back to own credentials
+  // If no userId provided, can't check team membership
+  if (!userId) {
+    return ownCredentials
   }
 
-  return decryptUserCredentials(credentials)
+  // Check if user is a team member
+  const teamMember = await prisma.teamMember.findUnique({
+    where: { userId },
+    include: {
+      team: {
+        include: {
+          owner: {
+            include: { credentials: true }
+          }
+        }
+      }
+    }
+  })
+
+  // If user is a team member and owner has Claude subscription, use it
+  if (teamMember?.team?.owner?.credentials?.anthropicAuthToken) {
+    return {
+      ...ownCredentials,
+      anthropicAuthToken: decrypt(teamMember.team.owner.credentials.anthropicAuthToken),
+      anthropicAuthType: "claude-max" as AnthropicAuthType,
+    }
+  }
+
+  return ownCredentials
 }
 
 // =============================================================================

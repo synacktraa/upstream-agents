@@ -133,7 +133,7 @@ export async function GET(req: Request) {
         }
 
         const { anthropicApiKey, anthropicAuthToken, anthropicAuthType, openaiApiKey, opencodeApiKey } =
-          await resolveUserCredentials(sandbox.user.credentials)
+          await resolveUserCredentials(sandbox.user.credentials, sandbox.userId)
 
         const agent = (branch.agent as Agent) || "claude-code"
         const model = branch.model || undefined
