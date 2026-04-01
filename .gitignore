@@ -4,12 +4,14 @@ node_modules/
 # Build outputs
 packages/*/dist/
 packages/web/.next/
+packages/web/.next-e2e/
 # Stray Next output if dev is run without an explicit app directory
 .next/
 
 # Environment
 .env
 .env*.local
+packages/web/.env.e2e
 
 # Generated
 packages/web/lib/generated/prisma

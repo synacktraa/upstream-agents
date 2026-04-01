@@ -13,6 +13,7 @@ import {
   sendMessage,
   expectAgentWorking,
   waitForAgentComplete,
+  waitForCompletionViaAPI,
   expectProseContent,
   expect,
 } from "../fixtures/agent-fixture"
@@ -61,6 +62,7 @@ test.describe("stream diagnostics", () => {
    */
   test("stress: reload mid-run then expect eventual idle", async ({ page, branches, repoName }, testInfo) => {
     const inst = attachStreamInstrumentation(page)
+    const { branchId } = branches[0]
 
     await navigateToRepo(page, repoName)
     await selectBranch(page, 0)
@@ -68,20 +70,17 @@ test.describe("stream diagnostics", () => {
     await expectAgentWorking(page)
 
     await test.step("reload while agent working", async () => {
-      await page.reload({ waitUntil: "domcontentloaded" })
+      await page.reload({ waitUntil: "load" })
     })
 
     await navigateToRepo(page, repoName)
     await selectBranch(page, 0)
 
-    // Either we see working again, or the run already finished — both are valid;
-    // the bug is "stuck running forever with no content".
-    await test.step("eventually idle with assistant prose (recovery finished)", async () => {
-      await expect(async () => {
-        const working = await page.getByText("Agent is working...").isVisible()
-        const prose = (await page.locator('[class*="prose"]').last().textContent())?.trim() ?? ""
-        expect(!working && prose.length > 5).toBe(true)
-      }).toPass({ timeout: TIMEOUT.AGENT_COMPLETE })
+    // Prefer server completion, then UI: after reload, prose can lag; working can lag after poll completes.
+    await test.step("server run completes then UI shows prose", async () => {
+      await waitForCompletionViaAPI(page, branchId)
+      await expectProseContent(page, TIMEOUT.AGENT_COMPLETE)
+      await expect(page.getByText("Agent is working...")).toBeHidden({ timeout: 60_000 })
     })
 
     await inst.attachToTest(testInfo)
