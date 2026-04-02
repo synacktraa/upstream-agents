@@ -32,10 +32,11 @@ if (process.env.E2E_CLAUDE_OAUTH_JSON?.trim()) {
 
 export default defineConfig({
   testDir: "./e2e",
-  timeout: 5 * 60_000,
-  expect: { timeout: 3 * 60_000 },
+  timeout: 2 * 60_000,
+  expect: { timeout: 60_000 },
   fullyParallel: false,
   workers: 1,
+  reporter: [["./e2e/reporters/step-timing.ts"]],
   use: {
     baseURL: `http://localhost:${port}`,
     trace: "on-first-retry",
