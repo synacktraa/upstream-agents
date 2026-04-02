@@ -96,6 +96,9 @@ interface ExecutionActions {
 
   // Set active branch ID (for determining unread state on completion)
   setActiveBranchId: (branchId: string | null) => void
+
+  /** True if any in-flight execution belongs to this branch (sync / load guard). */
+  isBranchStreaming: (branchId: string) => boolean
 }
 
 // =============================================================================
@@ -199,6 +202,13 @@ const storeCreator = (
 
   setActiveBranchId: (branchId: string | null) => {
     set({ activeBranchId: branchId })
+  },
+
+  isBranchStreaming: (branchId: string) => {
+    for (const ex of get().activeExecutions.values()) {
+      if (ex.branchId === branchId) return true
+    }
+    return false
   },
 })
 
@@ -508,6 +518,11 @@ export function hasActiveExecutions(): boolean {
  */
 export function isMessageStreaming(messageId: string): boolean {
   return useExecutionStore.getState().activeExecutions.has(messageId)
+}
+
+/** True if any active execution is for this branch (replaces per-panel poller tracking). */
+export function isBranchStreaming(branchId: string): boolean {
+  return useExecutionStore.getState().isBranchStreaming(branchId)
 }
 
 /**

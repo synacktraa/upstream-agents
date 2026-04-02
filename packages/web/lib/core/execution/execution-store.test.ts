@@ -40,6 +40,7 @@ describe('execution-store', () => {
     // Reset store state
     useExecutionStore.setState({
       activeExecutions: new Map(),
+      activeBranchId: null,
       callbacks: {
         onUpdateMessage: null,
         onUpdateBranch: null,
