@@ -56,6 +56,12 @@ DATABASE_URL="<same as the DATABASE_URL you configured>" npx prisma db push
 
 **Database:** Use a database from [Database setup](#database-setup). Prefer a **separate** database from your dev DB so E2E does not overwrite local data. In `packages/web/.env.e2e`, set `DATABASE_URL`, `DATABASE_URL_UNPOOLED` (same value is fine), `NEXTAUTH_SECRET`, and `ENCRYPTION_KEY`.
 
+**Build:** The web app depends on `@upstream/agents`. Build it first from the repo root:
+
+```bash
+npm run build -w @upstream/agents
+```
+
 Run the command below from `packages/web`.
 
 ```bash
