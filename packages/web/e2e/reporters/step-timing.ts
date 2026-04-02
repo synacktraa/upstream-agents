@@ -15,7 +15,7 @@ import * as path from "path"
 interface SafeTestResult {
   title: string
   file: string
-  status: "passed" | "failed" | "timedOut" | "skipped"
+  status: "passed" | "failed" | "timedOut" | "skipped" | "interrupted"
   duration: number
   steps: Array<{
     title: string
