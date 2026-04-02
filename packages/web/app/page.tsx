@@ -5,6 +5,7 @@ import { useSession, signOut } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { RepoSidebar } from "@/components/sidebar/repo-sidebar"
 import { BranchList } from "@/components/sidebar/branch-list"
+import { RecentFilesSidebar } from "@/components/sidebar/recent-files-sidebar"
 import { ChatPanel, EmptyChatPanel } from "@/components/panels/chat-panel"
 import { GitHistoryPanel } from "@/components/panels/git-history-panel"
 import { GitHistorySheet } from "@/components/panels/git-history-sheet"
@@ -560,6 +561,15 @@ export default function Home() {
                 document.getElementById(`commit-${shortHash}`)?.scrollIntoView({ behavior: "smooth", block: "center" })
               }}
               onBranchFromCommit={setPendingStartCommit}
+            />
+          )}
+
+          {/* Recent Files Sidebar - shows recently modified files */}
+          {activeBranch?.sandboxId && activeRepo && (
+            <RecentFilesSidebar
+              sandboxId={activeBranch.sandboxId}
+              repoPath={`/home/daytona/${activeRepo.name}`}
+              cacheKey={`${activeRepo.id}-${activeBranch.id}`}
             />
           )}
         </div>
