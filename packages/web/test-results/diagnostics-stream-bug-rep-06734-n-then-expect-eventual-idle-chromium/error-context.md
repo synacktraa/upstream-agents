@@ -1,0 +1,100 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e1]:
+  - main [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e4]:
+        - button "ER" [ref=e5] [cursor=pointer]:
+          - generic [ref=e6]: ER
+        - button [ref=e8] [cursor=pointer]:
+          - img [ref=e9]
+      - button [ref=e12] [cursor=pointer]:
+        - img [ref=e13]
+      - button "E" [ref=e15] [cursor=pointer]:
+        - generic [ref=e16]: E
+    - generic [ref=e18]:
+      - generic [ref=e19]:
+        - link "e2e-test/e2e-repo-1775143863198-0" [ref=e20] [cursor=pointer]:
+          - /url: https://github.com/e2e-test/e2e-repo-1775143863198-0
+          - img [ref=e21]
+          - generic [ref=e23]: e2e-test/e2e-repo-1775143863198-0
+        - button "Repository settings" [ref=e24] [cursor=pointer]:
+          - img [ref=e25]
+      - generic [ref=e29]:
+        - img [ref=e30]
+        - textbox "Search branches..." [ref=e33]
+      - generic [ref=e36]:
+        - button "e2e-branch-0 OpenCode" [active] [ref=e37] [cursor=pointer]:
+          - img [ref=e39]
+          - generic [ref=e41]:
+            - generic [ref=e43]: e2e-branch-0
+            - generic [ref=e45]:
+              - img [ref=e46]
+              - text: OpenCode
+        - button [ref=e49] [cursor=pointer]:
+          - img [ref=e50]
+      - generic [ref=e54]:
+        - button "New branch" [ref=e55] [cursor=pointer]:
+          - img [ref=e56]
+          - generic [ref=e57]: New branch
+        - 'button "Starting branch: main" [ref=e58] [cursor=pointer]':
+          - img [ref=e59]
+          - generic [ref=e63]: "Starting branch: main"
+          - img [ref=e64]
+    - generic [ref=e68]:
+      - generic [ref=e69]:
+        - generic [ref=e70]:
+          - link "e2e-branch-0" [ref=e71] [cursor=pointer]:
+            - /url: https://github.com/e2e-test/e2e-repo-1775143863198-0/tree/e2e-branch-0
+            - img [ref=e72]
+            - generic [ref=e74]: e2e-branch-0
+          - button [ref=e75] [cursor=pointer]:
+            - img [ref=e76]
+        - generic [ref=e79]:
+          - button [disabled] [ref=e80]:
+            - img [ref=e81]
+          - button [ref=e84] [cursor=pointer]:
+            - img [ref=e85]
+          - button [ref=e87] [cursor=pointer]:
+            - img [ref=e88]
+          - button [disabled] [ref=e96]:
+            - img [ref=e97]
+          - button [disabled] [ref=e102]:
+            - img [ref=e103]
+          - button [disabled] [ref=e108]:
+            - img [ref=e109]
+          - button [ref=e118] [cursor=pointer]:
+            - img [ref=e119]
+          - button [ref=e121] [cursor=pointer]:
+            - img [ref=e122]
+      - generic [ref=e127]:
+        - generic [ref=e128]:
+          - generic [ref=e129]:
+            - generic [ref=e130]: You
+            - generic [ref=e131]: 03:31 PM
+          - generic [ref=e132]: Create a file called greeting.txt containing 'Hello E2E'. Then reply with ONLY the word 'Done'.
+        - generic [ref=e133]:
+          - img [ref=e134]
+          - text: Agent is working...
+      - generic [ref=e136]:
+        - generic [ref=e137]:
+          - textbox "Describe what you want the agent to do..." [ref=e138]
+          - button [ref=e139] [cursor=pointer]
+        - generic [ref=e141]:
+          - button "OpenCode" [ref=e143] [cursor=pointer]:
+            - img [ref=e144]
+            - generic [ref=e147]: OpenCode
+            - img [ref=e148]
+          - button "Big Pickle (Free)" [ref=e150] [cursor=pointer]:
+            - img [ref=e151]
+            - generic [ref=e154]: Big Pickle (Free)
+            - img [ref=e155]
+  - generic [ref=e157]:
+    - img [ref=e159]
+    - button "Open Tanstack query devtools" [ref=e207] [cursor=pointer]:
+      - img [ref=e208]
+  - button "Open Next.js Dev Tools" [ref=e261] [cursor=pointer]:
+    - img [ref=e262]
+  - alert [ref=e265]
+```
