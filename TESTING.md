@@ -20,6 +20,19 @@ npm run test -w @upstream/agents
 
 ---
 
+## Agent SDK integration tests
+
+Integration tests run each provider (Claude, Codex, Gemini, OpenCode) in real Daytona sandboxes. Tests are skipped when required API keys are not set.
+
+Run the command below from the repo root.
+
+```bash
+DAYTONA_API_KEY=... ANTHROPIC_API_KEY=... OPENAI_API_KEY=... GEMINI_API_KEY=... \
+  npm test -w @upstream/agents -- tests/integration
+```
+
+---
+
 ## Database setup
 
 You need a Postgres database for Playwright below.
