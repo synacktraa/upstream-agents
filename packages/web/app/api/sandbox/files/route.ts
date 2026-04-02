@@ -189,6 +189,37 @@ export async function POST(req: Request) {
         })
       }
 
+      case "list-servers": {
+        // List running dev servers by checking listening TCP ports
+        // Use ss (socket statistics) to find listening ports
+        // Filter for common dev server ports (3000-9999) and exclude system services
+        const ssResult = await sandbox.process.executeCommand(
+          `ss -tlnp 2>/dev/null | grep -E 'LISTEN.*:(3[0-9]{3}|4[0-9]{3}|5[0-9]{3}|6[0-9]{3}|7[0-9]{3}|8[0-9]{3}|9[0-9]{3})' | awk '{print $4}' | sed 's/.*://' | sort -n | uniq || true`,
+          undefined,
+          undefined,
+          10
+        )
+
+        const ports: number[] = []
+        const lines = (ssResult.result || "").trim().split("\n").filter(Boolean)
+
+        for (const line of lines) {
+          const port = parseInt(line.trim(), 10)
+          // Only include ports in the dev server range (3000-9999)
+          if (!isNaN(port) && port >= 3000 && port <= 9999) {
+            ports.push(port)
+          }
+        }
+
+        // Get the preview URL pattern from the sandbox record
+        const previewUrlPattern = sandboxRecord.previewUrlPattern || null
+
+        return Response.json({
+          ports,
+          previewUrlPattern,
+        })
+      }
+
       default:
         return badRequest(`Unknown action: ${action}`)
     }

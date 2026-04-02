@@ -564,12 +564,13 @@ export default function Home() {
             />
           )}
 
-          {/* Recent Files Sidebar - shows recently modified files */}
+          {/* Recent Files Sidebar - shows recently modified files, running servers, and SSH access */}
           {activeBranch?.sandboxId && activeRepo && (
             <RecentFilesSidebar
               sandboxId={activeBranch.sandboxId}
               repoPath={`/home/daytona/${activeRepo.name}`}
               cacheKey={`${activeRepo.id}-${activeBranch.id}`}
+              previewUrlPattern={activeBranch.previewUrlPattern}
             />
           )}
         </div>

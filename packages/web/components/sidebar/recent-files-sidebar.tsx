@@ -7,7 +7,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { Loader2 } from "lucide-react"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import { Loader2, Terminal, Globe, ExternalLink, Copy, Check } from "lucide-react"
 
 interface ModifiedFile {
   path: string
@@ -22,11 +28,18 @@ interface FileContent {
   size: number
 }
 
+interface DevServer {
+  port: number
+  url: string
+}
+
 interface RecentFilesSidebarProps {
   sandboxId: string | null | undefined
   repoPath: string
   /** Cache key to preserve state across branch switches */
   cacheKey: string
+  /** Preview URL pattern from the branch (e.g., "https://{port}-xxx.daytonaproxy.net") */
+  previewUrlPattern?: string
 }
 
 // Cache for files per sandbox/branch
@@ -36,6 +49,10 @@ const CACHE_TTL = 30000 // 30 seconds
 // Cache for file content
 const contentCache = new Map<string, { content: FileContent; timestamp: number }>()
 const CONTENT_CACHE_TTL = 60000 // 1 minute
+
+// Cache for servers per sandbox
+const serversCache = new Map<string, { ports: number[]; previewUrlPattern: string | null; timestamp: number }>()
+const SERVERS_CACHE_TTL = 5000 // 5 seconds (check more frequently)
 
 /**
  * Extract display info from file path
@@ -226,14 +243,171 @@ function FilePreviewPopover({
   )
 }
 
-export function RecentFilesSidebar({ sandboxId, repoPath, cacheKey }: RecentFilesSidebarProps) {
+function ServerIcon({ server, onOpenUrl }: {
+  server: DevServer
+  onOpenUrl: (url: string) => void
+}) {
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            onClick={() => onOpenUrl(server.url)}
+            className={cn(
+              "relative flex h-9 w-9 items-center justify-center rounded-md transition-all",
+              "bg-green-500/20 hover:bg-green-500/30 border border-green-500/30"
+            )}
+          >
+            <div className="flex flex-col items-center justify-center leading-none gap-0.5">
+              <Globe className="h-3.5 w-3.5 text-green-500" />
+              <span className="text-[8px] font-semibold text-green-600 dark:text-green-400 font-mono">
+                {server.port}
+              </span>
+            </div>
+            {/* Pulsing indicator for active server */}
+            <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="left" className="max-w-[300px]">
+          <div className="space-y-1">
+            <p className="font-semibold text-xs">Dev Server on port {server.port}</p>
+            <p className="text-[10px] text-muted-foreground font-mono break-all">{server.url}</p>
+            <p className="text-[10px] text-muted-foreground">Click to open in new tab</p>
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
+}
+
+function TerminalButton({ sandboxId, onSshCommand }: {
+  sandboxId: string
+  onSshCommand: (command: string) => void
+}) {
+  const [loading, setLoading] = useState(false)
+  const [sshCommand, setSshCommand] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+  const [open, setOpen] = useState(false)
+
+  const fetchSshCommand = useCallback(async () => {
+    if (sshCommand) return // Already fetched
+
+    setLoading(true)
+    try {
+      const res = await fetch("/api/sandbox/ssh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sandboxId }),
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        setSshCommand(data.sshCommand)
+        onSshCommand(data.sshCommand)
+      }
+    } catch (err) {
+      console.error("Failed to get SSH command:", err)
+    } finally {
+      setLoading(false)
+    }
+  }, [sandboxId, sshCommand, onSshCommand])
+
+  const handleCopy = useCallback(async () => {
+    if (sshCommand) {
+      await navigator.clipboard.writeText(sshCommand)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }, [sshCommand])
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          onClick={() => {
+            setOpen(true)
+            fetchSshCommand()
+          }}
+          className={cn(
+            "relative flex h-9 w-9 items-center justify-center rounded-md transition-all",
+            "bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/30"
+          )}
+        >
+          <Terminal className="h-4 w-4 text-purple-500" />
+          {loading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-background/80 rounded-md">
+              <Loader2 className="h-3 w-3 animate-spin" />
+            </div>
+          )}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent side="left" align="start" sideOffset={8} className="w-[400px] p-0">
+        <div className="border-b border-border px-3 py-2 bg-muted/30">
+          <div className="flex items-center gap-2">
+            <Terminal className="h-4 w-4 text-purple-500" />
+            <span className="font-semibold text-sm">SSH into Sandbox</span>
+          </div>
+        </div>
+        <div className="p-3 space-y-3">
+          {loading ? (
+            <div className="flex items-center justify-center h-16">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : sshCommand ? (
+            <>
+              <p className="text-xs text-muted-foreground">
+                Run this command in your local terminal to SSH into the sandbox:
+              </p>
+              <div className="relative">
+                <pre className="p-3 bg-muted rounded-md text-xs font-mono overflow-x-auto whitespace-pre-wrap break-all pr-10">
+                  {sshCommand}
+                </pre>
+                <button
+                  onClick={handleCopy}
+                  className="absolute top-2 right-2 p-1.5 rounded-md bg-background/80 hover:bg-background transition-colors"
+                  title="Copy to clipboard"
+                >
+                  {copied ? (
+                    <Check className="h-3.5 w-3.5 text-green-500" />
+                  ) : (
+                    <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+                  )}
+                </button>
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                This SSH session will remain active for 60 minutes.
+              </p>
+            </>
+          ) : (
+            <p className="text-sm text-destructive">Failed to generate SSH command</p>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+function SectionDivider({ label }: { label: string }) {
+  return (
+    <div className="flex items-center justify-center py-1">
+      <span className="text-[8px] uppercase tracking-wider text-muted-foreground font-medium">
+        {label}
+      </span>
+    </div>
+  )
+}
+
+export function RecentFilesSidebar({ sandboxId, repoPath, cacheKey, previewUrlPattern: propPreviewUrlPattern }: RecentFilesSidebarProps) {
   const [files, setFiles] = useState<ModifiedFile[]>([])
   const [pinnedFileIndex, setPinnedFileIndex] = useState<number | null>(null)
   const [hoveredFileIndex, setHoveredFileIndex] = useState<number | null>(null)
   const [loadingContent, setLoadingContent] = useState<string | null>(null)
   const [fileContents, setFileContents] = useState<Map<string, FileContent>>(new Map())
   const [contentError, setContentError] = useState<string | null>(null)
+  const [servers, setServers] = useState<DevServer[]>([])
+  const [previewUrlPattern, setPreviewUrlPattern] = useState<string | null>(propPreviewUrlPattern || null)
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const serverPollIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Fetch modified files
@@ -268,6 +442,62 @@ export function RecentFilesSidebar({ sandboxId, repoPath, cacheKey }: RecentFile
       console.error("Failed to fetch modified files:", err)
     }
   }, [sandboxId, repoPath, cacheKey])
+
+  // Fetch running servers
+  const fetchServers = useCallback(async () => {
+    if (!sandboxId || !repoPath) return
+
+    // Check cache first
+    const cacheKeySrv = `servers-${sandboxId}`
+    const cached = serversCache.get(cacheKeySrv)
+    if (cached && Date.now() - cached.timestamp < SERVERS_CACHE_TTL) {
+      const pattern = cached.previewUrlPattern || propPreviewUrlPattern
+      if (pattern) {
+        setServers(cached.ports.map(port => ({
+          port,
+          url: pattern.replace("{port}", String(port))
+        })))
+        setPreviewUrlPattern(pattern)
+      }
+      return
+    }
+
+    try {
+      const res = await fetch("/api/sandbox/files", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sandboxId,
+          repoPath,
+          action: "list-servers",
+        }),
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        const ports: number[] = data.ports || []
+        const pattern = data.previewUrlPattern || propPreviewUrlPattern
+
+        serversCache.set(cacheKeySrv, {
+          ports,
+          previewUrlPattern: pattern,
+          timestamp: Date.now()
+        })
+
+        if (pattern) {
+          setServers(ports.map(port => ({
+            port,
+            url: pattern.replace("{port}", String(port))
+          })))
+          setPreviewUrlPattern(pattern)
+        } else {
+          setServers([])
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch servers:", err)
+    }
+  }, [sandboxId, repoPath, propPreviewUrlPattern])
 
   // Fetch file content
   const fetchFileContent = useCallback(async (filePath: string) => {
@@ -345,6 +575,26 @@ export function RecentFilesSidebar({ sandboxId, repoPath, cacheKey }: RecentFile
     }
   }, [sandboxId, repoPath, fetchModifiedFiles])
 
+  // Poll for running servers
+  useEffect(() => {
+    if (!sandboxId || !repoPath) {
+      setServers([])
+      return
+    }
+
+    // Initial fetch
+    fetchServers()
+
+    // Poll every 5 seconds
+    serverPollIntervalRef.current = setInterval(fetchServers, 5000)
+
+    return () => {
+      if (serverPollIntervalRef.current) {
+        clearInterval(serverPollIntervalRef.current)
+      }
+    }
+  }, [sandboxId, repoPath, fetchServers])
+
   // Handle file icon click - pins the popover open
   const handleFileClick = useCallback((index: number) => {
     if (pinnedFileIndex === index) {
@@ -406,6 +656,16 @@ export function RecentFilesSidebar({ sandboxId, repoPath, cacheKey }: RecentFile
     }
   }, [pinnedFileIndex, hoveredFileIndex])
 
+  // Open server URL
+  const handleOpenUrl = useCallback((url: string) => {
+    window.open(url, "_blank", "noopener,noreferrer")
+  }, [])
+
+  // Handle SSH command (could show toast notification, etc.)
+  const handleSshCommand = useCallback((command: string) => {
+    console.log("SSH command generated:", command)
+  }, [])
+
   // Cleanup hover timeout on unmount
   useEffect(() => {
     return () => {
@@ -415,46 +675,80 @@ export function RecentFilesSidebar({ sandboxId, repoPath, cacheKey }: RecentFile
     }
   }, [])
 
-  // Don't render if no files
-  if (files.length === 0) {
+  // Check if we have any content to show
+  const hasContent = files.length > 0 || servers.length > 0 || sandboxId
+
+  // Don't render if no content and no sandbox
+  if (!hasContent) {
     return null
   }
 
   return (
-    <aside className="flex h-full w-[52px] shrink-0 flex-col items-center gap-1.5 border-l border-border bg-sidebar py-3 overflow-y-auto">
-        {files.map((file, index) => {
-          const isPinned = pinnedFileIndex === index
-          const isHovered = hoveredFileIndex === index
-          const isOpen = isPinned || isHovered
-          const content = fileContents.get(file.path) || null
-          const isLoadingThis = loadingContent === file.path
+    <aside className="flex h-full w-[52px] shrink-0 flex-col items-center gap-1 border-l border-border bg-sidebar py-2 overflow-y-auto">
+      {/* Terminal/SSH Section */}
+      {sandboxId && (
+        <>
+          <SectionDivider label="SSH" />
+          <TerminalButton
+            sandboxId={sandboxId}
+            onSshCommand={handleSshCommand}
+          />
+        </>
+      )}
 
-          return (
-            <FilePreviewPopover
-              key={file.path}
-              file={file}
-              content={content}
-              isLoading={isLoadingThis}
-              error={isOpen && !isLoadingThis && !content ? contentError : null}
-              open={isOpen}
-              onOpenChange={(open) => handleOpenChange(index, open)}
-              onMouseEnter={handlePopoverMouseEnter}
-              onMouseLeave={handleMouseLeave}
-            >
-              <div
-                onMouseEnter={() => handleMouseEnter(index, file)}
+      {/* Running Servers Section */}
+      {servers.length > 0 && (
+        <>
+          <SectionDivider label="Servers" />
+          {servers.map((server) => (
+            <ServerIcon
+              key={server.port}
+              server={server}
+              onOpenUrl={handleOpenUrl}
+            />
+          ))}
+        </>
+      )}
+
+      {/* Modified Files Section */}
+      {files.length > 0 && (
+        <>
+          <SectionDivider label="Files" />
+          {files.map((file, index) => {
+            const isPinned = pinnedFileIndex === index
+            const isHovered = hoveredFileIndex === index
+            const isOpen = isPinned || isHovered
+            const content = fileContents.get(file.path) || null
+            const isLoadingThis = loadingContent === file.path
+
+            return (
+              <FilePreviewPopover
+                key={file.path}
+                file={file}
+                content={content}
+                isLoading={isLoadingThis}
+                error={isOpen && !isLoadingThis && !content ? contentError : null}
+                open={isOpen}
+                onOpenChange={(open) => handleOpenChange(index, open)}
+                onMouseEnter={handlePopoverMouseEnter}
                 onMouseLeave={handleMouseLeave}
               >
-                <FileIcon
-                  file={file}
-                  isLoading={isLoadingThis}
-                  onClick={() => handleFileClick(index)}
-                  isPinned={isPinned}
-                />
-              </div>
-            </FilePreviewPopover>
-          )
-        })}
+                <div
+                  onMouseEnter={() => handleMouseEnter(index, file)}
+                  onMouseLeave={handleMouseLeave}
+                >
+                  <FileIcon
+                    file={file}
+                    isLoading={isLoadingThis}
+                    onClick={() => handleFileClick(index)}
+                    isPinned={isPinned}
+                  />
+                </div>
+              </FilePreviewPopover>
+            )
+          })}
+        </>
+      )}
     </aside>
   )
 }
