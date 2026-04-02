@@ -101,13 +101,8 @@ export {
   createSession,
   getSession,
   getAgentNames,
-  // Legacy aliases for backwards compatibility
-  createBackgroundSession,
-  getBackgroundSession,
   type SessionOptions,
   type CreateSessionOptions,
-  // Backwards-compatible alias
-  type CreateSessionOptions as BackgroundSessionOptions,
 } from "./session.js"
 
 // ─────────────────────────────────────────────────────────────────────────────

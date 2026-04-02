@@ -136,22 +136,6 @@ export async function getSession(
  */
 export { getAgentNames }
 
-/**
- * Legacy aliases for backwards compatibility
- */
-export const createBackgroundSession = createSession
-
-/**
- * Legacy getBackgroundSession - takes options object with backgroundSessionId inside.
- * New code should use getSession(backgroundSessionId, options) instead.
- */
-export async function getBackgroundSession(
-  options: CreateSessionOptions & { backgroundSessionId: string }
-): Promise<BackgroundSession> {
-  const { backgroundSessionId, ...rest } = options
-  return getSession(backgroundSessionId, rest)
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Internal implementation
 // ─────────────────────────────────────────────────────────────────────────────
