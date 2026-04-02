@@ -1,0 +1,11 @@
+{"type":"step_start","sessionID":"ses_opencode123","part":{"id":"part_001","sessionID":"ses_opencode123","messageID":"msg_001","type":"step-start"}}
+{"type":"text","sessionID":"ses_opencode123","part":{"id":"part_002","sessionID":"ses_opencode123","messageID":"msg_001","type":"text","text":"I'll help you with that task. Let me start by examining the project."}}
+{"type":"text","sessionID":"ses_opencode123","part":{"id":"part_003","sessionID":"ses_opencode123","messageID":"msg_001","type":"text","text":" First, I'll check what files are available."}}
+{"type":"tool_call","sessionID":"ses_opencode123","part":{"id":"part_004","type":"tool-call","tool":"bash","args":{"command":"ls -la"}}}
+{"type":"tool_result","sessionID":"ses_opencode123","part":{"id":"part_005","type":"tool-result"}}
+{"type":"tool_use","sessionID":"ses_opencode123","part":{"id":"part_006","tool":"read_file","state":{"status":"completed","input":{"path":"/home/user/project/README.md"}}}}
+{"type":"tool_call","sessionID":"ses_opencode123","part":{"id":"part_007","type":"tool-call","tool":"write_file","args":{"path":"/home/user/project/output.txt","content":"Hello, World!"}}}
+{"type":"tool_result","sessionID":"ses_opencode123","part":{"id":"part_008","type":"tool-result"}}
+{"type":"text","sessionID":"ses_opencode123","part":{"id":"part_009","sessionID":"ses_opencode123","messageID":"msg_001","type":"text","text":"I've completed the task successfully."}}
+{"type":"step_finish","sessionID":"ses_opencode123","part":{"id":"part_010","type":"step-finish","reason":"tool-calls"}}
+{"type":"step_finish","sessionID":"ses_opencode123","part":{"id":"part_011","type":"step-finish","reason":"stop"}}

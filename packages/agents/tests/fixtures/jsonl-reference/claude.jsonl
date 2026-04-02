@@ -1,0 +1,14 @@
+{"type":"system","subtype":"init","session_id":"claude-session-abc123"}
+{"type":"assistant","message":{"id":"msg_01","content":[{"type":"text","text":"I'll help you with that. Let me first check the current directory."}]},"session_id":"claude-session-abc123"}
+{"type":"assistant","message":{"id":"msg_02","content":[{"type":"tool_use","name":"Read","input":{"file_path":"/home/user/project/README.md"}}]},"session_id":"claude-session-abc123"}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"tool_use_01","content":"# Project Title\n\nThis is a sample project."}]}}
+{"type":"tool_use","name":"Bash","input":{"command":"ls -la","description":"List files in current directory"}}
+{"type":"tool_result","tool_use_id":"tool_use_02","result":"total 8\ndrwxr-xr-x  2 user user 4096 Jan 1 00:00 .\ndrwxr-xr-x 10 user user 4096 Jan 1 00:00 .."}
+{"type":"assistant","message":{"id":"msg_03","content":[{"type":"tool_use","name":"Write","input":{"file_path":"/home/user/project/hello.txt","content":"Hello, World!"}}]},"session_id":"claude-session-abc123"}
+{"type":"tool_result","tool_use_id":"tool_use_03","content":[{"type":"text","text":"File written successfully"}]}
+{"type":"tool_use","name":"Edit","input":{"file_path":"/home/user/project/config.json","old_string":"\"debug\": false","new_string":"\"debug\": true"}}
+{"type":"tool_use","name":"Glob","input":{"pattern":"**/*.ts"}}
+{"type":"tool_use","name":"Grep","input":{"pattern":"TODO","path":"/home/user/project/src"}}
+{"type":"tool_use","name":"WebSearch","input":{"query":"TypeScript best practices 2024"}}
+{"type":"assistant","message":{"id":"msg_04","content":[{"type":"text","text":"I've completed the task. The file has been created successfully."}]},"session_id":"claude-session-abc123"}
+{"type":"result","subtype":"success","result":"Task completed successfully","session_id":"claude-session-abc123"}

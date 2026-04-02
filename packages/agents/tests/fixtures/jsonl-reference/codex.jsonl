@@ -1,0 +1,14 @@
+{"type":"thread.started","thread_id":"thread_abc123xyz"}
+{"type":"item.message.delta","text":"Let me help you with that task. "}
+{"type":"item.message.delta","text":"I'll start by examining the current directory."}
+{"type":"item.started","item":{"id":"item_001","type":"command_execution","command":"ls -la","status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_001","type":"command_execution","command":"ls -la","aggregated_output":"total 8\ndrwxr-xr-x  2 user user 4096 Jan 1 00:00 .\ndrwxr-xr-x 10 user user 4096 Jan 1 00:00 ..","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_002","type":"file_change","status":"completed","changes":[{"path":"/home/user/project/hello.txt","kind":"add"}]}}
+{"type":"item.started","item":{"id":"item_003","type":"mcp_tool_call","tool":"read_file","arguments":{"path":"/home/user/project/README.md"}}}
+{"type":"item.completed","item":{"id":"item_003","type":"mcp_tool_call","tool":"read_file","result":{"content":[{"type":"text","text":"# Project\n\nThis is the README."}]}}}
+{"type":"item.completed","item":{"id":"item_004","type":"agent_message","text":"I've read the file and it contains project documentation."}}
+{"type":"item.tool.start","name":"shell"}
+{"type":"item.tool.input.delta","text":"echo 'Hello World'"}
+{"type":"item.tool.end"}
+{"type":"item.message.delta","text":"Task completed successfully."}
+{"type":"turn.completed"}
