@@ -63,6 +63,7 @@ export function ChatDialogs({ branch, repoOwner, repoName, gitActions }: ChatDia
           repoName={repoName}
           branchName={branch.name}
           baseBranch={branch.baseBranch}
+          startCommit={branch.startCommit}
         />
       )}
 

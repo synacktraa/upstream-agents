@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, Fragment } from "react"
+import { cn } from "@/lib/shared/utils"
 import { Loader2, FileText } from "lucide-react"
 import {
   Dialog,
@@ -111,16 +112,20 @@ interface DiffModalProps {
   repoName: string
   branchName: string
   baseBranch: string
+  startCommit?: string | null
   commitHash?: string | null
   commitMessage?: string | null
 }
 
-export function DiffModal({ open, onClose, repoOwner, repoName, branchName, baseBranch, commitHash, commitMessage }: DiffModalProps) {
+type DiffMode = "since-created" | "vs-base" | "vs-branch"
+
+export function DiffModal({ open, onClose, repoOwner, repoName, branchName, baseBranch, startCommit, commitHash, commitMessage }: DiffModalProps) {
   const [branches, setBranches] = useState<string[]>([])
   const [compareBranch, setCompareBranch] = useState(baseBranch)
   const [diff, setDiff] = useState("")
   const [loading, setLoading] = useState(false)
   const [branchesLoading, setBranchesLoading] = useState(false)
+  const [diffMode, setDiffMode] = useState<DiffMode>(startCommit ? "since-created" : "vs-base")
 
   const isCommitMode = !!commitHash
 
@@ -144,7 +149,12 @@ export function DiffModal({ open, onClose, repoOwner, repoName, branchName, base
   }, [repoOwner, repoName, branchName, baseBranch, compareBranch])
 
   const fetchDiff = useCallback(async () => {
-    if (!compareBranch) return
+    const base = diffMode === "since-created" && startCommit
+      ? startCommit
+      : diffMode === "vs-branch"
+        ? compareBranch
+        : baseBranch
+    if (!base) return
     setLoading(true)
     try {
       const res = await fetch("/api/github/compare", {
@@ -153,13 +163,12 @@ export function DiffModal({ open, onClose, repoOwner, repoName, branchName, base
         body: JSON.stringify({
           owner: repoOwner,
           repo: repoName,
-          base: compareBranch,
+          base,
           head: branchName,
         }),
       })
       const data = await res.json()
       if (!res.ok) {
-        // Handle expected errors gracefully (branch not found, etc.)
         setDiff(data.error || "No differences found.")
       } else {
         setDiff(data.diff || "No differences found.")
@@ -169,7 +178,7 @@ export function DiffModal({ open, onClose, repoOwner, repoName, branchName, base
     } finally {
       setLoading(false)
     }
-  }, [repoOwner, repoName, branchName, compareBranch])
+  }, [repoOwner, repoName, branchName, baseBranch, startCommit, compareBranch, diffMode])
 
   const fetchCommitDiff = useCallback(async () => {
     if (!commitHash) return
@@ -199,16 +208,17 @@ export function DiffModal({ open, onClose, repoOwner, repoName, branchName, base
   }, [repoOwner, repoName, commitHash])
 
   useEffect(() => {
-    if (open && !isCommitMode) {
+    if (open && !isCommitMode && diffMode === "vs-branch") {
       fetchBranches()
     }
-  }, [open, isCommitMode, fetchBranches])
+  }, [open, isCommitMode, diffMode, fetchBranches])
 
   useEffect(() => {
-    if (open && !isCommitMode && compareBranch) {
+    if (open && !isCommitMode) {
+      if (diffMode === "vs-branch" && !compareBranch) return
       fetchDiff()
     }
-  }, [open, isCommitMode, compareBranch, fetchDiff])
+  }, [open, isCommitMode, diffMode, compareBranch, fetchDiff])
 
   useEffect(() => {
     if (open && isCommitMode) {
@@ -231,19 +241,58 @@ export function DiffModal({ open, onClose, repoOwner, repoName, branchName, base
               </>
             ) : (
               <>
-                {branchesLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                ) : (
-                  <Select value={compareBranch} onValueChange={setCompareBranch}>
-                    <SelectTrigger className="w-36 sm:w-48 h-7 text-xs">
-                      <SelectValue placeholder="Compare to..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {branches.map((b) => (
-                        <SelectItem key={b} value={b} className="text-xs">{b}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="flex items-center gap-1">
+                  {startCommit && (
+                    <button
+                      onClick={() => setDiffMode("since-created")}
+                      className={cn(
+                        "rounded-md border px-2 py-0.5 text-xs cursor-pointer transition-colors",
+                        diffMode === "since-created"
+                          ? "border-primary bg-primary/10 text-foreground"
+                          : "border-border text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      Since created
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setDiffMode("vs-base")}
+                    className={cn(
+                      "rounded-md border px-2 py-0.5 text-xs cursor-pointer transition-colors",
+                      diffMode === "vs-base"
+                        ? "border-primary bg-primary/10 text-foreground"
+                        : "border-border text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    vs {baseBranch}
+                  </button>
+                  <button
+                    onClick={() => setDiffMode("vs-branch")}
+                    className={cn(
+                      "rounded-md border px-2 py-0.5 text-xs cursor-pointer transition-colors",
+                      diffMode === "vs-branch"
+                        ? "border-primary bg-primary/10 text-foreground"
+                        : "border-border text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    vs branch
+                  </button>
+                </div>
+                {diffMode === "vs-branch" && (
+                  branchesLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  ) : (
+                    <Select value={compareBranch} onValueChange={setCompareBranch}>
+                      <SelectTrigger className="w-36 sm:w-48 h-7 text-xs">
+                        <SelectValue placeholder="Compare to..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {branches.map((b) => (
+                          <SelectItem key={b} value={b} className="text-xs">{b}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )
                 )}
                 <span className="text-xs text-muted-foreground truncate">...{branchName}</span>
               </>

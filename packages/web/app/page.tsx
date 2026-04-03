@@ -615,6 +615,7 @@ export default function Home() {
           repoName={activeRepo.name}
           branchName={activeBranch.name}
           baseBranch={activeBranch.baseBranch || activeRepo.defaultBranch}
+          startCommit={activeBranch.startCommit}
         />
       )}
 

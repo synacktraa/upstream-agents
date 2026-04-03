@@ -85,7 +85,7 @@ export function useGitActions({
         body: JSON.stringify({
           owner,
           repo,
-          base: branch.baseBranch,
+          base: branch.startCommit || branch.baseBranch,
           head: branch.name,
         }),
       })

@@ -41,7 +41,7 @@ export function useBranchDiffStats({
         body: JSON.stringify({
           owner: repoOwner,
           repo: repoName,
-          base: branch.baseBranch,
+          base: branch.startCommit || branch.baseBranch,
           head: branch.name,
         }),
       })
