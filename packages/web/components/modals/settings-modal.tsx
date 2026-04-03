@@ -767,8 +767,6 @@ export function SettingsModal({ open, onClose, credentials, onCredentialsUpdate,
                   </button>
                 ))}
               </div>
-
-              </div>
             </>
           )}
         </div>
