@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma"
+import { checkDuplicateBranchName } from "@/lib/db/branch-helpers"
 import { ensureSandboxStarted } from "@/lib/sandbox/sandbox-resume"
 import type { Sandbox } from "@daytonaio/sdk"
 import {
@@ -790,19 +791,9 @@ export async function POST(req: Request) {
         })
         if (branchRecord) {
           // Check if a branch with the new name already exists in this repo
-          const existingBranch = await prisma.branch.findUnique({
-            where: {
-              repoId_name: {
-                repoId: branchRecord.repoId,
-                name: newName,
-              },
-            },
-          })
-          if (existingBranch) {
-            return Response.json(
-              { error: `A branch named "${newName}" already exists in this repository` },
-              { status: 409 }
-            )
+          const duplicateCheck = await checkDuplicateBranchName(branchRecord.repoId, newName)
+          if (duplicateCheck) {
+            return Response.json(duplicateCheck, { status: 409 })
           }
 
           await prisma.branch.update({
