@@ -14,10 +14,16 @@ const PROVIDER_PACKAGES: Record<ProviderName, string> = {
 }
 
 /**
- * Shell script installers for providers that don't use npm
+ * Shell script installers for providers that don't use npm.
+ * These commands download and install the CLI binary directly.
  */
 const PROVIDER_SHELL_INSTALLERS: Partial<Record<ProviderName, string>> = {
-  goose: "curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | bash",
+  // Goose: Download the binary directly without the interactive installer script
+  // 1. Create temp and bin directories
+  // 2. Download the tarball for x86_64 Linux
+  // 3. Extract to temp dir and move binary to ~/.local/bin
+  // Use --no-same-owner and --no-same-permissions to avoid permission issues
+  goose: `mkdir -p ~/.local/bin ~/.goose_tmp && curl -fsSL "https://github.com/block/goose/releases/download/stable/goose-x86_64-unknown-linux-gnu.tar.bz2" | tar -xjf - --no-same-owner --no-same-permissions -C ~/.goose_tmp && mv ~/.goose_tmp/goose ~/.local/bin/goose && chmod +x ~/.local/bin/goose && rm -rf ~/.goose_tmp`,
 }
 
 /**

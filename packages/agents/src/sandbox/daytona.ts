@@ -129,7 +129,11 @@ export function adaptDaytonaSandbox(
     },
 
     async ensureProvider(name: ProviderName): Promise<void> {
-      const checkResult = await sandbox.process.executeCommand(`which ${name}`)
+      // For goose, also check in ~/.local/bin which is the default install location
+      const checkCommand = name === "goose"
+        ? `which ${name} || test -x "$HOME/.local/bin/${name}"`
+        : `which ${name}`
+      const checkResult = await sandbox.process.executeCommand(checkCommand)
       if (checkResult.exitCode === 0) return
 
       console.log(`Installing ${name} CLI in sandbox...`)
@@ -142,12 +146,21 @@ export function adaptDaytonaSandbox(
         installCommand, undefined, undefined, 120
       )
       if (installResult.exitCode !== 0) {
-        throw new Error(`Failed to install ${name} CLI in sandbox`)
+        const output = installResult.result ?? ""
+        throw new Error(`Failed to install ${name} CLI in sandbox: ${output.slice(0, 500)}`)
       }
       console.log(`Installed ${name} CLI`)
 
       if (name === "gemini") {
         await sandbox.process.executeCommand("mkdir -p ~/.gemini", undefined, undefined, 30)
+      }
+
+      // For goose, add ~/.local/bin to PATH in .bashrc if not already there
+      if (name === "goose") {
+        await sandbox.process.executeCommand(
+          `grep -q 'HOME/.local/bin' ~/.bashrc || echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc`,
+          undefined, undefined, 10
+        )
       }
     },
   }
