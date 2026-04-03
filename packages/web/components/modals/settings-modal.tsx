@@ -251,14 +251,8 @@ export function SettingsModal({ open, onClose, credentials, onCredentialsUpdate,
         }
       }
 
-      setSaveStatus({
-        message: "Settings saved",
-        isError: false,
-      })
       onCredentialsUpdate()
-      setTimeout(() => {
-        onClose()
-      }, 1000)
+      onClose()
     } catch {
       setSaveStatus({
         message: "Failed to save settings",
