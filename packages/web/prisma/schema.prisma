@@ -116,8 +116,9 @@ model Repo {
   name          String
   owner         String
   avatar        String?
-  defaultBranch String
-  createdAt     DateTime        @default(now())
+  defaultBranch      String
+  preferredBaseBranch String?
+  createdAt          DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
   envVars       Json?
   branches      Branch[]

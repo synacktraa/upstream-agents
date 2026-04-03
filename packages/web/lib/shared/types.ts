@@ -340,6 +340,7 @@ export interface Repo {
   owner: string
   avatar: string
   defaultBranch: string
+  preferredBaseBranch: string | null
   branches: Branch[]
 }
 

@@ -95,6 +95,7 @@ export function AddRepoModal({ open, onClose, githubUser, existingRepos, onAddRe
       owner: info.owner,
       avatar: info.avatar,
       defaultBranch: info.defaultBranch,
+      preferredBaseBranch: null,
       branches: [],
     }
     try {

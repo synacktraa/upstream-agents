@@ -109,6 +109,7 @@ export function MobileSidebarDrawer({
     owner: "",
     avatar: "",
     defaultBranch: "main",
+    preferredBaseBranch: null,
     branches: [],
   }
   const deleteDialogRepo = activeRepo ?? repos[0] ?? fallbackDeleteRepo

@@ -66,6 +66,7 @@ export interface DbRepo {
   owner: string
   avatar: string | null
   defaultBranch: string
+  preferredBaseBranch: string | null
   branches: DbBranch[]
 }
 
@@ -181,6 +182,7 @@ export function transformRepo(dbRepo: DbRepo) {
     owner: dbRepo.owner,
     avatar: dbRepo.avatar || "",
     defaultBranch: dbRepo.defaultBranch,
+    preferredBaseBranch: dbRepo.preferredBaseBranch || null,
     branches: (dbRepo.branches || []).map(transformBranch),
   }
 }

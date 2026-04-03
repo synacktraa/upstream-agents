@@ -35,6 +35,7 @@ export interface SyncRepo {
   owner: string
   avatar: string | null
   defaultBranch: string
+  preferredBaseBranch?: string | null
   branches: SyncBranch[]
 }
 
@@ -169,6 +170,7 @@ export function useSyncData({ setRepos, activeBranchIdRef, streamingMessageIdRef
             owner: syncRepo.owner,
             avatar: syncRepo.avatar || "",
             defaultBranch: syncRepo.defaultBranch,
+            preferredBaseBranch: syncRepo.preferredBaseBranch || null,
             branches: syncRepo.branches.map(syncBranchToBranch),
           }
         })
