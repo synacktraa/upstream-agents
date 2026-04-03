@@ -123,7 +123,6 @@ The repository is cloned at ${repoPath}.
 
 ## Logs Directory
 - Write any log files to ${PATHS.LOGS_DIR}.
-- Create the directory if it doesn't exist: mkdir -p ${PATHS.LOGS_DIR}
 - Examples: ${PATHS.LOGS_DIR}/build.log, ${PATHS.LOGS_DIR}/test-results.log
 
 ## Running Web Servers
