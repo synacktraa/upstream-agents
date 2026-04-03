@@ -52,8 +52,8 @@ export function SettingsModal({ open, onClose, credentials, onCredentialsUpdate,
   const [geminiApiKey, setGeminiApiKey] = useState("")
 
   // Git preferences
-  const [squashOnMerge, setSquashOnMerge] = useState(true)
-  const [initialSquashOnMerge, setInitialSquashOnMerge] = useState(true)
+  const [squashOnMerge, setSquashOnMerge] = useState(false)
+  const [initialSquashOnMerge, setInitialSquashOnMerge] = useState(false)
   const [prDescriptionMode, setPrDescriptionMode] = useState<"ai" | "commits">("ai")
   const [initialPrDescriptionMode, setInitialPrDescriptionMode] = useState<"ai" | "commits">("ai")
 
@@ -99,7 +99,7 @@ export function SettingsModal({ open, onClose, credentials, onCredentialsUpdate,
       const interval = credentials?.sandboxAutoStopInterval ?? 5
       setSandboxAutoStopInterval(interval)
       setInitialAutoStopInterval(interval)
-      const sq = credentials?.squashOnMerge ?? true
+      const sq = credentials?.squashOnMerge ?? false
       const pr = (credentials?.prDescriptionMode as "ai" | "commits") ?? "ai"
       setSquashOnMerge(sq)
       setInitialSquashOnMerge(sq)
