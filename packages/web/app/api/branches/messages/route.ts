@@ -69,8 +69,33 @@ export async function GET(req: Request) {
 
   const nextCursor = messages.length === limit ? messages[messages.length - 1]?.id : null
 
+  // If branch is running, check for active execution snapshot and merge into last message
+  // This allows new tabs/devices to see streaming content that hasn't been persisted yet
+  let finalMessages = messages
+  if (!summary && branch.status === "running" && messages.length > 0) {
+    const lastMessage = messages[messages.length - 1]
+    if (lastMessage.role === "assistant") {
+      const execution = await prisma.agentExecution.findFirst({
+        where: { messageId: lastMessage.id, status: "running" },
+        select: { latestSnapshot: true },
+      })
+      const snapshot = execution?.latestSnapshot as { content?: string; toolCalls?: unknown[]; contentBlocks?: unknown[] } | null
+      if (snapshot && (snapshot.content || snapshot.toolCalls?.length || snapshot.contentBlocks?.length)) {
+        finalMessages = [
+          ...messages.slice(0, -1),
+          {
+            ...lastMessage,
+            content: snapshot.content ?? lastMessage.content,
+            toolCalls: snapshot.toolCalls ?? lastMessage.toolCalls,
+            contentBlocks: snapshot.contentBlocks ?? lastMessage.contentBlocks,
+          },
+        ]
+      }
+    }
+  }
+
   return Response.json({
-    messages,
+    messages: finalMessages,
     pagination: {
       totalCount,
       hasMore: !!nextCursor,
