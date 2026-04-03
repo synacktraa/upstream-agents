@@ -70,6 +70,9 @@ export default function Home() {
     clearPendingStartCommit,
     desktopRebaseConflict,
     setDesktopRebaseConflict,
+    pendingRepoFromUrl,
+    setPendingRepoFromUrl,
+    clearPendingRepoFromUrl,
   } = useUIStore()
 
   // Core data state
@@ -281,9 +284,9 @@ export default function Home() {
     }
   }, [loaded, activeRepo, repoFromUrl, updateUrlToRepo])
 
-  // Redirect to home if URL repo is not found in user's repos
+  // Handle URL repo that is not found in user's repos - open AddRepoModal with pre-filled URL
   useEffect(() => {
-    if (!loaded || repos.length === 0 || !repoFromUrl) return
+    if (!loaded || !repoFromUrl) return
 
     const matchingRepo = repos.find(
       (r) =>
@@ -292,10 +295,14 @@ export default function Home() {
     )
 
     if (!matchingRepo) {
-      // URL repo not found, redirect to home
-      router.replace("/")
+      // URL repo not found in user's repos - set pending and open modal to add/fork
+      setPendingRepoFromUrl({ owner: repoFromUrl.owner, name: repoFromUrl.name })
+      openAddRepo()
+    } else {
+      // Repo found, clear any pending
+      clearPendingRepoFromUrl()
     }
-  }, [loaded, repos, repoFromUrl, router])
+  }, [loaded, repos, repoFromUrl, setPendingRepoFromUrl, clearPendingRepoFromUrl, openAddRepo])
 
   // Load messages when active branch changes
   useEffect(() => {
@@ -588,11 +595,25 @@ export default function Home() {
       />
       <AddRepoModal
         open={addRepoOpen}
-        onClose={closeAddRepo}
+        onClose={() => {
+          closeAddRepo()
+          // If user cancels adding a repo from URL, clear pending and go home
+          if (pendingRepoFromUrl) {
+            clearPendingRepoFromUrl()
+            router.replace("/")
+          }
+        }}
         githubUser={session?.user?.githubLogin || null}
         existingRepos={repos}
-        onAddRepo={handleAddRepo}
-        onSelectExistingRepo={selectRepo}
+        onAddRepo={(repo) => {
+          clearPendingRepoFromUrl()
+          return handleAddRepo(repo)
+        }}
+        onSelectExistingRepo={(repoId) => {
+          clearPendingRepoFromUrl()
+          selectRepo(repoId)
+        }}
+        initialRepoUrl={pendingRepoFromUrl ? `${pendingRepoFromUrl.owner}/${pendingRepoFromUrl.name}` : undefined}
       />
       {activeRepo && (
         <RepoSettingsModal

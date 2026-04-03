@@ -2,7 +2,7 @@
 
 import { Github, X, Loader2, Search, Lock, GitFork, Plus } from "lucide-react"
 import { Input } from "@/components/ui/input"
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { cn } from "@/lib/shared/utils"
 import type { Repo } from "@/lib/shared/types"
 import { generateId } from "@/lib/shared/store"
@@ -25,9 +25,20 @@ interface AddRepoModalProps {
   existingRepos: Repo[]
   onAddRepo: (repo: Repo) => void | Promise<void>
   onSelectExistingRepo: (repoId: string) => void
+  /** Pre-fill URL when opening from a direct /:owner/:repo URL */
+  initialRepoUrl?: string
 }
 
-export function AddRepoModal({ open, onClose, githubUser, existingRepos, onAddRepo, onSelectExistingRepo }: AddRepoModalProps) {
+function parseGitHubUrl(input: string): { owner: string; name: string } | null {
+  const trimmed = input.trim().replace(/\.git$/, "").replace(/\/$/, "")
+  const urlMatch = trimmed.match(/github\.com\/([^/]+)\/([^/]+)/)
+  if (urlMatch) return { owner: urlMatch[1], name: urlMatch[2] }
+  const shortMatch = trimmed.match(/^([^/]+)\/([^/]+)$/)
+  if (shortMatch) return { owner: shortMatch[1], name: shortMatch[2] }
+  return null
+}
+
+export function AddRepoModal({ open, onClose, githubUser, existingRepos, onAddRepo, onSelectExistingRepo, initialRepoUrl }: AddRepoModalProps) {
   const [mode, setMode] = useState<"select" | "url" | "create">("select")
   const [url, setUrl] = useState("")
   const [search, setSearch] = useState("")
@@ -39,47 +50,10 @@ export function AddRepoModal({ open, onClose, githubUser, existingRepos, onAddRe
   const [newRepoName, setNewRepoName] = useState("")
   const [newRepoDescription, setNewRepoDescription] = useState("")
   const [newRepoPrivate, setNewRepoPrivate] = useState(false)
+  const autoTriggeredRef = useRef(false)
 
-  // Fetch user repos when modal opens in select mode
-  useEffect(() => {
-    if (open && mode === "select") {
-      setLoadingRepos(true)
-      fetch("/api/github/repos")
-        .then((r) => r.json())
-        .then((data) => {
-          if (data.repos) setUserRepos(data.repos)
-        })
-        .catch(() => {})
-        .finally(() => setLoadingRepos(false))
-    }
-  }, [open, mode])
-
-  // Reset state when modal closes
-  useEffect(() => {
-    if (!open) {
-      setUrl("")
-      setSearch("")
-      setError(null)
-      setForkPrompt(null)
-      setLoading(false)
-      setNewRepoName("")
-      setNewRepoDescription("")
-      setNewRepoPrivate(false)
-    }
-  }, [open])
-
-  if (!open) return null
-
-  function parseGitHubUrl(input: string): { owner: string; name: string } | null {
-    const trimmed = input.trim().replace(/\.git$/, "").replace(/\/$/, "")
-    const urlMatch = trimmed.match(/github\.com\/([^/]+)\/([^/]+)/)
-    if (urlMatch) return { owner: urlMatch[1], name: urlMatch[2] }
-    const shortMatch = trimmed.match(/^([^/]+)\/([^/]+)$/)
-    if (shortMatch) return { owner: shortMatch[1], name: shortMatch[2] }
-    return null
-  }
-
-  async function addRepoByInfo(info: { name: string; owner: string; avatar: string; defaultBranch: string }) {
+  // Helper to add repo by info
+  const addRepoByInfo = useCallback(async (info: { name: string; owner: string; avatar: string; defaultBranch: string }) => {
     // Check if repo already exists — if so, just select it
     const existing = existingRepos.find(
       (r) => r.owner.toLowerCase() === info.owner.toLowerCase() && r.name.toLowerCase() === info.name.toLowerCase()
@@ -104,10 +78,11 @@ export function AddRepoModal({ open, onClose, githubUser, existingRepos, onAddRe
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add repository")
     }
-  }
+  }, [existingRepos, onAddRepo, onClose, onSelectExistingRepo])
 
-  async function handleAddByUrl() {
-    const parsed = parseGitHubUrl(url)
+  // Helper to lookup repo by URL
+  const lookupRepoByUrl = useCallback(async (repoUrl: string) => {
+    const parsed = parseGitHubUrl(repoUrl)
     if (!parsed) {
       setError("Invalid format. Use https://github.com/owner/repo or owner/repo")
       return
@@ -140,6 +115,53 @@ export function AddRepoModal({ open, onClose, githubUser, existingRepos, onAddRe
     } finally {
       setLoading(false)
     }
+  }, [addRepoByInfo])
+
+  // Fetch user repos when modal opens in select mode
+  useEffect(() => {
+    if (open && mode === "select") {
+      setLoadingRepos(true)
+      fetch("/api/github/repos")
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.repos) setUserRepos(data.repos)
+        })
+        .catch(() => {})
+        .finally(() => setLoadingRepos(false))
+    }
+  }, [open, mode])
+
+  // Reset state when modal closes
+  useEffect(() => {
+    if (!open) {
+      setUrl("")
+      setSearch("")
+      setError(null)
+      setForkPrompt(null)
+      setLoading(false)
+      setNewRepoName("")
+      setNewRepoDescription("")
+      setNewRepoPrivate(false)
+      setMode("select")
+      autoTriggeredRef.current = false
+    }
+  }, [open])
+
+  // When opened with initialRepoUrl, set mode to URL and trigger lookup
+  useEffect(() => {
+    if (open && initialRepoUrl && !autoTriggeredRef.current) {
+      autoTriggeredRef.current = true
+      setMode("url")
+      setUrl(initialRepoUrl)
+      // Auto-trigger the URL lookup
+      lookupRepoByUrl(initialRepoUrl)
+    }
+  }, [open, initialRepoUrl, lookupRepoByUrl])
+
+  if (!open) return null
+
+  async function handleAddByUrl() {
+    await lookupRepoByUrl(url)
   }
 
   async function handleFork() {
