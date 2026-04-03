@@ -272,13 +272,13 @@ function FilePathLink({
   sandboxId: string | null | undefined
   repoPath: string | null | undefined
 }) {
-  // If sandbox is not available, render as tooltip only (no clickable link)
+  // If sandbox is not available, fall back to the original tooltip-only behavior
   if (!sandboxId || !repoPath) {
     if (fullSummary) {
       return (
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="text-xs text-muted-foreground break-words min-w-0 cursor-help">
+            <span className="text-xs text-muted-foreground break-words min-w-0">
               {displayText}
             </span>
           </TooltipTrigger>
@@ -343,7 +343,7 @@ function ToolCallTimeline({ toolCalls, sandboxId, repoPath }: { toolCalls: ToolC
               ) : tc.fullSummary ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="text-xs text-muted-foreground break-words min-w-0 cursor-help">
+                    <span className="text-xs text-muted-foreground break-words min-w-0">
                       {tc.summary}
                     </span>
                   </TooltipTrigger>
