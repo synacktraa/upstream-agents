@@ -127,6 +127,42 @@ function formatRelativeTime(timestamp: number): string {
   return `${Math.floor(minutes / 60)}h ago`
 }
 
+function HighlightedCode({ code }: { code: string }) {
+  const [lines, setLines] = useState<string[] | null>(null)
+
+  useEffect(() => {
+    setLines(null)
+    const id = requestAnimationFrame(() => {
+      setLines(highlight(code).split("\n"))
+    })
+    return () => cancelAnimationFrame(id)
+  }, [code])
+
+  if (!lines) {
+    return (
+      <div className="flex items-center justify-center h-32">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  return (
+    <table className="w-full text-xs font-mono border-collapse">
+      <tbody>
+        {lines.map((lineHtml, i) => (
+          <tr key={i} className="leading-5">
+            <td className="select-none text-right text-muted-foreground/50 pr-3 pl-3 align-top w-1 whitespace-nowrap">{i + 1}</td>
+            <td
+              className="pr-3 whitespace-pre-wrap break-all"
+              dangerouslySetInnerHTML={{ __html: lineHtml }}
+            />
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
 /** Check if file is older than 5 minutes */
 function isOldFile(modifiedAt: number): boolean {
   return Date.now() - modifiedAt > 5 * 60 * 1000
@@ -228,10 +264,7 @@ function FilePreviewPopover({
               {error}
             </div>
           ) : content ? (
-            <pre
-              className="p-3 text-xs font-mono whitespace-pre-wrap break-all overflow-x-auto"
-              dangerouslySetInnerHTML={{ __html: highlight(content.content) }}
-            />
+            <HighlightedCode code={content.content} />
           ) : null}
         </div>
 
