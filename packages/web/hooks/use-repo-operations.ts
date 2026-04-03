@@ -116,6 +116,9 @@ export function useRepoOperations({
     if (!activeRepo) return
     setRepos((prev) => addBranchToRepo(prev, activeRepo.id, branch))
     setActiveBranchId(branch.id)
+    // Update URL to reflect the new branch
+    const url = `/${encodeURIComponent(activeRepo.owner)}/${encodeURIComponent(activeRepo.name)}/${branch.name.split("/").map(encodeURIComponent).join("/")}`
+    window.history.replaceState(null, "", url)
   }, [activeRepo, setRepos, setActiveBranchId])
 
   // Remove a branch from the active repo

@@ -64,6 +64,9 @@ export function useBranchRenaming({
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
       onUpdateBranch(branch.id, { name: newName, hasCustomName: true })
+      // Update URL to reflect the new branch name
+      const url = `/${encodeURIComponent(owner)}/${encodeURIComponent(repoName)}/${newName.split("/").map(encodeURIComponent).join("/")}`
+      window.history.replaceState(null, "", url)
       setRenaming(false)
     } catch (err: unknown) {
       addSystemMessage(`::icon-error:: **Rename failed:** ${err instanceof Error ? err.message : "Unknown error"}`)
@@ -202,6 +205,9 @@ export function useBranchRenaming({
 
       if (renameRes.ok) {
         onUpdateBranch(targetBranchId, { name: suggestedName })
+        // Update URL to reflect the auto-suggested branch name
+        const url = `/${encodeURIComponent(owner)}/${encodeURIComponent(repoName)}/${suggestedName.split("/").map(encodeURIComponent).join("/")}`
+        window.history.replaceState(null, "", url)
       }
       // Silently fail if rename doesn't work - auto-suggestion is not critical
     } catch (err) {
