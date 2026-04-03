@@ -356,6 +356,20 @@ export async function POST(req: Request) {
             })
           }
 
+          // Check if branch with this name already exists in this repo
+          const existingBranch = await prisma.branch.findUnique({
+            where: {
+              repoId_name: {
+                repoId: dbRepo.id,
+                name: effectiveBranchName,
+              },
+            },
+          })
+
+          if (existingBranch) {
+            throw new Error(`A branch named "${effectiveBranchName}" already exists in this repository`)
+          }
+
           // Create branch record with appropriate default agent based on credentials
           branchRecord = await prisma.branch.create({
             data: {

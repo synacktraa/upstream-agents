@@ -143,6 +143,25 @@ export async function PATCH(req: Request) {
     return notFound("Branch not found")
   }
 
+  // If renaming the branch, check for duplicate names within the same repo
+  if (name && name !== branchWithSandbox.name) {
+    const existingBranch = await prisma.branch.findUnique({
+      where: {
+        repoId_name: {
+          repoId: branchWithSandbox.repoId,
+          name,
+        },
+      },
+    })
+
+    if (existingBranch) {
+      return Response.json(
+        { error: `A branch named "${name}" already exists in this repository` },
+        { status: 409 }
+      )
+    }
+  }
+
   // If clearSession is true and branch has a sandbox, clear its session ID
   if (clearSession && branchWithSandbox.sandbox) {
     // Clear session ID from database
