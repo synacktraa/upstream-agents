@@ -303,15 +303,12 @@ export default function Home() {
   // Update URL when repo/branch is auto-selected on root page
   useEffect(() => {
     if (!loaded || !activeRepo) return
-    // Only update if we're at root (no repo in URL)
-    if (!repoFromUrl) {
-      if (activeBranch) {
-        updateUrlToRepoBranch(activeRepo.owner, activeRepo.name, activeBranch.name)
-      } else {
-        updateUrlToRepo(activeRepo.owner, activeRepo.name)
-      }
+    if (activeBranch) {
+      updateUrlToRepoBranch(activeRepo.owner, activeRepo.name, activeBranch.name)
+    } else {
+      updateUrlToRepo(activeRepo.owner, activeRepo.name)
     }
-  }, [loaded, activeRepo, activeBranch, repoFromUrl, updateUrlToRepo, updateUrlToRepoBranch])
+  }, [loaded, activeRepo, activeBranch, updateUrlToRepo, updateUrlToRepoBranch])
 
   // Handle URL repo that is not found in user's repos - open AddRepoModal with pre-filled URL
   useEffect(() => {
