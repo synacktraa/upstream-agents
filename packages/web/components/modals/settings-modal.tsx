@@ -53,7 +53,9 @@ export function SettingsModal({ open, onClose, credentials, onCredentialsUpdate,
 
   // Git preferences
   const [squashOnMerge, setSquashOnMerge] = useState(true)
+  const [initialSquashOnMerge, setInitialSquashOnMerge] = useState(true)
   const [prDescriptionMode, setPrDescriptionMode] = useState<"ai" | "commits">("ai")
+  const [initialPrDescriptionMode, setInitialPrDescriptionMode] = useState<"ai" | "commits">("ai")
 
   // Sandbox settings
   const [sandboxAutoStopInterval, setSandboxAutoStopInterval] = useState(5)
@@ -68,6 +70,19 @@ export function SettingsModal({ open, onClose, credentials, onCredentialsUpdate,
   const [copiedCredentials, setCopiedCredentials] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<{ message: string; isError: boolean } | null>(null)
+  const hasChanges = !!(
+    anthropicApiKey.trim() ||
+    anthropicAuthToken.trim() ||
+    openaiApiKey.trim() ||
+    opencodeApiKey.trim() ||
+    geminiApiKey.trim() ||
+    daytonaApiKey.trim() ||
+    keysToClear.size > 0 ||
+    sandboxAutoStopInterval !== initialAutoStopInterval ||
+    squashOnMerge !== initialSquashOnMerge ||
+    prDescriptionMode !== initialPrDescriptionMode
+  )
+
   const [showDaytonaWarning, setShowDaytonaWarning] = useState(false)
   const [daytonaWarningConfirmed, setDaytonaWarningConfirmed] = useState(false)
 
@@ -84,8 +99,12 @@ export function SettingsModal({ open, onClose, credentials, onCredentialsUpdate,
       const interval = credentials?.sandboxAutoStopInterval ?? 5
       setSandboxAutoStopInterval(interval)
       setInitialAutoStopInterval(interval)
-      setSquashOnMerge(credentials?.squashOnMerge ?? true)
-      setPrDescriptionMode((credentials?.prDescriptionMode as "ai" | "commits") ?? "ai")
+      const sq = credentials?.squashOnMerge ?? true
+      const pr = (credentials?.prDescriptionMode as "ai" | "commits") ?? "ai"
+      setSquashOnMerge(sq)
+      setInitialSquashOnMerge(sq)
+      setPrDescriptionMode(pr)
+      setInitialPrDescriptionMode(pr)
       setSaveStatus(null)
       setShowDaytonaWarning(false)
       setDaytonaWarningConfirmed(false)
@@ -797,7 +816,7 @@ export function SettingsModal({ open, onClose, credentials, onCredentialsUpdate,
             </button>
             <button
               onClick={() => handleSave()}
-              disabled={isSaving}
+              disabled={isSaving || !hasChanges}
               className="cursor-pointer rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSaving ? "Saving..." : "Save"}
