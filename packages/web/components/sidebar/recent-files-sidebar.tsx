@@ -152,7 +152,7 @@ function FileIcon({ file, isLoading, onClick, isPinned }: {
       }}
       className={cn(
         "relative flex h-10 w-10 items-center justify-center rounded-lg transition-all cursor-pointer",
-        "bg-accent/50 hover:bg-accent",
+        "bg-secondary",
         isPinned && "ring-2 ring-primary",
         isOld && "opacity-40 hover:opacity-100"
       )}
@@ -255,7 +255,7 @@ function ServerIcon({ onClick, isPinned, port }: {
       }}
       className={cn(
         "relative flex h-10 w-10 items-center justify-center rounded-lg transition-all cursor-pointer",
-        "bg-accent/50 hover:bg-accent",
+        "bg-secondary",
         isPinned && "ring-2 ring-primary"
       )}
     >
@@ -374,7 +374,7 @@ function TerminalIcon({ onClick, isPinned }: {
       }}
       className={cn(
         "relative flex h-10 w-10 items-center justify-center rounded-lg transition-all cursor-pointer",
-        "bg-accent/50 hover:bg-accent",
+        "bg-secondary",
         isPinned && "ring-2 ring-primary"
       )}
     >
