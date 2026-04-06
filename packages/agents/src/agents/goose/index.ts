@@ -41,7 +41,10 @@ export const gooseAgent: AgentDefinition = {
 
   capabilities: {
     supportsSystemPrompt: true,
-    supportsResume: true,
+    // Goose resume is disabled because it fails with "No session found" if the
+    // previous session didn't complete successfully (e.g., API error, crash).
+    // Each run will be independent until goose supports graceful session creation.
+    supportsResume: false,
   },
 
   buildCommand(options: RunOptions): CommandSpec {
@@ -68,10 +71,10 @@ export const gooseAgent: AgentDefinition = {
       gooseArgs.push("--system", options.systemPrompt)
     }
 
-    // Resume session by name if provided
-    if (options.sessionId) {
-      gooseArgs.push("--name", options.sessionId, "--resume")
-    }
+    // Note: Session resumption is disabled for goose (supportsResume: false)
+    // because goose fails with "No session found" if the previous run didn't
+    // complete successfully. Use --no-session for clean automated runs.
+    gooseArgs.push("--no-session")
 
     // Build the goose command string (will be passed to bash -c)
     const gooseCmd = ["goose", ...gooseArgs].map(arg => {
