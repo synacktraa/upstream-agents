@@ -12,7 +12,7 @@ Raw JSONL output from each provider CLI is captured in `packages/agents/tests/fi
 npm run generate:jsonl-refs -w @upstream/agents
 ```
 
-These fixtures are used by unit tests to verify JSONL parsing without requiring live API calls.
+These fixtures are used as samples to verify that the agents are working and to analyze their output formats.
 
 ---
 
