@@ -55,6 +55,7 @@ export const piAgent: AgentDefinition = {
 
     // Add the prompt if provided
     if (options.prompt) {
+      args.push("-p")
       args.push(options.prompt)
     }
 
