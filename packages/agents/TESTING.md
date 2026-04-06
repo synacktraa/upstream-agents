@@ -16,6 +16,16 @@ npm run test -w @upstream/agents
 
 ---
 
+## JSONL reference files
+
+Raw JSONL output from each provider CLI is captured in `packages/agents/tests/fixtures/jsonl-reference/`. To regenerate:
+
+```bash
+npm run generate:jsonl-refs -w @upstream/agents
+```
+
+---
+
 ## Agent SDK integration tests
 
 Integration tests run each provider (Claude, Codex, Gemini, OpenCode, Pi) in real Daytona sandboxes. Tests are skipped when required API keys are not set.
@@ -42,12 +52,4 @@ Example:
 ```bash
 TEST_DAYTONA_API_KEY=... TEST_ANTHROPIC_API_KEY=... \
   npm test -w @upstream/agents -- tests/integration
-```
-
-### JSONL reference files
-
-Raw JSONL output from each provider CLI is captured in `packages/agents/tests/fixtures/jsonl-reference/`. To regenerate:
-
-```bash
-npm run generate:jsonl-refs -w @upstream/agents
 ```
