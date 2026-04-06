@@ -595,10 +595,7 @@ class BackgroundSessionImpl implements BackgroundSession {
   }
 
   private quoteArg(arg: string): string {
-    if (arg.includes(" ") || arg.includes('"') || arg.includes("'")) {
-      return `'${arg.replace(/'/g, "'\\''")}'`
-    }
-    return arg
+    return `'${arg.replace(/'/g, "'\\''")}'`
   }
 }
 

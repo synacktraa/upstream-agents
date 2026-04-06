@@ -77,11 +77,7 @@ export const gooseAgent: AgentDefinition = {
 
     // Build the goose command string (will be passed to bash -c)
     const gooseCmd = ["goose", ...gooseArgs].map(arg => {
-      // Quote args that contain spaces or special characters
-      if (arg.includes(" ") || arg.includes('"') || arg.includes("'") || arg.includes("\n")) {
-        return `'${arg.replace(/'/g, "'\\''")}'`
-      }
-      return arg
+      return `'${arg.replace(/'/g, "'\\''")}'`
     }).join(" ")
 
     // Wrap in bash to ensure PATH includes ~/.local/bin where goose installs
