@@ -349,7 +349,7 @@ function FilePathLink({
       {fullSummary ? (
         <Tooltip>
           <TooltipTrigger asChild>
-            <button className="text-xs text-primary/80 hover:text-primary hover:underline break-words min-w-0 cursor-pointer text-left">
+            <button className="text-xs text-foreground hover:underline break-words min-w-0 cursor-pointer text-left">
               {displayText}
             </button>
           </TooltipTrigger>
@@ -358,7 +358,7 @@ function FilePathLink({
           </TooltipContent>
         </Tooltip>
       ) : (
-        <button className="text-xs text-primary/80 hover:text-primary hover:underline break-words min-w-0 cursor-pointer text-left">
+        <button className="text-xs text-foreground hover:underline break-words min-w-0 cursor-pointer text-left">
           {displayText}
         </button>
       )}
