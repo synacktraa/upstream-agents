@@ -42,7 +42,18 @@ export async function GET() {
             team: {
               include: {
                 owner: {
-                  select: { id: true, name: true, githubLogin: true, image: true },
+                  select: {
+                    id: true,
+                    name: true,
+                    githubLogin: true,
+                    image: true,
+                    // Include owner credentials to check for shared subscriptions
+                    credentials: {
+                      select: {
+                        anthropicAuthToken: true,
+                      },
+                    },
+                  },
                 },
               },
             },
@@ -92,11 +103,15 @@ export async function GET() {
     // Transform credentials to just show existence, not values
     const serverLlmFallback = hasOpenRouterKey()
 
+    // Check if user is a team member and team owner has a Claude subscription
+    const teamOwnerHasClaudeSubscription = !!user.teamMembership?.team?.owner?.credentials?.anthropicAuthToken
+
     const credentials = user.credentials
       ? {
           anthropicAuthType: user.credentials.anthropicAuthType,
           hasAnthropicApiKey: !!user.credentials.anthropicApiKey,
-          hasAnthropicAuthToken: !!user.credentials.anthropicAuthToken,
+          // User has access to Claude if they have their own token OR their team owner has one
+          hasAnthropicAuthToken: !!user.credentials.anthropicAuthToken || teamOwnerHasClaudeSubscription,
           hasOpenaiApiKey: !!user.credentials.openaiApiKey,
           hasOpencodeApiKey: !!user.credentials.opencodeApiKey,
           hasGeminiApiKey: !!user.credentials.geminiApiKey,
@@ -106,9 +121,15 @@ export async function GET() {
           prDescriptionMode: user.credentials.prDescriptionMode,
           ...(serverLlmFallback ? { hasServerLlmFallback: true } : {}),
         }
-      : serverLlmFallback
-        ? { hasServerLlmFallback: true as const }
-        : null
+      : teamOwnerHasClaudeSubscription
+        ? {
+            // Team member without their own credentials but with access to team owner's Claude subscription
+            hasAnthropicAuthToken: true,
+            ...(serverLlmFallback ? { hasServerLlmFallback: true } : {}),
+          }
+        : serverLlmFallback
+          ? { hasServerLlmFallback: true as const }
+          : null
 
     // Build team info
     const team = user.ownedTeam
