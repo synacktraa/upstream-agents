@@ -35,7 +35,7 @@ import {
 } from "@/hooks"
 
 // Import Zustand stores
-import { useUIStore } from "@/lib/stores"
+import { useUIStore, useRepoStore } from "@/lib/stores"
 import { useExecutionStore, recoverActiveExecutions } from "@/lib/stores/execution-store"
 import type { Branch } from "@/lib/shared/types"
 
@@ -74,6 +74,9 @@ export default function Home() {
     setPendingRepoFromUrl,
     clearPendingRepoFromUrl,
   } = useUIStore()
+
+  // Get resetRepoState for logout
+  const resetRepoState = useRepoStore((state) => state.resetRepoState)
 
   // Core data state
   const {
@@ -397,7 +400,7 @@ export default function Home() {
             onReorderRepos={handleReorderRepos}
             onOpenSettings={() => openSettings()}
             onOpenAddRepo={openAddRepo}
-            onSignOut={() => signOut({ callbackUrl: "/login" })}
+            onSignOut={() => { resetRepoState(); signOut({ callbackUrl: "/login" }) }}
             quota={quota}
             isAdmin={isAdmin}
           />
@@ -422,7 +425,7 @@ export default function Home() {
             onRemoveRepo={handleRemoveRepo}
             onOpenSettings={() => openSettings()}
             onOpenAddRepo={openAddRepo}
-            onSignOut={() => signOut({ callbackUrl: "/login" })}
+            onSignOut={() => { resetRepoState(); signOut({ callbackUrl: "/login" }) }}
             quota={quota}
             onAddBranch={handleAddBranch}
             onUpdateBranch={handleUpdateBranch}
