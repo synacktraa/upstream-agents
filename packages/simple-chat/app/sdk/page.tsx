@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Copy, Check } from "lucide-react"
 import { Sidebar } from "@/components/Sidebar"
 import { SettingsModal } from "@/components/modals/SettingsModal"
@@ -88,6 +89,7 @@ function Endpoint({
 }
 
 export default function SDKPage() {
+  const router = useRouter()
   const {
     chats,
     currentChatId,
@@ -108,6 +110,17 @@ export default function SDKPage() {
   const displayChats = isHydrated ? chats : []
   const displayCurrentChatId = isHydrated ? currentChatId : null
 
+  // Navigate to home when creating new chat or selecting a chat
+  const handleNewChat = () => {
+    startNewChat()
+    router.push("/")
+  }
+
+  const handleSelectChat = (chatId: string) => {
+    selectChat(chatId)
+    router.push("/")
+  }
+
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar
@@ -115,8 +128,8 @@ export default function SDKPage() {
         currentChatId={displayCurrentChatId}
         deletingChatIds={deletingChatIds}
         canCreateChat={canCreateChat}
-        onSelectChat={selectChat}
-        onNewChat={startNewChat}
+        onSelectChat={handleSelectChat}
+        onNewChat={handleNewChat}
         onDeleteChat={removeChat}
         onOpenSettings={() => setSettingsOpen(true)}
         collapsed={sidebarCollapsed}
