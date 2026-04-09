@@ -1,18 +1,20 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { Send, Square, GitBranch, Loader2 } from "lucide-react"
+import { Send, Square, GitBranch, Loader2, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { Chat, Message } from "@/lib/types"
+import type { Chat } from "@/lib/types"
+import { NEW_REPOSITORY } from "@/lib/types"
 import { MessageBubble } from "./MessageBubble"
 
 interface ChatPanelProps {
   chat: Chat | null
   onSendMessage: (message: string) => void
   onStopAgent: () => void
+  onChangeRepo?: () => void
 }
 
-export function ChatPanel({ chat, onSendMessage, onStopAgent }: ChatPanelProps) {
+export function ChatPanel({ chat, onSendMessage, onStopAgent, onChangeRepo }: ChatPanelProps) {
   const [input, setInput] = useState("")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -56,23 +58,41 @@ export function ChatPanel({ chat, onSendMessage, onStopAgent }: ChatPanelProps) 
           <h2 className="text-2xl font-semibold mb-2">Welcome to Simple Chat</h2>
           <p className="text-muted-foreground">
             Click "New Chat" to start a conversation with an AI coding agent.
-            Select a repository and branch, then describe what you want to build.
           </p>
         </div>
       </div>
     )
   }
 
+  const isNewRepo = chat.repo === NEW_REPOSITORY
+  const canChangeRepo = chat.messages.length === 0 && !chat.sandboxId
+
   return (
     <div className="flex-1 flex flex-col bg-background">
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
         <GitBranch className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm font-medium">{chat.repo}</span>
-        <span className="text-muted-foreground">•</span>
-        <span className="text-sm text-muted-foreground">
-          {chat.branch || chat.baseBranch}
-        </span>
+        {canChangeRepo && onChangeRepo ? (
+          <button
+            onClick={onChangeRepo}
+            className="flex items-center gap-1 text-sm font-medium hover:text-primary transition-colors"
+          >
+            {isNewRepo ? "New Repository" : chat.repo}
+            <ChevronDown className="h-3 w-3" />
+          </button>
+        ) : (
+          <span className="text-sm font-medium">
+            {isNewRepo ? "New Repository" : chat.repo}
+          </span>
+        )}
+        {!isNewRepo && (
+          <>
+            <span className="text-muted-foreground">•</span>
+            <span className="text-sm text-muted-foreground">
+              {chat.branch || chat.baseBranch}
+            </span>
+          </>
+        )}
         {chat.status === "creating" && (
           <span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
             <Loader2 className="h-3 w-3 animate-spin" />
@@ -95,8 +115,14 @@ export function ChatPanel({ chat, onSendMessage, onStopAgent }: ChatPanelProps) 
               <h3 className="text-lg font-medium mb-2">What would you like to build?</h3>
               <p className="text-sm text-muted-foreground">
                 Describe your task and the AI agent will help you implement it.
-                Changes will be committed to the branch:{" "}
-                <span className="font-mono text-xs">{chat.branch || "(will be created)"}</span>
+                {isNewRepo ? (
+                  <> A new repository will be created in the sandbox.</>
+                ) : (
+                  <>
+                    {" "}Changes will be committed to the branch:{" "}
+                    <span className="font-mono text-xs">{chat.branch || "(will be created)"}</span>
+                  </>
+                )}
               </p>
             </div>
           </div>

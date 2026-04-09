@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import { nanoid } from "nanoid"
 import { useSession } from "next-auth/react"
 import type { AppState, Chat, Message, Settings, AgentStatusResponse } from "@/lib/types"
+import { NEW_REPOSITORY } from "@/lib/types"
 import {
   loadState,
   saveState,
@@ -46,7 +47,7 @@ export function useChat() {
   // Chat Operations
   // =============================================================================
 
-  const startNewChat = useCallback((repo: string, baseBranch: string) => {
+  const startNewChat = useCallback((repo: string = NEW_REPOSITORY, baseBranch: string = "main") => {
     const chat: Chat = {
       id: nanoid(),
       repo,
@@ -83,6 +84,18 @@ export function useChat() {
     setState(newState)
   }, [state.currentChatId])
 
+  // Update repo for a chat (only allowed before first message)
+  const updateChatRepo = useCallback((chatId: string, repo: string, baseBranch: string) => {
+    const chat = state.chats.find((c) => c.id === chatId)
+    if (!chat || chat.messages.length > 0 || chat.sandboxId) {
+      // Can't change repo after first message or sandbox created
+      return
+    }
+
+    const newState = updateChat(chatId, { repo, baseBranch })
+    setState(newState)
+  }, [state.chats])
+
   // =============================================================================
   // Settings
   // =============================================================================
@@ -97,7 +110,11 @@ export function useChat() {
   // =============================================================================
 
   const sendMessage = useCallback(async (content: string) => {
-    if (!currentChat || !session?.accessToken) return
+    if (!currentChat) return
+
+    // For GitHub repos, we need auth. For NEW_REPOSITORY, we don't.
+    const isNewRepo = currentChat.repo === NEW_REPOSITORY
+    if (!isNewRepo && !session?.accessToken) return
 
     const chat = currentChat
     // OpenCode uses free models by default, so API key is optional
@@ -282,10 +299,10 @@ export function useChat() {
           newState = updateChat(chatId, { status: data.status === "error" ? "error" : "ready" })
           setState(newState)
 
-          // Auto-push on completion
+          // Auto-push on completion (only for GitHub repos, not NEW_REPOSITORY)
           if (data.status === "completed") {
             const chat = loadState().chats.find((c) => c.id === chatId)
-            if (chat?.branch) {
+            if (chat?.branch && chat.repo !== NEW_REPOSITORY) {
               try {
                 await fetch("/api/git/push", {
                   method: "POST",
@@ -348,6 +365,7 @@ export function useChat() {
     startNewChat,
     selectChat,
     removeChat,
+    updateChatRepo,
     sendMessage,
     stopAgent,
     updateSettings,

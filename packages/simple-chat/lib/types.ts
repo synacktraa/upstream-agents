@@ -16,12 +16,15 @@ export interface Message {
   }>
 }
 
+// Special value for new repository (local git repo, no GitHub)
+export const NEW_REPOSITORY = "__new__"
+
 export interface Chat {
   id: string
 
-  // Repo config (set when chat created, IMMUTABLE)
-  repo: string           // "owner/repo"
-  baseBranch: string     // "main" - what we branched FROM
+  // Repo config (set when chat created, IMMUTABLE after first message)
+  repo: string           // "owner/repo" or NEW_REPOSITORY for local repo
+  baseBranch: string     // "main" - what we branched FROM (ignored for NEW_REPOSITORY)
 
   // Created on first message
   branch: string | null         // "swift-lunar-abc1" - the NEW branch we created
