@@ -177,7 +177,9 @@ export function ChatPanel({ chat, onSendMessage, onStopAgent, onChangeRepo }: Ch
   }
 
   const chatTitle = chat.displayName || "Untitled"
-  const githubBranchUrl = !isNewRepo && chat.branch
+  // Only show GitHub link after branch has been created and pushed (sandboxId exists means branch was pushed)
+  const hasBranchOnGitHub = !isNewRepo && chat.branch && chat.sandboxId
+  const githubBranchUrl = hasBranchOnGitHub
     ? `https://github.com/${chat.repo}/tree/${chat.branch}`
     : null
 

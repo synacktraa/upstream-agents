@@ -326,14 +326,16 @@ function ChatItem({ chat, isActive, collapsed, isDeleting, onSelect, onDelete }:
   return (
     <div
       className={cn(
-        "group flex items-center gap-2 rounded-md cursor-pointer transition-all duration-300",
+        "group flex items-center gap-2 rounded-md transition-colors",
         collapsed ? "justify-center p-2" : "px-2 py-1.5",
-        isActive
+        isDeleting
+          ? "opacity-50 cursor-not-allowed"
+          : "cursor-pointer",
+        !isDeleting && (isActive
           ? "bg-accent text-accent-foreground"
-          : "hover:bg-accent/50 text-sidebar-foreground",
-        isDeleting && "opacity-0 scale-95 h-0 py-0 overflow-hidden"
+          : "hover:bg-accent/50 text-sidebar-foreground")
       )}
-      onClick={onSelect}
+      onClick={isDeleting ? undefined : onSelect}
     >
       {!collapsed && (
         <>

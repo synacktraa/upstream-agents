@@ -97,7 +97,7 @@ export function useChat() {
       isPollingRef.current = false
     }
 
-    // Start fade animation
+    // Mark as deleting (grays out the item)
     setDeletingChatIds((prev) => new Set([...prev, chatId]))
 
     // Delete sandbox if it exists
@@ -114,16 +114,14 @@ export function useChat() {
       }
     }
 
-    // Wait for animation to complete
-    setTimeout(() => {
-      const newState = deleteStoredChat(chatId)
-      setState(newState)
-      setDeletingChatIds((prev) => {
-        const next = new Set(prev)
-        next.delete(chatId)
-        return next
-      })
-    }, 300) // Match the CSS transition duration
+    // Delete the chat immediately after sandbox deletion completes
+    const newState = deleteStoredChat(chatId)
+    setState(newState)
+    setDeletingChatIds((prev) => {
+      const next = new Set(prev)
+      next.delete(chatId)
+      return next
+    })
   }, [state.chats, state.currentChatId])
 
   // Update repo for a chat (only allowed before first message)
