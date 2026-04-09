@@ -3,15 +3,22 @@ import GitHubProvider from "next-auth/providers/github"
 
 export const authOptions: NextAuthOptions = {
   providers: [
-    GitHubProvider({
-      clientId: process.env.GITHUB_CLIENT_ID!,
-      clientSecret: process.env.GITHUB_CLIENT_SECRET!,
-      authorization: {
-        params: {
-          scope: "repo read:user user:email",
+    {
+      ...GitHubProvider({
+        clientId: process.env.GITHUB_CLIENT_ID!,
+        clientSecret: process.env.GITHUB_CLIENT_SECRET!,
+        authorization: {
+          params: {
+            scope: "repo read:user user:email",
+          },
         },
-      },
-    }),
+      }),
+      // GitHub now sends `iss=https://github.com/login/oauth` in the OAuth
+      // callback. openid-client validates this against the issuer config, but
+      // next-auth's GitHub provider doesn't set one. Adding it here satisfies
+      // the check.
+      issuer: "https://github.com/login/oauth",
+    },
   ],
   callbacks: {
     async jwt({ token, account }) {
