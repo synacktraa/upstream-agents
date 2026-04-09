@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { useSession, signIn } from "next-auth/react"
 import { Sidebar } from "@/components/Sidebar"
 import { ChatPanel } from "@/components/ChatPanel"
+import { SDKContent } from "@/components/SDKContent"
 import { RepoPickerModal } from "@/components/modals/RepoPickerModal"
 import { SettingsModal, type HighlightKey } from "@/components/modals/SettingsModal"
 import { useChat } from "@/lib/hooks/useChat"
@@ -35,6 +36,25 @@ export default function HomePage() {
   const [settingsHighlightKey, setSettingsHighlightKey] = useState<HighlightKey>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [sidebarWidth, setSidebarWidth] = useState(260)
+  const [currentPage, setCurrentPage] = useState<"chat" | "sdk">(() => {
+    if (typeof window === "undefined") return "chat"
+    return window.location.pathname === "/sdk" ? "sdk" : "chat"
+  })
+
+  // Navigate between pages without reload
+  const handleNavigate = (page: "chat" | "sdk") => {
+    setCurrentPage(page)
+    window.history.pushState(null, "", page === "sdk" ? "/sdk" : "/")
+  }
+
+  // Handle browser back/forward
+  useEffect(() => {
+    const handlePopState = () => {
+      setCurrentPage(window.location.pathname === "/sdk" ? "sdk" : "chat")
+    }
+    window.addEventListener("popstate", handlePopState)
+    return () => window.removeEventListener("popstate", handlePopState)
+  }, [])
 
   // Handler for opening settings (optionally with a highlighted API key field)
   const handleOpenSettings = (highlightKey?: HighlightKey) => {
@@ -57,7 +77,14 @@ export default function HomePage() {
 
   // Handler for new chat - creates with NEW_REPOSITORY by default
   const handleNewChat = () => {
-    startNewChat() // Defaults to NEW_REPOSITORY
+    startNewChat()
+    if (currentPage !== "chat") handleNavigate("chat")
+  }
+
+  // Handler for selecting a chat - switch to chat view
+  const handleSelectChat = (chatId: string) => {
+    selectChat(chatId)
+    if (currentPage !== "chat") handleNavigate("chat")
   }
 
   // Handler for changing repo (called from ChatPanel header)
@@ -99,7 +126,7 @@ export default function HomePage() {
         currentChatId={displayCurrentChatId}
         deletingChatIds={deletingChatIds}
         canCreateChat={canCreateChat}
-        onSelectChat={selectChat}
+        onSelectChat={handleSelectChat}
         onNewChat={handleNewChat}
         onDeleteChat={removeChat}
         onOpenSettings={() => handleOpenSettings()}
@@ -107,17 +134,23 @@ export default function HomePage() {
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
         width={sidebarWidth}
         onWidthChange={setSidebarWidth}
+        currentPage={currentPage}
+        onNavigate={handleNavigate}
       />
 
-      <ChatPanel
-        chat={displayCurrentChat}
-        settings={settings}
-        onSendMessage={handleSendMessage}
-        onStopAgent={stopAgent}
-        onChangeRepo={handleChangeRepo}
-        onUpdateChat={updateCurrentChat}
-        onOpenSettings={handleOpenSettings}
-      />
+      {currentPage === "chat" ? (
+        <ChatPanel
+          chat={displayCurrentChat}
+          settings={settings}
+          onSendMessage={handleSendMessage}
+          onStopAgent={stopAgent}
+          onChangeRepo={handleChangeRepo}
+          onUpdateChat={updateCurrentChat}
+          onOpenSettings={handleOpenSettings}
+        />
+      ) : (
+        <SDKContent />
+      )}
 
       <RepoPickerModal
         open={repoPickerOpen}

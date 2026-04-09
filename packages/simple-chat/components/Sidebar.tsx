@@ -3,7 +3,6 @@
 import { useState, useRef, useCallback, useEffect } from "react"
 import { useSession, signIn, signOut } from "next-auth/react"
 import { Plus, Trash2, Settings, LogOut, PanelLeft, MoreHorizontal, Pin, Pencil, Code2 } from "lucide-react"
-import Link from "next/link"
 import { cn } from "@/lib/utils"
 import type { Chat } from "@/lib/types"
 
@@ -26,6 +25,7 @@ interface SidebarProps {
   width: number
   onWidthChange: (width: number) => void
   currentPage?: "chat" | "sdk"
+  onNavigate?: (page: "chat" | "sdk") => void
 }
 
 export function Sidebar({
@@ -42,6 +42,7 @@ export function Sidebar({
   width,
   onWidthChange,
   currentPage = "chat",
+  onNavigate,
 }: SidebarProps) {
   const { data: session } = useSession()
   const isResizing = useRef(false)
@@ -147,8 +148,8 @@ export function Sidebar({
 
       {/* API Reference Link */}
       <div className={cn("pb-2", collapsed ? "px-0 flex justify-center" : "px-2")}>
-        <Link
-          href="/sdk"
+        <button
+          onClick={() => onNavigate?.(currentPage === "sdk" ? "chat" : "sdk")}
           className={cn(
             "flex items-center gap-2 rounded-md transition-colors",
             collapsed ? "p-1.5" : "w-full px-2 py-2",
@@ -159,7 +160,7 @@ export function Sidebar({
         >
           <Code2 className="h-4 w-4 text-muted-foreground" />
           {!collapsed && <span className="text-sm text-foreground">API Reference</span>}
-        </Link>
+        </button>
       </div>
 
       {/* Chat List - only show when expanded */}
