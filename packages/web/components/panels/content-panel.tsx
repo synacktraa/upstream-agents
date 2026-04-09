@@ -12,7 +12,6 @@ import {
   FileCode,
   Loader2,
   SquareTerminal,
-  ChevronDown,
 } from "lucide-react"
 import { highlight } from "sugar-high"
 
@@ -205,160 +204,21 @@ function DeferredHighlightedCode({ code }: { code: string }) {
 // ============================================================================
 
 /** Get the icon for a tab type */
-function TabIcon({ tab }: { tab: ContentPanelTab }) {
+function TabIcon({ tab, className }: { tab: ContentPanelTab; className?: string }) {
   const { ext } = tab.type === "file" && tab.filePath
     ? getFileDisplayInfo(tab.filePath)
     : { ext: "" }
 
   if (tab.type === "file") {
-    return <FileCode className={cn("h-3.5 w-3.5 shrink-0", getExtColor(ext))} />
+    return <FileCode className={cn("h-3 w-3", getExtColor(ext), className)} />
   }
   if (tab.type === "terminal") {
-    return <Terminal className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+    return <Terminal className={cn("h-3 w-3 text-muted-foreground", className)} />
   }
   if (tab.type === "server") {
-    return <Globe className="h-3.5 w-3.5 shrink-0 text-green-500" />
+    return <Globe className={cn("h-3 w-3 text-green-500", className)} />
   }
   return null
-}
-
-/** Render a single tab item in the tab bar */
-function TabItem({
-  tab,
-  isActive,
-  onSelect,
-  onClose,
-}: {
-  tab: ContentPanelTab
-  isActive: boolean
-  onSelect: () => void
-  onClose: () => void
-}) {
-  return (
-    <div
-      onClick={onSelect}
-      className={cn(
-        "group flex items-center gap-1.5 px-3 py-2 cursor-pointer border-r border-border/50 shrink-0",
-        "hover:bg-accent/50 transition-colors",
-        isActive && "bg-background border-b-2 border-b-primary"
-      )}
-    >
-      <TabIcon tab={tab} />
-      <span className="text-xs font-medium truncate max-w-[120px]">
-        {tab.filename}
-      </span>
-      <button
-        onClick={(e) => {
-          e.stopPropagation()
-          onClose()
-        }}
-        className="h-4 w-4 flex items-center justify-center rounded hover:bg-muted-foreground/20 opacity-0 group-hover:opacity-100 transition-opacity"
-      >
-        <X className="h-3 w-3" />
-      </button>
-    </div>
-  )
-}
-
-/** Custom overflow dropdown for hidden tabs */
-function TabOverflowMenu({
-  tabs,
-  activeTabId,
-  onSelectTab,
-  onCloseTab,
-}: {
-  tabs: ContentPanelTab[]
-  activeTabId: string | null
-  onSelectTab: (id: string) => void
-  onCloseTab: (id: string) => void
-}) {
-  const [isOpen, setIsOpen] = useState(false)
-  const menuRef = useRef<HTMLDivElement>(null)
-  const buttonRef = useRef<HTMLButtonElement>(null)
-
-  const activeInOverflow = tabs.some(t => t.id === activeTabId)
-
-  // Close on click outside
-  useEffect(() => {
-    if (!isOpen) return
-
-    function handleClickOutside(e: MouseEvent) {
-      if (
-        menuRef.current &&
-        !menuRef.current.contains(e.target as Node) &&
-        buttonRef.current &&
-        !buttonRef.current.contains(e.target as Node)
-      ) {
-        setIsOpen(false)
-      }
-    }
-
-    function handleEscape(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        setIsOpen(false)
-      }
-    }
-
-    document.addEventListener("mousedown", handleClickOutside)
-    document.addEventListener("keydown", handleEscape as unknown as EventListener)
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside)
-      document.removeEventListener("keydown", handleEscape as unknown as EventListener)
-    }
-  }, [isOpen])
-
-  return (
-    <div className="relative">
-      <button
-        ref={buttonRef}
-        onClick={() => setIsOpen(!isOpen)}
-        className={cn(
-          "flex items-center gap-1 px-2 py-2 hover:bg-accent/50 transition-colors text-xs",
-          activeInOverflow ? "text-primary font-medium" : "text-muted-foreground"
-        )}
-      >
-        <span>+{tabs.length}</span>
-        <ChevronDown className={cn("h-3 w-3 transition-transform", isOpen && "rotate-180")} />
-      </button>
-
-      {isOpen && (
-        <div
-          ref={menuRef}
-          className="absolute top-full left-0 mt-1 z-50 min-w-[180px] max-w-[280px] max-h-[300px] overflow-y-auto rounded-md border border-border bg-popover shadow-lg"
-        >
-          {tabs.map((tab) => (
-            <div
-              key={tab.id}
-              onClick={() => {
-                onSelectTab(tab.id)
-                setIsOpen(false)
-              }}
-              className={cn(
-                "group flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors",
-                "hover:bg-accent",
-                tab.id === activeTabId && "bg-accent/50"
-              )}
-            >
-              <TabIcon tab={tab} />
-              <span className="text-xs truncate flex-1">{tab.filename}</span>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onCloseTab(tab.id)
-                  if (tabs.length === 1) {
-                    setIsOpen(false)
-                  }
-                }}
-                className="h-4 w-4 flex items-center justify-center rounded hover:bg-muted-foreground/20 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
 }
 
 function TabBar({
@@ -376,125 +236,92 @@ function TabBar({
   onAddTerminal: () => void
   onClose: () => void
 }) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const tabsContainerRef = useRef<HTMLDivElement>(null)
-  const [visibleCount, setVisibleCount] = useState(tabs.length)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const activeTabRef = useRef<HTMLButtonElement>(null)
 
-  // Measure how many tabs fit by checking actual rendered widths
+  // Scroll active tab into view when it changes
   useEffect(() => {
-    const container = containerRef.current
-    const tabsContainer = tabsContainerRef.current
-    if (!container || !tabsContainer) return
+    if (activeTabRef.current && scrollRef.current) {
+      const container = scrollRef.current
+      const tab = activeTabRef.current
+      const containerRect = container.getBoundingClientRect()
+      const tabRect = tab.getBoundingClientRect()
 
-    const measureTabs = () => {
-      // Get the actual width of all tabs
-      const tabElements = tabsContainer.children
-      if (tabElements.length === 0) {
-        setVisibleCount(tabs.length)
-        return
+      if (tabRect.left < containerRect.left) {
+        container.scrollLeft -= containerRect.left - tabRect.left + 8
+      } else if (tabRect.right > containerRect.right) {
+        container.scrollLeft += tabRect.right - containerRect.right + 8
       }
-
-      // Measure total tabs width
-      let totalTabsWidth = 0
-      const tabWidths: number[] = []
-      for (let i = 0; i < tabElements.length; i++) {
-        const width = (tabElements[i] as HTMLElement).offsetWidth
-        tabWidths.push(width)
-        totalTabsWidth += width
-      }
-
-      // Reserve space for action buttons only (~70px for + and x buttons)
-      // Only add dropdown space (~40px) if we actually need overflow
-      const ACTION_BUTTONS_WIDTH = 70
-      const DROPDOWN_WIDTH = 40
-      const containerWidth = container.clientWidth
-
-      // First check if all tabs fit without dropdown
-      const availableWithoutDropdown = containerWidth - ACTION_BUTTONS_WIDTH
-      if (totalTabsWidth <= availableWithoutDropdown) {
-        setVisibleCount(tabs.length)
-        return
-      }
-
-      // Need overflow - calculate how many tabs fit with dropdown
-      const availableWithDropdown = containerWidth - ACTION_BUTTONS_WIDTH - DROPDOWN_WIDTH
-      let visibleWidth = 0
-      let count = 0
-      for (let i = 0; i < tabWidths.length; i++) {
-        if (visibleWidth + tabWidths[i] <= availableWithDropdown) {
-          visibleWidth += tabWidths[i]
-          count++
-        } else {
-          break
-        }
-      }
-
-      setVisibleCount(Math.max(1, count))
     }
-
-    // Use requestAnimationFrame to ensure DOM is ready
-    const rafId = requestAnimationFrame(measureTabs)
-
-    const resizeObserver = new ResizeObserver(() => {
-      requestAnimationFrame(measureTabs)
-    })
-    resizeObserver.observe(container)
-
-    return () => {
-      cancelAnimationFrame(rafId)
-      resizeObserver.disconnect()
-    }
-  }, [tabs.length, tabs])
-
-  const visibleTabs = tabs.slice(0, visibleCount)
-  const overflowTabs = tabs.slice(visibleCount)
-  const hasOverflow = overflowTabs.length > 0
+  }, [activeTabId])
 
   return (
-    <div ref={containerRef} className="flex items-center border-b border-border bg-muted/30 shrink-0">
-      {/* Visible Tabs */}
-      <div ref={tabsContainerRef} className="flex items-center min-w-0">
-        {visibleTabs.map((tab) => (
-          <TabItem
-            key={tab.id}
-            tab={tab}
-            isActive={tab.id === activeTabId}
-            onSelect={() => onSelectTab(tab.id)}
-            onClose={() => onCloseTab(tab.id)}
-          />
-        ))}
+    <div className="flex items-stretch border-b border-border bg-muted/30 h-9 shrink-0">
+      {/* Scrollable tabs area */}
+      <div
+        ref={scrollRef}
+        className="flex-1 flex items-stretch overflow-x-auto scrollbar-none min-w-0"
+        style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+      >
+        {tabs.map((tab) => {
+          const isActive = tab.id === activeTabId
+          return (
+            <button
+              key={tab.id}
+              ref={isActive ? activeTabRef : null}
+              onClick={() => onSelectTab(tab.id)}
+              className={cn(
+                "group relative flex items-center gap-1.5 px-3 shrink-0 text-xs transition-colors",
+                "hover:bg-accent/50",
+                isActive
+                  ? "bg-background text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {/* Active indicator */}
+              {isActive && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+              )}
+
+              <TabIcon tab={tab} />
+              <span className="truncate max-w-[100px]">{tab.filename}</span>
+
+              {/* Close button */}
+              <span
+                role="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onCloseTab(tab.id)
+                }}
+                className={cn(
+                  "ml-0.5 p-0.5 rounded hover:bg-foreground/10 transition-opacity",
+                  isActive ? "opacity-60 hover:opacity-100" : "opacity-0 group-hover:opacity-60 hover:!opacity-100"
+                )}
+              >
+                <X className="h-3 w-3" />
+              </span>
+            </button>
+          )
+        })}
       </div>
 
-      {/* Overflow Menu */}
-      {hasOverflow && (
-        <TabOverflowMenu
-          tabs={overflowTabs}
-          activeTabId={activeTabId}
-          onSelectTab={onSelectTab}
-          onCloseTab={onCloseTab}
-        />
-      )}
-
-      {/* Spacer to push buttons to the right */}
-      <div className="flex-1" />
-
-      {/* Add Terminal Button */}
-      <button
-        onClick={onAddTerminal}
-        className="flex items-center justify-center h-full px-2 hover:bg-accent/50 transition-colors border-l border-border/50"
-        title="New Terminal"
-      >
-        <Plus className="h-3.5 w-3.5 text-muted-foreground" />
-      </button>
-
-      {/* Close Panel Button */}
-      <button
-        onClick={onClose}
-        className="flex items-center justify-center h-full px-2 hover:bg-accent/50 transition-colors border-l border-border/50"
-        title="Close Panel"
-      >
-        <X className="h-3.5 w-3.5 text-muted-foreground" />
-      </button>
+      {/* Action buttons */}
+      <div className="flex items-stretch border-l border-border/50">
+        <button
+          onClick={onAddTerminal}
+          className="flex items-center justify-center w-8 hover:bg-accent/50 transition-colors text-muted-foreground hover:text-foreground"
+          title="New Terminal"
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </button>
+        <button
+          onClick={onClose}
+          className="flex items-center justify-center w-8 hover:bg-accent/50 transition-colors text-muted-foreground hover:text-foreground border-l border-border/50"
+          title="Close Panel"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
     </div>
   )
 }
