@@ -9,7 +9,7 @@ import { randomUUID } from "node:crypto"
 import { debugLog } from "./debug"
 
 // Import and register all agents
-import "./agents/index.js"
+import "./agents/index"
 
 import { getAgent, getAgentNames } from "./core/registry"
 import {
