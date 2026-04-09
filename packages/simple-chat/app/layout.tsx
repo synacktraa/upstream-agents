@@ -7,8 +7,8 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
 const jetbrainsMono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains" })
 
 export const metadata: Metadata = {
-  title: "Simple Chat",
-  description: "A simple AI coding agent chat interface",
+  title: "Background Agents",
+  description: "An AI coding agent chat interface",
 }
 
 export const viewport: Viewport = {

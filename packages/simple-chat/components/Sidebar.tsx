@@ -1,9 +1,14 @@
 "use client"
 
+import { useRef, useCallback, useEffect } from "react"
 import { useSession, signIn, signOut } from "next-auth/react"
 import { Plus, MessageSquare, Trash2, Settings, LogOut, ChevronLeft, ChevronRight } from "lucide-react"
 import { cn, formatRelativeTime } from "@/lib/utils"
 import type { Chat } from "@/lib/types"
+
+const MIN_WIDTH = 200
+const MAX_WIDTH = 400
+const COLLAPSED_WIDTH = 64
 
 interface SidebarProps {
   chats: Chat[]
@@ -14,6 +19,8 @@ interface SidebarProps {
   onOpenSettings: () => void
   collapsed: boolean
   onToggleCollapse: () => void
+  width: number
+  onWidthChange: (width: number) => void
 }
 
 export function Sidebar({
@@ -25,24 +32,56 @@ export function Sidebar({
   onOpenSettings,
   collapsed,
   onToggleCollapse,
+  width,
+  onWidthChange,
 }: SidebarProps) {
   const { data: session } = useSession()
+  const isResizing = useRef(false)
+  const sidebarRef = useRef<HTMLDivElement>(null)
 
   // Group chats by date
   const groupedChats = groupChatsByDate(chats)
 
+  // Handle drag resize
+  const startResizing = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    isResizing.current = true
+    document.body.style.cursor = "col-resize"
+    document.body.style.userSelect = "none"
+  }, [])
+
+  const stopResizing = useCallback(() => {
+    isResizing.current = false
+    document.body.style.cursor = ""
+    document.body.style.userSelect = ""
+  }, [])
+
+  const resize = useCallback((e: MouseEvent) => {
+    if (!isResizing.current) return
+    const newWidth = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, e.clientX))
+    onWidthChange(newWidth)
+  }, [onWidthChange])
+
+  useEffect(() => {
+    window.addEventListener("mousemove", resize)
+    window.addEventListener("mouseup", stopResizing)
+    return () => {
+      window.removeEventListener("mousemove", resize)
+      window.removeEventListener("mouseup", stopResizing)
+    }
+  }, [resize, stopResizing])
+
   return (
     <div
-      className={cn(
-        "flex h-full flex-col bg-sidebar border-r border-sidebar-border transition-all duration-300",
-        collapsed ? "w-16" : "w-64"
-      )}
+      ref={sidebarRef}
+      className="relative flex h-full flex-col bg-sidebar border-r border-sidebar-border"
+      style={{ width: collapsed ? COLLAPSED_WIDTH : width }}
     >
       {/* Header */}
       <div className="flex items-center justify-between p-3 border-b border-sidebar-border">
         {!collapsed && (
           <h1 className="text-sm font-semibold text-sidebar-foreground">
-            Simple Chat
+            Background Agents
           </h1>
         )}
         <button
@@ -162,6 +201,14 @@ export function Sidebar({
           </button>
         )}
       </div>
+
+      {/* Resize Handle */}
+      {!collapsed && (
+        <div
+          onMouseDown={startResizing}
+          className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50 active:bg-primary transition-colors"
+        />
+      )}
     </div>
   )
 }

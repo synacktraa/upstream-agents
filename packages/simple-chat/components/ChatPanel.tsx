@@ -55,7 +55,7 @@ export function ChatPanel({ chat, onSendMessage, onStopAgent, onChangeRepo }: Ch
     return (
       <div className="flex-1 flex items-center justify-center bg-background">
         <div className="text-center max-w-md px-4">
-          <h2 className="text-2xl font-semibold mb-2">Welcome to Simple Chat</h2>
+          <h2 className="text-2xl font-semibold mb-2">Welcome to Background Agents</h2>
           <p className="text-muted-foreground">
             Click "New Chat" to start a conversation with an AI coding agent.
           </p>

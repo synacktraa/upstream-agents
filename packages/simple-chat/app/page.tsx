@@ -29,6 +29,7 @@ export default function HomePage() {
   const [repoPickerOpen, setRepoPickerOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [sidebarWidth, setSidebarWidth] = useState(260)
 
   // Handler for new chat - creates with NEW_REPOSITORY by default
   const handleNewChat = () => {
@@ -73,6 +74,8 @@ export default function HomePage() {
         onOpenSettings={() => setSettingsOpen(true)}
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+        width={sidebarWidth}
+        onWidthChange={setSidebarWidth}
       />
 
       <ChatPanel
