@@ -39,9 +39,6 @@ export function Sidebar({
   const isResizing = useRef(false)
   const sidebarRef = useRef<HTMLDivElement>(null)
 
-  // Group chats by date
-  const groupedChats = groupChatsByDate(chats)
-
   // Handle drag resize
   const startResizing = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
@@ -112,27 +109,18 @@ export function Sidebar({
 
       {/* Chat List */}
       <div className="flex-1 overflow-y-auto p-2">
-        {Object.entries(groupedChats).map(([date, dateChats]) => (
-          <div key={date} className="mb-4">
-            {!collapsed && (
-              <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
-                {date}
-              </div>
-            )}
-            <div className="space-y-1">
-              {dateChats.map((chat) => (
-                <ChatItem
-                  key={chat.id}
-                  chat={chat}
-                  isActive={chat.id === currentChatId}
-                  collapsed={collapsed}
-                  onSelect={() => onSelectChat(chat.id)}
-                  onDelete={() => onDeleteChat(chat.id)}
-                />
-              ))}
-            </div>
-          </div>
-        ))}
+        <div className="space-y-1">
+          {chats.map((chat) => (
+            <ChatItem
+              key={chat.id}
+              chat={chat}
+              isActive={chat.id === currentChatId}
+              collapsed={collapsed}
+              onSelect={() => onSelectChat(chat.id)}
+              onDelete={() => onDeleteChat(chat.id)}
+            />
+          ))}
+        </div>
 
         {chats.length === 0 && !collapsed && (
           <div className="px-2 py-8 text-center text-sm text-muted-foreground">
@@ -281,32 +269,3 @@ function getFirstMessagePreview(chat: Chat): string {
   return "New chat"
 }
 
-function groupChatsByDate(chats: Chat[]): Record<string, Chat[]> {
-  const groups: Record<string, Chat[]> = {}
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000)
-  const lastWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
-
-  for (const chat of chats) {
-    const chatDate = new Date(chat.updatedAt)
-    let group: string
-
-    if (chatDate >= today) {
-      group = "Today"
-    } else if (chatDate >= yesterday) {
-      group = "Yesterday"
-    } else if (chatDate >= lastWeek) {
-      group = "Last 7 days"
-    } else {
-      group = "Older"
-    }
-
-    if (!groups[group]) {
-      groups[group] = []
-    }
-    groups[group].push(chat)
-  }
-
-  return groups
-}
