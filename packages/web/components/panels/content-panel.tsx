@@ -14,12 +14,6 @@ import {
   SquareTerminal,
   ChevronDown,
 } from "lucide-react"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { highlight } from "sugar-high"
 
 // ============================================================================
@@ -210,47 +204,36 @@ function DeferredHighlightedCode({ code }: { code: string }) {
 // Tab Bar Component
 // ============================================================================
 
-/** Render a single tab item (used in both visible tabs and dropdown) */
+/** Get the icon for a tab type */
+function TabIcon({ tab }: { tab: ContentPanelTab }) {
+  const { ext } = tab.type === "file" && tab.filePath
+    ? getFileDisplayInfo(tab.filePath)
+    : { ext: "" }
+
+  if (tab.type === "file") {
+    return <FileCode className={cn("h-3.5 w-3.5 shrink-0", getExtColor(ext))} />
+  }
+  if (tab.type === "terminal") {
+    return <Terminal className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+  }
+  if (tab.type === "server") {
+    return <Globe className="h-3.5 w-3.5 shrink-0 text-green-500" />
+  }
+  return null
+}
+
+/** Render a single tab item in the tab bar */
 function TabItem({
   tab,
   isActive,
   onSelect,
   onClose,
-  inDropdown = false,
 }: {
   tab: ContentPanelTab
   isActive: boolean
   onSelect: () => void
   onClose: () => void
-  inDropdown?: boolean
 }) {
-  const { ext } = tab.type === "file" && tab.filePath
-    ? getFileDisplayInfo(tab.filePath)
-    : { ext: "" }
-
-  if (inDropdown) {
-    return (
-      <DropdownMenuItem
-        onClick={onSelect}
-        className={cn(
-          "flex items-center gap-2 cursor-pointer",
-          isActive && "bg-accent"
-        )}
-      >
-        {tab.type === "file" && (
-          <FileCode className={cn("h-3.5 w-3.5 shrink-0", getExtColor(ext))} />
-        )}
-        {tab.type === "terminal" && (
-          <Terminal className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-        )}
-        {tab.type === "server" && (
-          <Globe className="h-3.5 w-3.5 shrink-0 text-green-500" />
-        )}
-        <span className="text-xs truncate">{tab.filename}</span>
-      </DropdownMenuItem>
-    )
-  }
-
   return (
     <div
       onClick={onSelect}
@@ -260,15 +243,7 @@ function TabItem({
         isActive && "bg-background border-b-2 border-b-primary"
       )}
     >
-      {tab.type === "file" && (
-        <FileCode className={cn("h-3.5 w-3.5 shrink-0", getExtColor(ext))} />
-      )}
-      {tab.type === "terminal" && (
-        <Terminal className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-      )}
-      {tab.type === "server" && (
-        <Globe className="h-3.5 w-3.5 shrink-0 text-green-500" />
-      )}
+      <TabIcon tab={tab} />
       <span className="text-xs font-medium truncate max-w-[120px]">
         {tab.filename}
       </span>
@@ -281,6 +256,107 @@ function TabItem({
       >
         <X className="h-3 w-3" />
       </button>
+    </div>
+  )
+}
+
+/** Custom overflow dropdown for hidden tabs */
+function TabOverflowMenu({
+  tabs,
+  activeTabId,
+  onSelectTab,
+  onCloseTab,
+}: {
+  tabs: ContentPanelTab[]
+  activeTabId: string | null
+  onSelectTab: (id: string) => void
+  onCloseTab: (id: string) => void
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+
+  const activeInOverflow = tabs.some(t => t.id === activeTabId)
+
+  // Close on click outside
+  useEffect(() => {
+    if (!isOpen) return
+
+    function handleClickOutside(e: MouseEvent) {
+      if (
+        menuRef.current &&
+        !menuRef.current.contains(e.target as Node) &&
+        buttonRef.current &&
+        !buttonRef.current.contains(e.target as Node)
+      ) {
+        setIsOpen(false)
+      }
+    }
+
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setIsOpen(false)
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside)
+    document.addEventListener("keydown", handleEscape as unknown as EventListener)
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+      document.removeEventListener("keydown", handleEscape as unknown as EventListener)
+    }
+  }, [isOpen])
+
+  return (
+    <div className="relative">
+      <button
+        ref={buttonRef}
+        onClick={() => setIsOpen(!isOpen)}
+        className={cn(
+          "flex items-center gap-1 px-2 py-2 hover:bg-accent/50 transition-colors text-xs",
+          activeInOverflow ? "text-primary font-medium" : "text-muted-foreground"
+        )}
+      >
+        <span>+{tabs.length}</span>
+        <ChevronDown className={cn("h-3 w-3 transition-transform", isOpen && "rotate-180")} />
+      </button>
+
+      {isOpen && (
+        <div
+          ref={menuRef}
+          className="absolute top-full left-0 mt-1 z-50 min-w-[180px] max-w-[280px] max-h-[300px] overflow-y-auto rounded-md border border-border bg-popover shadow-lg"
+        >
+          {tabs.map((tab) => (
+            <div
+              key={tab.id}
+              onClick={() => {
+                onSelectTab(tab.id)
+                setIsOpen(false)
+              }}
+              className={cn(
+                "group flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors",
+                "hover:bg-accent",
+                tab.id === activeTabId && "bg-accent/50"
+              )}
+            >
+              <TabIcon tab={tab} />
+              <span className="text-xs truncate flex-1">{tab.filename}</span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onCloseTab(tab.id)
+                  if (tabs.length === 1) {
+                    setIsOpen(false)
+                  }
+                }}
+                className="h-4 w-4 flex items-center justify-center rounded hover:bg-muted-foreground/20 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -374,9 +450,6 @@ function TabBar({
   const overflowTabs = tabs.slice(visibleCount)
   const hasOverflow = overflowTabs.length > 0
 
-  // Check if active tab is in overflow
-  const activeInOverflow = overflowTabs.some(t => t.id === activeTabId)
-
   return (
     <div ref={containerRef} className="flex items-center border-b border-border bg-muted/30 shrink-0">
       {/* Visible Tabs */}
@@ -392,33 +465,14 @@ function TabBar({
         ))}
       </div>
 
-      {/* Overflow Dropdown */}
+      {/* Overflow Menu */}
       {hasOverflow && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              className={cn(
-                "flex items-center gap-1 px-2 py-2 hover:bg-accent/50 transition-colors text-xs text-muted-foreground",
-                activeInOverflow && "text-primary font-medium"
-              )}
-            >
-              <span>+{overflowTabs.length}</span>
-              <ChevronDown className="h-3 w-3" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="max-h-[300px] overflow-y-auto">
-            {overflowTabs.map((tab) => (
-              <TabItem
-                key={tab.id}
-                tab={tab}
-                isActive={tab.id === activeTabId}
-                onSelect={() => onSelectTab(tab.id)}
-                onClose={() => onCloseTab(tab.id)}
-                inDropdown
-              />
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <TabOverflowMenu
+          tabs={overflowTabs}
+          activeTabId={activeTabId}
+          onSelectTab={onSelectTab}
+          onCloseTab={onCloseTab}
+        />
       )}
 
       {/* Spacer to push buttons to the right */}
