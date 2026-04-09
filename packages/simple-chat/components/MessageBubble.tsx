@@ -48,7 +48,7 @@ function AssistantContent({ message }: { message: Message }) {
   }
 
   return (
-    <div className="space-y-2 text-sm">
+    <div className="space-y-3 text-sm leading-relaxed">
       {/* Tool Calls */}
       {hasToolCalls && (
         <div className="space-y-2">
@@ -60,7 +60,7 @@ function AssistantContent({ message }: { message: Message }) {
 
       {/* Text Content */}
       {hasContent && (
-        <div className="prose prose-sm dark:prose-invert max-w-none">
+        <div className="prose prose-sm dark:prose-invert max-w-none prose-p:leading-relaxed prose-li:leading-relaxed">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>
             {message.content}
           </ReactMarkdown>

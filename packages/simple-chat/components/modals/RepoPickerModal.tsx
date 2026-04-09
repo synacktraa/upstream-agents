@@ -131,19 +131,21 @@ export function RepoPickerModal({ open, onClose, onSelect }: RepoPickerModalProp
             </div>
           )}
 
-          {/* Search */}
-          <div className="p-4 border-b border-border">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder={step === "repo" ? "Search repositories..." : "Search branches..."}
-                className="w-full pl-9 pr-4 py-2 text-sm bg-input border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
-              />
+          {/* Search - only for repo step */}
+          {step === "repo" && (
+            <div className="p-4 border-b border-border">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search repositories..."
+                  className="w-full pl-9 pr-4 py-2 text-sm bg-input border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Content */}
           <div className="max-h-80 overflow-y-auto">
@@ -192,7 +194,7 @@ export function RepoPickerModal({ open, onClose, onSelect }: RepoPickerModalProp
             )}
 
             {!loading && !error && step === "branch" && (
-              <div className="p-4 overflow-visible">
+              <div className="p-4">
                 <div className="mb-4">
                   <label className="block text-sm font-medium mb-2">Base Branch</label>
                   <div className="relative">
@@ -208,7 +210,7 @@ export function RepoPickerModal({ open, onClose, onSelect }: RepoPickerModalProp
                     </button>
 
                     {showBranchDropdown && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-popover border border-border rounded-md shadow-lg z-[100] max-h-48 overflow-y-auto">
+                      <div className="fixed mt-1 bg-popover border border-border rounded-md shadow-lg z-[200] max-h-48 overflow-y-auto w-[calc(100%-2rem)] max-w-[calc(28rem-2rem)]" style={{ marginTop: '4px' }}>
                         {branches.length === 0 ? (
                           <div className="p-2 text-sm text-muted-foreground text-center">
                             No branches found

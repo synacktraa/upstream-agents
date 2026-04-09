@@ -309,7 +309,6 @@ function ChatItem({ chat, isActive, collapsed, isDeleting, onSelect, onDelete }:
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const displayName = chat.displayName || "Untitled"
-  const repoName = chat.repo.split("/")[1]
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -340,9 +339,6 @@ function ChatItem({ chat, isActive, collapsed, isDeleting, onSelect, onDelete }:
         <>
           <div className="flex-1 min-w-0">
             <div className="text-sm truncate">{displayName}</div>
-            <div className="text-xs text-muted-foreground truncate">
-              {repoName}
-            </div>
           </div>
 
           <div className="relative" ref={menuRef}>
