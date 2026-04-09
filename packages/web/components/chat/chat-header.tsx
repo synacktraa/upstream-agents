@@ -18,7 +18,9 @@ import {
   Sparkles,
   XCircle,
   X,
+  Terminal,
 } from "lucide-react"
+import { useUIStore } from "@/lib/stores/ui-store"
 import type { RebaseConflictState } from "@/components/git/hooks/useGitDialogs"
 import {
   Tooltip,
@@ -64,10 +66,17 @@ export function ChatHeader({
   rebaseConflict,
   onAbortConflict,
 }: ChatHeaderProps) {
+  const { openContentPanel, addTerminalTab } = useUIStore()
+
   const isReady = branch.sandboxId && (branch.status !== BRANCH_STATUS.CREATING)
   const isBusy = branch.status === BRANCH_STATUS.RUNNING || branch.status === BRANCH_STATUS.CREATING
   const inConflict = !!(rebaseConflict?.inRebase || rebaseConflict?.inMerge)
   const mergeConflict = rebaseConflict?.inMerge ?? false
+
+  const handleOpenTerminal = () => {
+    openContentPanel()
+    addTerminalTab(true)
+  }
 
   return (
     <header
@@ -302,6 +311,24 @@ export function ChatHeader({
             </span>
           )
         })}
+
+        {/* Terminal button - opens content panel with new terminal tab */}
+        {branch.sandboxId && (
+          <>
+            <div className="mx-1.5 h-4 w-px bg-border shrink-0" />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={handleOpenTerminal}
+                  className="flex cursor-pointer h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                >
+                  <Terminal className="h-3.5 w-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs">Terminal</TooltipContent>
+            </Tooltip>
+          </>
+        )}
       </div>
     </header>
   )
