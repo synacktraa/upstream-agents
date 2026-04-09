@@ -963,7 +963,7 @@ export function ContentPanel({
       {/* Resize Handle */}
       <div
         onMouseDown={startResize}
-        className="absolute left-0 top-0 h-full w-2 cursor-col-resize hover:bg-primary/30 transition-colors z-10"
+        className="absolute left-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/30 transition-colors z-10"
       />
 
       {/* Tab Bar */}
