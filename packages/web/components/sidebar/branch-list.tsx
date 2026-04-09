@@ -40,6 +40,8 @@ interface BranchListProps {
   quota?: { current: number; max: number; remaining: number } | null
   width: number | string
   onWidthChange: (w: number) => void
+  collapsed?: boolean
+  onToggleCollapse?: () => void
   pendingStartCommit?: string | null
   onClearPendingCommit?: () => void
   isMobile?: boolean
@@ -59,6 +61,8 @@ export function BranchList({
   quota,
   width,
   onWidthChange,
+  collapsed = false,
+  onToggleCollapse,
   pendingStartCommit,
   onClearPendingCommit,
   isMobile = false,
@@ -244,6 +248,24 @@ export function BranchList({
 
   // Compute width style for desktop vs mobile
   const widthStyle = isMobile ? { width: "100%" } : { width: typeof width === "number" ? width : width }
+
+  // Collapsed state: show minimal view with just the resize handle
+  if (collapsed && !isMobile) {
+    return (
+      <div
+        className="relative flex h-full shrink-0 flex-col bg-card border-r border-border"
+        style={{ width: 0 }}
+      >
+        {/* Resize handle for expanding */}
+        <div
+          onMouseDown={startResize}
+          onDoubleClick={onToggleCollapse}
+          className="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/30 transition-colors z-10"
+          title="Double-click to expand"
+        />
+      </div>
+    )
+  }
 
   return (
     <div className={cn(
@@ -505,7 +527,9 @@ export function BranchList({
       {!isMobile && (
         <div
           onMouseDown={startResize}
+          onDoubleClick={onToggleCollapse}
           className="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/30 transition-colors z-10"
+          title="Double-click to collapse/expand"
         />
       )}
     </div>

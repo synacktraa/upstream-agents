@@ -262,6 +262,22 @@ export default function Home() {
 
   // Local UI state (kept local as it's not needed elsewhere)
   const [branchListWidth, setBranchListWidth] = useState(260)
+  const [branchListCollapsed, setBranchListCollapsed] = useState(false)
+  const [branchListWidthBeforeCollapse, setBranchListWidthBeforeCollapse] = useState(260)
+
+  // Handler to toggle branch list collapse/expand
+  const handleToggleBranchListCollapse = useCallback(() => {
+    if (branchListCollapsed) {
+      // Expand: restore previous width
+      setBranchListWidth(branchListWidthBeforeCollapse)
+      setBranchListCollapsed(false)
+    } else {
+      // Collapse: save current width and set to minimum
+      setBranchListWidthBeforeCollapse(branchListWidth)
+      setBranchListWidth(0)
+      setBranchListCollapsed(true)
+    }
+  }, [branchListCollapsed, branchListWidth, branchListWidthBeforeCollapse])
 
   // Handler to open settings with a specific field highlighted
   const handleOpenSettingsWithHighlight = useCallback((field: string) => {
@@ -454,6 +470,8 @@ export default function Home() {
               onQuotaRefresh={refreshQuotaOnly}
               width={branchListWidth}
               onWidthChange={setBranchListWidth}
+              collapsed={branchListCollapsed}
+              onToggleCollapse={handleToggleBranchListCollapse}
               pendingStartCommit={pendingStartCommit}
               onClearPendingCommit={clearPendingStartCommit}
               quota={quota}
