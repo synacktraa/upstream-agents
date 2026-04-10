@@ -146,7 +146,7 @@ export async function detectAndShowCommits(params: DetectAndShowCommitsParams): 
         }),
       })
       const logData = await logRes.json()
-      const allCommits: { shortHash: string; message: string }[] = logData.commits || []
+      const allCommits: { hash: string; shortHash: string; message: string }[] = logData.commits || []
 
       const messagesForDedupInput = messagesForDedup.map((m) => ({
         id: m.id,
@@ -166,6 +166,7 @@ export async function detectAndShowCommits(params: DetectAndShowCommitsParams): 
             minute: "2-digit",
           }),
           commitHash: c.shortHash,
+          commitFullHash: c.hash,
           commitMessage: c.message,
         }
         await onAddMessage(branchId, commitMessage)
