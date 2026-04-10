@@ -13,7 +13,7 @@ import {
 // Timeout for terminal setup - 60 seconds
 export const maxDuration = 60
 
-// Port for the WebSocket PTY server (unique high port to avoid conflicts with dev servers)
+// Port for the WebSocket PTY server (using unique high port to avoid conflicts)
 const PTY_SERVER_PORT = 44777
 
 /**
