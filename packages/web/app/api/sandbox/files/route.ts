@@ -117,7 +117,13 @@ export async function POST(req: Request) {
   const auth = await requireAuth()
   if (isAuthError(auth)) return auth
 
-  const body = await req.json()
+  let body: Record<string, unknown>
+  try {
+    body = await req.json()
+  } catch {
+    return badRequest("Invalid or empty JSON body")
+  }
+
   const { sandboxId, repoPath, action, filePath, since } = body
 
   if (!sandboxId || !repoPath || !action) {
