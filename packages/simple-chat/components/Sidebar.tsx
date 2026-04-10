@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react"
 import { useSession, signIn, signOut } from "next-auth/react"
-import { Plus, Trash2, Settings, LogOut, PanelLeft, MoreHorizontal, Pin, Pencil, Code2 } from "lucide-react"
+import { Plus, Trash2, Settings, LogOut, PanelLeft, MoreHorizontal, Pin, Pencil, Code2, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Chat } from "@/lib/types"
 
@@ -10,6 +10,7 @@ const MIN_WIDTH = 140
 const MAX_WIDTH = 400
 const COLLAPSED_WIDTH = 64
 const COLLAPSE_THRESHOLD = 100 // Collapse when dragged below this width
+const SWIPE_THRESHOLD = 80 // Minimum swipe distance to close drawer
 
 interface SidebarProps {
   chats: Chat[]
@@ -26,6 +27,10 @@ interface SidebarProps {
   onWidthChange: (width: number) => void
   currentPage?: "chat" | "sdk"
   onNavigate?: (page: "chat" | "sdk") => void
+  // Mobile drawer props
+  isMobile?: boolean
+  mobileOpen?: boolean
+  onMobileClose?: () => void
 }
 
 export function Sidebar({
@@ -43,11 +48,20 @@ export function Sidebar({
   onWidthChange,
   currentPage = "chat",
   onNavigate,
+  isMobile = false,
+  mobileOpen = false,
+  onMobileClose,
 }: SidebarProps) {
   const { data: session } = useSession()
   const isResizing = useRef(false)
   const [isAnimating, setIsAnimating] = useState(false)
   const sidebarRef = useRef<HTMLDivElement>(null)
+
+  // Swipe gesture state for mobile drawer
+  const [isDragging, setIsDragging] = useState(false)
+  const [dragX, setDragX] = useState(0)
+  const [startX, setStartX] = useState(0)
+  const [startTime, setStartTime] = useState(0)
 
   // Animate collapse/expand when toggled via button
   const handleToggleCollapse = useCallback(() => {
@@ -58,13 +72,14 @@ export function Sidebar({
     return () => clearTimeout(timer)
   }, [onToggleCollapse])
 
-  // Handle drag resize
+  // Handle drag resize (desktop only)
   const startResizing = useCallback((e: React.MouseEvent) => {
+    if (isMobile) return
     e.preventDefault()
     isResizing.current = true
     document.body.style.cursor = "col-resize"
     document.body.style.userSelect = "none"
-  }, [])
+  }, [isMobile])
 
   const stopResizing = useCallback(() => {
     isResizing.current = false
@@ -73,7 +88,7 @@ export function Sidebar({
   }, [])
 
   const resize = useCallback((e: MouseEvent) => {
-    if (!isResizing.current) return
+    if (!isResizing.current || isMobile) return
     // If dragged below threshold, collapse the sidebar
     if (e.clientX < COLLAPSE_THRESHOLD) {
       if (!collapsed) {
@@ -89,22 +104,255 @@ export function Sidebar({
     }
     const newWidth = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, e.clientX))
     onWidthChange(newWidth)
-  }, [onWidthChange, collapsed, onToggleCollapse])
+  }, [onWidthChange, collapsed, onToggleCollapse, isMobile])
 
   useEffect(() => {
+    if (isMobile) return
     window.addEventListener("mousemove", resize)
     window.addEventListener("mouseup", stopResizing)
     return () => {
       window.removeEventListener("mousemove", resize)
       window.removeEventListener("mouseup", stopResizing)
     }
-  }, [resize, stopResizing])
+  }, [resize, stopResizing, isMobile])
 
+  // Mobile swipe gesture handlers
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (!isMobile || !mobileOpen) return
+    setIsDragging(true)
+    setStartX(e.touches[0].clientX)
+    setStartTime(Date.now())
+    setDragX(0)
+  }, [isMobile, mobileOpen])
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!isDragging) return
+
+    const currentX = e.touches[0].clientX
+    const diff = currentX - startX
+
+    // Only allow dragging left (negative direction to close)
+    if (diff < 0) {
+      setDragX(diff)
+    }
+  }, [isDragging, startX])
+
+  const handleTouchEnd = useCallback(() => {
+    if (!isDragging) return
+
+    setIsDragging(false)
+
+    const duration = Date.now() - startTime
+    const velocity = Math.abs(dragX) / duration
+
+    // Close if:
+    // 1. Dragged more than threshold
+    // 2. OR fast swipe (velocity > 0.5)
+    if (Math.abs(dragX) > SWIPE_THRESHOLD || velocity > 0.5) {
+      onMobileClose?.()
+    }
+
+    setDragX(0)
+  }, [isDragging, dragX, startTime, onMobileClose])
+
+  // Close mobile drawer when selecting a chat
+  const handleSelectChat = (chatId: string) => {
+    onSelectChat(chatId)
+    if (isMobile && onMobileClose) {
+      onMobileClose()
+    }
+  }
+
+  // Close mobile drawer when creating new chat
+  const handleNewChat = () => {
+    onNewChat()
+    if (isMobile && onMobileClose) {
+      onMobileClose()
+    }
+  }
+
+  // Close mobile drawer when navigating
+  const handleNavigate = (page: "chat" | "sdk") => {
+    onNavigate?.(page)
+    if (isMobile && onMobileClose) {
+      onMobileClose()
+    }
+  }
+
+  // Prevent body scroll when drawer is open
+  useEffect(() => {
+    if (isMobile && mobileOpen) {
+      document.body.style.overflow = "hidden"
+    } else {
+      document.body.style.overflow = ""
+    }
+    return () => {
+      document.body.style.overflow = ""
+    }
+  }, [isMobile, mobileOpen])
+
+  // Mobile drawer rendering
+  if (isMobile) {
+    return (
+      <>
+        {/* Backdrop overlay */}
+        <div
+          className={cn(
+            "fixed inset-0 z-40 mobile-overlay transition-opacity duration-300",
+            mobileOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+          )}
+          onClick={onMobileClose}
+          aria-hidden="true"
+        />
+
+        {/* Mobile drawer with swipe gesture */}
+        <div
+          ref={sidebarRef}
+          className={cn(
+            "fixed inset-y-0 left-0 z-50 w-[280px] flex flex-col bg-background border-r border-sidebar-border",
+            !isDragging && "transition-transform duration-300 ease-out"
+          )}
+          style={{
+            transform: mobileOpen
+              ? `translateX(${Math.min(0, dragX)}px)`
+              : "translateX(-100%)",
+          }}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
+          {/* Swipe indicator bar */}
+          <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-16 flex items-center justify-center">
+            <div className="w-1 h-8 rounded-full bg-muted-foreground/20" />
+          </div>
+
+          {/* Header with close button */}
+          <div className="flex items-center justify-between p-4 pt-safe border-b border-sidebar-border">
+            <h1 className="text-base font-semibold text-foreground">
+              Background Agents
+            </h1>
+            <button
+              onClick={onMobileClose}
+              className="p-2 -mr-2 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors touch-target"
+              aria-label="Close menu"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          {/* New Chat Button - larger touch target */}
+          <div className="px-3 py-2">
+            <button
+              onClick={handleNewChat}
+              disabled={!canCreateChat}
+              title={!canCreateChat ? "Sign in with GitHub to create more chats" : undefined}
+              className={cn(
+                "flex items-center gap-3 w-full px-3 py-3 rounded-lg transition-colors touch-target",
+                canCreateChat
+                  ? "hover:bg-accent/50 active:bg-accent"
+                  : "opacity-50 cursor-not-allowed"
+              )}
+            >
+              <Plus className="h-5 w-5 text-muted-foreground" />
+              <span className="text-base text-foreground">New Chat</span>
+            </button>
+          </div>
+
+          {/* API Reference Link */}
+          <div className="px-3 pb-2">
+            <button
+              onClick={() => handleNavigate(currentPage === "sdk" ? "chat" : "sdk")}
+              className={cn(
+                "flex items-center gap-3 w-full px-3 py-3 rounded-lg transition-colors touch-target",
+                currentPage === "sdk"
+                  ? "bg-accent text-accent-foreground"
+                  : "hover:bg-accent/50 active:bg-accent"
+              )}
+            >
+              <Code2 className="h-5 w-5 text-muted-foreground" />
+              <span className="text-base text-foreground">API Reference</span>
+            </button>
+          </div>
+
+          {/* Chat List */}
+          <div className="flex-1 overflow-y-auto mobile-scroll px-3 py-2">
+            <div className="space-y-1">
+              {chats
+                .filter((chat) => chat.messages.length > 0)
+                .map((chat) => (
+                  <MobileChatItem
+                    key={chat.id}
+                    chat={chat}
+                    isActive={chat.id === currentChatId}
+                    isDeleting={deletingChatIds.has(chat.id)}
+                    onSelect={() => handleSelectChat(chat.id)}
+                    onDelete={() => onDeleteChat(chat.id)}
+                  />
+                ))}
+            </div>
+          </div>
+
+          {/* Footer - User & Settings */}
+          <div className="mt-auto p-4 pb-safe border-t border-sidebar-border">
+            {session?.user ? (
+              <div className="flex items-center gap-3">
+                {/* User Avatar & Name */}
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  {session.user.image && (
+                    <img
+                      src={session.user.image}
+                      alt={session.user.name || "User"}
+                      className="h-10 w-10 rounded-full"
+                    />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-base font-medium truncate">
+                      {session.user.name}
+                    </div>
+                    <div className="text-sm text-muted-foreground truncate">
+                      {session.user.email}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Action Buttons - larger touch targets */}
+                <div className="flex gap-1">
+                  <button
+                    onClick={onOpenSettings}
+                    className="p-3 rounded-lg hover:bg-accent active:bg-accent text-muted-foreground hover:text-foreground transition-colors touch-target"
+                    title="Settings"
+                  >
+                    <Settings className="h-5 w-5" />
+                  </button>
+                  <button
+                    onClick={() => signOut()}
+                    className="p-3 rounded-lg hover:bg-accent active:bg-accent text-muted-foreground hover:text-foreground transition-colors touch-target"
+                    title="Sign out"
+                  >
+                    <LogOut className="h-5 w-5" />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => signIn("github")}
+                className="flex items-center justify-center gap-2 w-full rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 active:bg-secondary/70 transition-colors px-4 py-3 touch-target"
+              >
+                <span className="text-base">Sign in with GitHub</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </>
+    )
+  }
+
+  // Desktop sidebar rendering (original behavior)
   return (
     <div
       ref={sidebarRef}
       className={cn(
-        "relative flex h-full flex-col bg-background border-r border-sidebar-border overflow-hidden",
+        "relative flex h-full flex-col bg-background border-r border-sidebar-border overflow-hidden hide-mobile",
         isAnimating && "transition-[width] duration-200 ease-in-out"
       )}
       style={{ width: collapsed ? COLLAPSED_WIDTH : width }}
@@ -260,6 +508,55 @@ export function Sidebar({
 }
 
 // =============================================================================
+// Mobile Chat Item Component
+// =============================================================================
+
+interface MobileChatItemProps {
+  chat: Chat
+  isActive: boolean
+  isDeleting: boolean
+  onSelect: () => void
+  onDelete: () => void
+}
+
+function MobileChatItem({ chat, isActive, isDeleting, onSelect, onDelete }: MobileChatItemProps) {
+  const [showActions, setShowActions] = useState(false)
+  const displayName = chat.displayName || "Untitled"
+
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-3 rounded-lg transition-colors touch-target px-3 py-3",
+        isDeleting
+          ? "opacity-50 cursor-not-allowed"
+          : "active:bg-accent",
+        !isDeleting && (isActive
+          ? "bg-accent text-accent-foreground"
+          : "hover:bg-accent/50 text-sidebar-foreground")
+      )}
+      onClick={isDeleting ? undefined : onSelect}
+    >
+      <div className="flex-1 min-w-0">
+        <div className="text-base truncate">{displayName}</div>
+      </div>
+
+      {/* Delete button */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation()
+          onDelete()
+        }}
+        disabled={isDeleting}
+        className="p-2 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors touch-target disabled:cursor-not-allowed"
+        aria-label="Delete chat"
+      >
+        <Trash2 className="h-4 w-4" />
+      </button>
+    </div>
+  )
+}
+
+// =============================================================================
 // Collapsed User Menu Component
 // =============================================================================
 
@@ -334,7 +631,7 @@ function CollapsedUserMenu({ user, onOpenSettings }: CollapsedUserMenuProps) {
 }
 
 // =============================================================================
-// Chat Item Component
+// Chat Item Component (Desktop)
 // =============================================================================
 
 interface ChatItemProps {
@@ -455,4 +752,3 @@ function getFirstMessagePreview(chat: Chat): string {
   }
   return "New chat"
 }
-
