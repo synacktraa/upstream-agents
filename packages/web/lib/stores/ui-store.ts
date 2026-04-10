@@ -19,6 +19,7 @@ export interface ContentPanelTab {
   filename?: string               // Display name
   port?: number                   // For server tabs
   url?: string                    // For server tabs
+  websocketUrl?: string           // For terminal tabs (WebSocket PTY URL)
 }
 
 interface UIState {
@@ -111,6 +112,7 @@ interface UIActions {
   removeServerTab: (port: number) => void
   closeTab: (tabId: string) => void
   setActiveTab: (tabId: string) => void
+  setTerminalWebsocketUrl: (tabId: string, websocketUrl: string) => void
   clearContentPanelTabs: () => void
 
   // Desktop rebase conflict
@@ -308,6 +310,14 @@ const storeCreator = (set: (partial: Partial<UIState & UIActions>) => void, get:
   },
 
   setActiveTab: (tabId: string) => set({ contentPanelActiveTabId: tabId }),
+
+  setTerminalWebsocketUrl: (tabId: string, websocketUrl: string) => {
+    const state = get()
+    const newTabs = state.contentPanelTabs.map(tab =>
+      tab.id === tabId ? { ...tab, websocketUrl } : tab
+    )
+    set({ contentPanelTabs: newTabs })
+  },
 
   clearContentPanelTabs: () => set({
     contentPanelTabs: [],

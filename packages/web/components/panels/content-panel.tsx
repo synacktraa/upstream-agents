@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef, KeyboardEvent } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
+import "xterm/css/xterm.css"
 import { cn } from "@/lib/shared/utils"
 import { useUIStore, ContentPanelTab } from "@/lib/stores/ui-store"
 import {
@@ -29,11 +30,6 @@ interface FileContent {
   modifiedAt: number
   size: number
   truncated?: boolean
-}
-
-interface TerminalLine {
-  type: "input" | "output" | "error"
-  content: string
 }
 
 interface ContentPanelProps {
@@ -418,184 +414,232 @@ function FileTabContent({
 }
 
 // ============================================================================
-// Terminal Tab Content Component
+// Terminal Tab Content Component (WebSocket PTY)
 // ============================================================================
 
 function TerminalTabContent({
   tab,
   sandboxId,
-  repoPath,
 }: {
   tab: ContentPanelTab
   sandboxId: string
   repoPath: string
 }) {
-  const [lines, setLines] = useState<TerminalLine[]>([])
-  const [currentInput, setCurrentInput] = useState("")
-  const [isExecuting, setIsExecuting] = useState(false)
-  const [commandHistory, setCommandHistory] = useState<string[]>([])
-  const [historyIndex, setHistoryIndex] = useState(-1)
-  const [currentDir, setCurrentDir] = useState(repoPath)
-  const inputRef = useRef<HTMLInputElement>(null)
-  const outputRef = useRef<HTMLDivElement>(null)
+  const { setTerminalWebsocketUrl } = useUIStore()
+  const [status, setStatus] = useState<"connecting" | "connected" | "error" | "disconnected">("connecting")
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const terminalRef = useRef<HTMLDivElement>(null)
+  const hasInitialized = useRef(false)
+  const socketRef = useRef<WebSocket | null>(null)
+  const terminalInstanceRef = useRef<any>(null)
+  const fitAddonRef = useRef<any>(null)
 
-  // Scroll to bottom when new lines are added
-  useEffect(() => {
-    if (outputRef.current) {
-      outputRef.current.scrollTop = outputRef.current.scrollHeight
+  // Setup terminal when we have a websocketUrl
+  const setupTerminal = useCallback(async (websocketUrl: string) => {
+    if (!terminalRef.current || terminalInstanceRef.current) return
+
+    try {
+      // Dynamically import xterm to avoid SSR issues
+      const [{ Terminal }, { FitAddon }, { WebLinksAddon }] = await Promise.all([
+        import("xterm"),
+        import("xterm-addon-fit"),
+        import("xterm-addon-web-links"),
+      ])
+
+      // Create terminal instance
+      const terminal = new Terminal({
+        cursorBlink: true,
+        fontSize: 13,
+        fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+        theme: {
+          background: "#1a1a1a",
+          foreground: "#e0e0e0",
+          cursor: "#ffffff",
+          selectionBackground: "rgba(255, 255, 255, 0.3)",
+        },
+        allowProposedApi: true,
+        scrollback: 10000,
+      })
+
+      terminalInstanceRef.current = terminal
+
+      // Load addons
+      const fitAddon = new FitAddon()
+      fitAddonRef.current = fitAddon
+      terminal.loadAddon(fitAddon)
+
+      const webLinksAddon = new WebLinksAddon()
+      terminal.loadAddon(webLinksAddon)
+
+      // Mount terminal
+      terminal.open(terminalRef.current)
+
+      // Initial fit
+      setTimeout(() => {
+        try {
+          fitAddon.fit()
+        } catch {
+          // Ignore fit errors
+        }
+      }, 0)
+
+      // Connect WebSocket
+      const socket = new WebSocket(websocketUrl)
+      socketRef.current = socket
+
+      socket.onopen = () => {
+        setStatus("connected")
+        // Send initial resize
+        const { cols, rows } = terminal
+        socket.send(JSON.stringify({ type: "resize", cols, rows }))
+      }
+
+      socket.onerror = () => {
+        setStatus("error")
+        setErrorMessage("Connection error")
+      }
+
+      socket.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data)
+          if (message.type === "data" && message.payload) {
+            terminal.write(message.payload)
+          }
+        } catch {
+          // Ignore parse errors
+        }
+      }
+
+      socket.onclose = () => {
+        setStatus("disconnected")
+      }
+
+      // Handle terminal input
+      terminal.onData((data: string) => {
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ type: "input", payload: data }))
+        }
+      })
+
+      // Handle resize
+      const resizeObserver = new ResizeObserver(() => {
+        try {
+          fitAddon.fit()
+          if (socket.readyState === WebSocket.OPEN) {
+            const { cols, rows } = terminal
+            socket.send(JSON.stringify({ type: "resize", cols, rows }))
+          }
+        } catch {
+          // Ignore resize errors
+        }
+      })
+      resizeObserver.observe(terminalRef.current)
+
+      return () => {
+        resizeObserver.disconnect()
+        socket.close()
+        terminal.dispose()
+      }
+    } catch (err) {
+      setStatus("error")
+      setErrorMessage("Failed to load terminal")
+      console.error("[Terminal] Error:", err)
     }
-  }, [lines])
-
-  // Focus input on mount
-  useEffect(() => {
-    inputRef.current?.focus()
   }, [])
 
-  const fetchPwd = useCallback(async () => {
-    try {
-      const res = await fetch("/api/sandbox/files", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sandboxId,
-          repoPath: currentDir,
-          action: "execute-command",
-          command: "pwd",
-        }),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        if (data.exitCode === 0 && data.output) {
-          setCurrentDir(data.output.trim())
-        }
-      }
-    } catch {
-      // Ignore pwd fetch errors
+  // Initialize terminal connection
+  useEffect(() => {
+    if (hasInitialized.current) return
+    hasInitialized.current = true
+
+    // If we already have a websocketUrl, use it
+    if (tab.websocketUrl) {
+      setupTerminal(tab.websocketUrl)
+      return
     }
-  }, [sandboxId, currentDir])
 
-  const executeCommand = useCallback(async (command: string) => {
-    if (!command.trim()) return
+    // Otherwise, set up the PTY server
+    const setupPtyServer = async () => {
+      try {
+        const res = await fetch("/api/sandbox/terminal", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sandboxId,
+            action: "setup",
+          }),
+        })
 
-    setLines(prev => [...prev, { type: "input", content: `$ ${command}` }])
-    setCommandHistory(prev => [...prev, command])
-    setHistoryIndex(-1)
-    setCurrentInput("")
-    setIsExecuting(true)
-
-    try {
-      const res = await fetch("/api/sandbox/files", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sandboxId,
-          repoPath: currentDir,
-          action: "execute-command",
-          command,
-        }),
-      })
-
-      if (res.ok) {
-        const data = await res.json()
-        const output = data.output || ""
-        const exitCode = data.exitCode
-
-        if (output.trim()) {
-          const outputLines = output.split("\n")
-          setLines(prev => [
-            ...prev,
-            ...outputLines.map((line: string) => ({
-              type: exitCode === 0 ? "output" : "error" as const,
-              content: line
-            }))
-          ])
+        if (res.ok) {
+          const data = await res.json()
+          if (data.status === "running" && data.websocketUrl) {
+            // Store the websocketUrl in the tab
+            setTerminalWebsocketUrl(tab.id, data.websocketUrl)
+            // Setup terminal with the URL
+            setupTerminal(data.websocketUrl)
+          } else {
+            setStatus("error")
+            setErrorMessage(data.error || "Failed to start terminal server")
+          }
+        } else {
+          const data = await res.json().catch(() => ({}))
+          setStatus("error")
+          setErrorMessage(data.error || "Failed to set up terminal")
         }
-
-        if (exitCode !== 0) {
-          setLines(prev => [...prev, { type: "error", content: `Exit code: ${exitCode}` }])
-        }
-
-        await fetchPwd()
-      } else {
-        setLines(prev => [...prev, { type: "error", content: "Failed to execute command" }])
+      } catch (err) {
+        setStatus("error")
+        setErrorMessage("Connection error")
+        console.error("[Terminal] Setup error:", err)
       }
-    } catch {
-      setLines(prev => [...prev, { type: "error", content: "Connection error" }])
-    } finally {
-      setIsExecuting(false)
-      inputRef.current?.focus()
     }
-  }, [sandboxId, currentDir, fetchPwd])
 
-  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && !isExecuting) {
-      executeCommand(currentInput)
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault()
-      if (commandHistory.length > 0) {
-        const newIndex = historyIndex < commandHistory.length - 1 ? historyIndex + 1 : historyIndex
-        setHistoryIndex(newIndex)
-        setCurrentInput(commandHistory[commandHistory.length - 1 - newIndex] || "")
+    setupPtyServer()
+
+    // Cleanup
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.close()
+        socketRef.current = null
       }
-    } else if (e.key === "ArrowDown") {
-      e.preventDefault()
-      if (historyIndex > 0) {
-        const newIndex = historyIndex - 1
-        setHistoryIndex(newIndex)
-        setCurrentInput(commandHistory[commandHistory.length - 1 - newIndex] || "")
-      } else if (historyIndex === 0) {
-        setHistoryIndex(-1)
-        setCurrentInput("")
+      if (terminalInstanceRef.current) {
+        terminalInstanceRef.current.dispose()
+        terminalInstanceRef.current = null
       }
-    } else if (e.key === "c" && e.ctrlKey) {
-      setCurrentInput("")
-      setLines(prev => [...prev, { type: "input", content: `$ ${currentInput}^C` }])
+      fitAddonRef.current = null
+      hasInitialized.current = false
     }
+  }, [tab.id, tab.websocketUrl, sandboxId, setTerminalWebsocketUrl, setupTerminal])
+
+  // Loading state
+  if (status === "connecting") {
+    return (
+      <div className="flex-1 bg-[#1a1a1a] flex items-center justify-center h-full">
+        <div className="flex flex-col items-center gap-2">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <span className="text-xs text-muted-foreground">Starting terminal...</span>
+        </div>
+      </div>
+    )
   }
 
-  const handleContainerClick = () => {
-    inputRef.current?.focus()
+  // Error state
+  if (status === "error") {
+    return (
+      <div className="flex-1 bg-[#1a1a1a] flex items-center justify-center h-full">
+        <div className="flex flex-col items-center gap-2">
+          <span className="text-sm text-red-500">Terminal Error</span>
+          <span className="text-xs text-muted-foreground">{errorMessage}</span>
+        </div>
+      </div>
+    )
   }
 
   return (
     <div
-      ref={outputRef}
-      onClick={handleContainerClick}
-      className="flex-1 bg-muted/50 dark:bg-[#1a1a1a] text-foreground dark:text-[#e0e0e0] font-mono text-xs p-2 overflow-auto cursor-text h-full"
-    >
-        {lines.map((line, index) => (
-          <div
-            key={index}
-            className={cn(
-              "whitespace-pre-wrap break-all leading-relaxed",
-              line.type === "input" && "text-blue-600 dark:text-[#7cb7ff]",
-              line.type === "error" && "text-red-600 dark:text-[#ff6b6b]",
-              line.type === "output" && "text-foreground dark:text-[#e0e0e0]"
-            )}
-          >
-            {line.content || "\u00A0"}
-          </div>
-        ))}
-
-        {/* Input Line */}
-        <div className="flex items-center text-blue-600 dark:text-[#7cb7ff]">
-          <span className="mr-1">$</span>
-          <input
-            ref={inputRef}
-            type="text"
-            value={currentInput}
-            onChange={(e) => setCurrentInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={isExecuting}
-            className="flex-1 bg-transparent outline-none text-foreground dark:text-[#e0e0e0] caret-blue-600 dark:caret-[#7cb7ff]"
-            spellCheck={false}
-            autoComplete="off"
-          />
-          {isExecuting && (
-            <Loader2 className="h-3 w-3 animate-spin text-muted-foreground ml-2" />
-          )}
-        </div>
-      </div>
+      ref={terminalRef}
+      className="flex-1 h-full w-full"
+      style={{ backgroundColor: "#1a1a1a", padding: "4px" }}
+    />
   )
 }
 
