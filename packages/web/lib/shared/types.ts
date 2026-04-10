@@ -116,7 +116,8 @@ export interface Message {
   toolCalls?: ToolCall[]
   contentBlocks?: ContentBlock[]  // Interleaved text and tool calls in order
   timestamp: string
-  commitHash?: string
+  commitHash?: string      // Short hash (7 chars) for display
+  commitFullHash?: string  // Full hash (40 chars) for git operations like branching
   commitMessage?: string
   contentLoaded?: boolean  // false = summary only (content not loaded), true/undefined = full content available
   pushError?: PushErrorInfo  // Present when push failed, allows retry with branch deletion
