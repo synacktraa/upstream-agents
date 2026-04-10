@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import "xterm/css/xterm.css"
 import { cn } from "@/lib/shared/utils"
 import { useUIStore, ContentPanelTab } from "@/lib/stores/ui-store"
+import { useTheme } from "next-themes"
 import {
   X,
   Globe,
@@ -417,6 +418,58 @@ function FileTabContent({
 // Terminal Tab Content Component (WebSocket PTY)
 // ============================================================================
 
+// Terminal theme configurations
+const TERMINAL_THEMES = {
+  dark: {
+    background: "#1a1a1a",
+    foreground: "#e0e0e0",
+    cursor: "#ffffff",
+    cursorAccent: "#1a1a1a",
+    selectionBackground: "rgba(255, 255, 255, 0.3)",
+    selectionForeground: "#ffffff",
+    black: "#000000",
+    red: "#ff6b6b",
+    green: "#69db7c",
+    yellow: "#ffd43b",
+    blue: "#74c0fc",
+    magenta: "#da77f2",
+    cyan: "#66d9e8",
+    white: "#e0e0e0",
+    brightBlack: "#666666",
+    brightRed: "#ff8787",
+    brightGreen: "#8ce99a",
+    brightYellow: "#ffe066",
+    brightBlue: "#91d0ff",
+    brightMagenta: "#e599f7",
+    brightCyan: "#99e9f2",
+    brightWhite: "#ffffff",
+  },
+  light: {
+    background: "#ffffff",
+    foreground: "#1a1a1a",
+    cursor: "#000000",
+    cursorAccent: "#ffffff",
+    selectionBackground: "rgba(0, 0, 0, 0.2)",
+    selectionForeground: "#000000",
+    black: "#000000",
+    red: "#c92a2a",
+    green: "#2f9e44",
+    yellow: "#e67700",
+    blue: "#1971c2",
+    magenta: "#9c36b5",
+    cyan: "#0c8599",
+    white: "#868e96",
+    brightBlack: "#495057",
+    brightRed: "#e03131",
+    brightGreen: "#37b24d",
+    brightYellow: "#f59f00",
+    brightBlue: "#1c7ed6",
+    brightMagenta: "#ae3ec9",
+    brightCyan: "#1098ad",
+    brightWhite: "#f8f9fa",
+  },
+}
+
 function TerminalTabContent({
   tab,
   sandboxId,
@@ -426,6 +479,7 @@ function TerminalTabContent({
   repoPath: string
 }) {
   const { setTerminalWebsocketUrl } = useUIStore()
+  const { resolvedTheme } = useTheme()
   const [status, setStatus] = useState<"connecting" | "connected" | "error" | "disconnected">("connecting")
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const terminalRef = useRef<HTMLDivElement>(null)
@@ -433,6 +487,17 @@ function TerminalTabContent({
   const socketRef = useRef<WebSocket | null>(null)
   const terminalInstanceRef = useRef<any>(null)
   const fitAddonRef = useRef<any>(null)
+
+  // Get current theme colors
+  const isDark = resolvedTheme === "dark"
+  const terminalTheme = isDark ? TERMINAL_THEMES.dark : TERMINAL_THEMES.light
+
+  // Update terminal theme when app theme changes
+  useEffect(() => {
+    if (terminalInstanceRef.current) {
+      terminalInstanceRef.current.options.theme = terminalTheme
+    }
+  }, [terminalTheme])
 
   // Setup terminal when we have a websocketUrl
   const setupTerminal = useCallback(async (websocketUrl: string) => {
@@ -446,17 +511,16 @@ function TerminalTabContent({
         import("xterm-addon-web-links"),
       ])
 
-      // Create terminal instance
+      // Create terminal instance with current theme
+      const currentTheme = document.documentElement.classList.contains("dark")
+        ? TERMINAL_THEMES.dark
+        : TERMINAL_THEMES.light
+
       const terminal = new Terminal({
         cursorBlink: true,
         fontSize: 13,
         fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-        theme: {
-          background: "#1a1a1a",
-          foreground: "#e0e0e0",
-          cursor: "#ffffff",
-          selectionBackground: "rgba(255, 255, 255, 0.3)",
-        },
+        theme: currentTheme,
         allowProposedApi: true,
         scrollback: 10000,
       })
@@ -613,7 +677,10 @@ function TerminalTabContent({
   // Loading state
   if (status === "connecting") {
     return (
-      <div className="flex-1 bg-[#1a1a1a] flex items-center justify-center h-full">
+      <div
+        className="flex-1 flex items-center justify-center h-full"
+        style={{ backgroundColor: terminalTheme.background }}
+      >
         <div className="flex flex-col items-center gap-2">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           <span className="text-xs text-muted-foreground">Starting terminal...</span>
@@ -625,7 +692,10 @@ function TerminalTabContent({
   // Error state
   if (status === "error") {
     return (
-      <div className="flex-1 bg-[#1a1a1a] flex items-center justify-center h-full">
+      <div
+        className="flex-1 flex items-center justify-center h-full"
+        style={{ backgroundColor: terminalTheme.background }}
+      >
         <div className="flex flex-col items-center gap-2">
           <span className="text-sm text-red-500">Terminal Error</span>
           <span className="text-xs text-muted-foreground">{errorMessage}</span>
@@ -638,7 +708,7 @@ function TerminalTabContent({
     <div
       ref={terminalRef}
       className="flex-1 h-full w-full"
-      style={{ backgroundColor: "#1a1a1a", padding: "4px" }}
+      style={{ backgroundColor: terminalTheme.background, padding: "4px" }}
     />
   )
 }
