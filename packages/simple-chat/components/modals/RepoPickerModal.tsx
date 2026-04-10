@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { useSession } from "next-auth/react"
 import * as Dialog from "@radix-ui/react-dialog"
 import { X, Search, GitBranch, Loader2, Lock, Globe, ChevronDown, ChevronLeft } from "lucide-react"
@@ -17,6 +17,8 @@ interface RepoPickerModalProps {
 
 type Step = "repo" | "branch"
 
+const SWIPE_THRESHOLD = 100 // Minimum swipe distance to dismiss
+
 export function RepoPickerModal({ open, onClose, onSelect, isMobile = false }: RepoPickerModalProps) {
   const { data: session } = useSession()
 
@@ -30,6 +32,13 @@ export function RepoPickerModal({ open, onClose, onSelect, isMobile = false }: R
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
   const [branchSearch, setBranchSearch] = useState("")
+
+  // Swipe gesture state
+  const contentRef = useRef<HTMLDivElement>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const [dragY, setDragY] = useState(0)
+  const [startY, setStartY] = useState(0)
+  const [startTime, setStartTime] = useState(0)
 
   // Fetch repos on open
   useEffect(() => {
@@ -54,8 +63,51 @@ export function RepoPickerModal({ open, onClose, onSelect, isMobile = false }: R
       setBranchSearch("")
       setShowBranchDropdown(false)
       setError(null)
+      setDragY(0)
     }
   }, [open])
+
+  // Swipe gesture handlers
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (!isMobile) return
+
+    // Only enable swipe when at top of scroll
+    const content = contentRef.current
+    if (content && content.scrollTop > 0) return
+
+    setIsDragging(true)
+    setStartY(e.touches[0].clientY)
+    setStartTime(Date.now())
+    setDragY(0)
+  }, [isMobile])
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!isDragging || !isMobile) return
+
+    const currentY = e.touches[0].clientY
+    const diff = currentY - startY
+
+    // Only allow dragging down
+    if (diff > 0) {
+      setDragY(diff)
+    }
+  }, [isDragging, startY, isMobile])
+
+  const handleTouchEnd = useCallback(() => {
+    if (!isDragging || !isMobile) return
+
+    setIsDragging(false)
+
+    const duration = Date.now() - startTime
+    const velocity = Math.abs(dragY) / duration
+
+    // Close if dragged far enough or fast enough
+    if (dragY > SWIPE_THRESHOLD || velocity > 0.5) {
+      onClose()
+    }
+
+    setDragY(0)
+  }, [isDragging, dragY, startTime, onClose, isMobile])
 
   // Fetch branches when repo selected
   const handleSelectRepo = async (repo: GitHubRepo) => {
@@ -108,19 +160,36 @@ export function RepoPickerModal({ open, onClose, onSelect, isMobile = false }: R
     <Dialog.Root open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className={cn(
-          "fixed inset-0 z-50",
-          isMobile ? "bg-background" : "bg-black/50"
+          "fixed inset-0 z-50 transition-opacity duration-300",
+          isMobile ? "bg-black/50" : "bg-black/50",
+          open ? "opacity-100" : "opacity-0"
         )} />
-        <Dialog.Content className={cn(
-          "fixed z-50 bg-popover overflow-hidden flex flex-col",
-          isMobile
-            ? "inset-0 rounded-none"
-            : "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md border border-border rounded-lg shadow-lg"
-        )}>
+        <Dialog.Content
+          className={cn(
+            "fixed z-50 bg-popover overflow-hidden flex flex-col",
+            isMobile
+              ? "inset-x-0 bottom-0 top-0 rounded-none"
+              : "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md border border-border rounded-lg shadow-lg",
+            !isDragging && isMobile && "transition-transform duration-300"
+          )}
+          style={isMobile ? {
+            transform: `translateY(${dragY}px)`,
+          } : undefined}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
+          {/* Drag handle for mobile */}
+          {isMobile && (
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
+            </div>
+          )}
+
           {/* Header */}
           <div className={cn(
             "flex items-center justify-between border-b border-border",
-            isMobile ? "px-4 py-4 pt-safe" : "px-4 py-3"
+            isMobile ? "px-4 py-3" : "px-4 py-3"
           )}>
             <Dialog.Title className={cn(
               "font-semibold",
@@ -187,10 +256,13 @@ export function RepoPickerModal({ open, onClose, onSelect, isMobile = false }: R
           )}
 
           {/* Content */}
-          <div className={cn(
-            "flex-1 overflow-y-auto mobile-scroll",
-            isMobile ? "max-h-none" : "max-h-80"
-          )}>
+          <div
+            ref={contentRef}
+            className={cn(
+              "flex-1 overflow-y-auto mobile-scroll",
+              isMobile ? "max-h-none" : "max-h-80"
+            )}
+          >
             {error && (
               <div className={cn(
                 "text-destructive text-center",

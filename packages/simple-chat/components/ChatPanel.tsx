@@ -8,6 +8,7 @@ import { NEW_REPOSITORY, agentModels, agentLabels, getModelLabel, hasCredentials
 import { getCredentialFlags } from "@/lib/storage"
 import { MessageBubble } from "./MessageBubble"
 import { AgentIcon } from "./icons/agent-icons"
+import { MobileSelect } from "./ui/MobileBottomSheet"
 
 import type { HighlightKey } from "./modals/SettingsModal"
 
@@ -27,6 +28,9 @@ export function ChatPanel({ chat, settings, onSendMessage, onStopAgent, onChange
   const [userHasScrolledUp, setUserHasScrolledUp] = useState(false)
   const [showAgentDropdown, setShowAgentDropdown] = useState(false)
   const [showModelDropdown, setShowModelDropdown] = useState(false)
+  // Mobile bottom sheet states
+  const [showAgentSheet, setShowAgentSheet] = useState(false)
+  const [showModelSheet, setShowModelSheet] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
@@ -81,8 +85,9 @@ export function ChatPanel({ chat, settings, onSendMessage, onStopAgent, onChange
     }
   }, [input, isMobile])
 
-  // Close dropdowns when clicking outside
+  // Close dropdowns when clicking outside (desktop only)
   useEffect(() => {
+    if (isMobile) return
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement
       if (!target.closest('[data-dropdown]')) {
@@ -92,7 +97,7 @@ export function ChatPanel({ chat, settings, onSendMessage, onStopAgent, onChange
     }
     document.addEventListener('click', handleClickOutside)
     return () => document.removeEventListener('click', handleClickOutside)
-  }, [])
+  }, [isMobile])
 
   const handleSend = () => {
     if (!canSend) return
@@ -111,6 +116,7 @@ export function ChatPanel({ chat, settings, onSendMessage, onStopAgent, onChange
 
   const handleAgentChange = (agent: Agent) => {
     setShowAgentDropdown(false)
+    setShowAgentSheet(false)
     // Update chat's agent if possible
     if (chat && onUpdateChat) {
       const models = agentModels[agent] ?? []
@@ -131,6 +137,7 @@ export function ChatPanel({ chat, settings, onSendMessage, onStopAgent, onChange
 
   const handleModelChange = (model: string) => {
     setShowModelDropdown(false)
+    setShowModelSheet(false)
     if (chat && onUpdateChat) {
       onUpdateChat({ model })
 
@@ -162,6 +169,25 @@ export function ChatPanel({ chat, settings, onSendMessage, onStopAgent, onChange
   const isNewChat = chat.messages.length === 0
 
   const agents: Agent[] = ["claude-code", "opencode", "codex", "gemini", "goose", "pi"]
+
+  // Prepare agent options for mobile bottom sheet
+  const agentOptions = agents.map(agent => ({
+    value: agent,
+    label: agentLabels[agent],
+    icon: <AgentIcon agent={agent} className="h-5 w-5" />,
+  }))
+
+  // Prepare model options for mobile bottom sheet
+  const modelOptions = availableModels.map((model: ModelOption) => {
+    const modelHasCredentials = hasCredentialsForModel(model, credentialFlags, currentAgent)
+    const needsKey = model.requiresKey !== "none" && !modelHasCredentials
+    return {
+      value: model.value,
+      label: model.label,
+      description: needsKey ? "Requires API key" : undefined,
+      icon: needsKey ? <Key className="h-5 w-5 text-red-500" /> : undefined,
+    }
+  })
 
   // Chat input component - responsive design
   const chatInput = (
@@ -269,92 +295,131 @@ export function ChatPanel({ chat, settings, onSendMessage, onStopAgent, onChange
           <div className="flex-1" />
 
           {/* Agent selector */}
-          <div className="relative" data-dropdown>
+          {isMobile ? (
+            // Mobile: Use bottom sheet
             <button
-              onClick={(e) => {
-                e.stopPropagation()
-                setShowAgentDropdown(!showAgentDropdown)
-                setShowModelDropdown(false)
-              }}
-              className={cn(
-                "flex items-center gap-1 text-muted-foreground hover:text-foreground active:text-foreground transition-colors",
-                isMobile ? "text-sm py-1 px-2 rounded-md hover:bg-accent/50" : "text-xs"
-              )}
+              onClick={() => setShowAgentSheet(true)}
+              className="flex items-center gap-1 text-sm py-1 px-2 rounded-md hover:bg-accent/50 text-muted-foreground hover:text-foreground active:text-foreground transition-colors"
             >
-              <AgentIcon agent={currentAgent} className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
+              <AgentIcon agent={currentAgent} className="h-4 w-4" />
               {agentLabels[currentAgent]}
-              <ChevronDown className={cn(isMobile ? "h-4 w-4" : "h-3 w-3")} />
+              <ChevronDown className="h-4 w-4" />
             </button>
-            {showAgentDropdown && (
-              <div className={cn(
-                "absolute bottom-full right-0 mb-1 bg-popover border border-border rounded-md shadow-lg py-1 z-50",
-                isMobile ? "w-48" : "w-40"
-              )}>
-                {agents.map((agent) => (
-                  <button
-                    key={agent}
-                    onClick={() => handleAgentChange(agent)}
-                    className={cn(
-                      "w-full text-left hover:bg-accent active:bg-accent transition-colors flex items-center gap-2",
-                      isMobile ? "px-4 py-3 text-base" : "px-3 py-1.5 text-xs",
-                      agent === currentAgent && "bg-accent"
-                    )}
-                  >
-                    <AgentIcon agent={agent} className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
-                    {agentLabels[agent]}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          ) : (
+            // Desktop: Use dropdown
+            <div className="relative" data-dropdown>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setShowAgentDropdown(!showAgentDropdown)
+                  setShowModelDropdown(false)
+                }}
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground active:text-foreground transition-colors"
+              >
+                <AgentIcon agent={currentAgent} className="h-3.5 w-3.5" />
+                {agentLabels[currentAgent]}
+                <ChevronDown className="h-3 w-3" />
+              </button>
+              {showAgentDropdown && (
+                <div className="absolute bottom-full right-0 mb-1 bg-popover border border-border rounded-md shadow-lg py-1 z-50 w-40">
+                  {agents.map((agent) => (
+                    <button
+                      key={agent}
+                      onClick={() => handleAgentChange(agent)}
+                      className={cn(
+                        "w-full text-left hover:bg-accent active:bg-accent transition-colors flex items-center gap-2 px-3 py-1.5 text-xs",
+                        agent === currentAgent && "bg-accent"
+                      )}
+                    >
+                      <AgentIcon agent={agent} className="h-3.5 w-3.5" />
+                      {agentLabels[agent]}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Model selector */}
-          <div className="relative" data-dropdown>
+          {isMobile ? (
+            // Mobile: Use bottom sheet
             <button
-              onClick={(e) => {
-                e.stopPropagation()
-                setShowModelDropdown(!showModelDropdown)
-                setShowAgentDropdown(false)
-              }}
+              onClick={() => setShowModelSheet(true)}
               className={cn(
-                "flex items-center gap-1 transition-colors",
-                isMobile ? "text-sm py-1 px-2 rounded-md hover:bg-accent/50" : "text-xs",
+                "flex items-center gap-1 text-sm py-1 px-2 rounded-md hover:bg-accent/50 transition-colors",
                 !hasRequiredCredentials ? "text-red-500 hover:text-red-600" : "text-muted-foreground hover:text-foreground"
               )}
             >
-              {!hasRequiredCredentials && <Key className={cn(isMobile ? "h-4 w-4" : "h-3 w-3")} />}
+              {!hasRequiredCredentials && <Key className="h-4 w-4" />}
               {getModelLabel(currentAgent, currentModel)}
-              <ChevronDown className={cn(isMobile ? "h-4 w-4" : "h-3 w-3")} />
+              <ChevronDown className="h-4 w-4" />
             </button>
-            {showModelDropdown && (
-              <div className={cn(
-                "absolute bottom-full right-0 mb-1 max-h-64 overflow-y-auto bg-popover border border-border rounded-md shadow-lg py-1 z-50",
-                isMobile ? "w-60" : "w-52"
-              )}>
-                {availableModels.map((model: ModelOption) => {
-                  const modelHasCredentials = hasCredentialsForModel(model, credentialFlags, currentAgent)
-                  const needsKey = model.requiresKey !== "none" && !modelHasCredentials
-                  return (
-                    <button
-                      key={model.value}
-                      onClick={() => handleModelChange(model.value)}
-                      className={cn(
-                        "w-full text-left hover:bg-accent active:bg-accent transition-colors flex items-center justify-between",
-                        isMobile ? "px-4 py-3 text-base" : "px-3 py-1.5 text-xs",
-                        model.value === currentModel && "bg-accent"
-                      )}
-                    >
-                      <span>{model.label}</span>
-                      {needsKey && <Key className={cn(isMobile ? "h-4 w-4" : "h-3 w-3", "text-red-500 shrink-0")} />}
-                    </button>
-                  )
-                })}
-              </div>
-            )}
-          </div>
+          ) : (
+            // Desktop: Use dropdown
+            <div className="relative" data-dropdown>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setShowModelDropdown(!showModelDropdown)
+                  setShowAgentDropdown(false)
+                }}
+                className={cn(
+                  "flex items-center gap-1 text-xs transition-colors",
+                  !hasRequiredCredentials ? "text-red-500 hover:text-red-600" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {!hasRequiredCredentials && <Key className="h-3 w-3" />}
+                {getModelLabel(currentAgent, currentModel)}
+                <ChevronDown className="h-3 w-3" />
+              </button>
+              {showModelDropdown && (
+                <div className="absolute bottom-full right-0 mb-1 max-h-64 overflow-y-auto bg-popover border border-border rounded-md shadow-lg py-1 z-50 w-52">
+                  {availableModels.map((model: ModelOption) => {
+                    const modelHasCredentials = hasCredentialsForModel(model, credentialFlags, currentAgent)
+                    const needsKey = model.requiresKey !== "none" && !modelHasCredentials
+                    return (
+                      <button
+                        key={model.value}
+                        onClick={() => handleModelChange(model.value)}
+                        className={cn(
+                          "w-full text-left hover:bg-accent active:bg-accent transition-colors flex items-center justify-between px-3 py-1.5 text-xs",
+                          model.value === currentModel && "bg-accent"
+                        )}
+                      >
+                        <span>{model.label}</span>
+                        {needsKey && <Key className="h-3 w-3 text-red-500 shrink-0" />}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
         </div>
       </div>
+
+      {/* Mobile Bottom Sheets */}
+      {isMobile && (
+        <>
+          <MobileSelect
+            open={showAgentSheet}
+            onClose={() => setShowAgentSheet(false)}
+            title="Select Agent"
+            options={agentOptions}
+            value={currentAgent}
+            onChange={(value) => handleAgentChange(value as Agent)}
+          />
+          <MobileSelect
+            open={showModelSheet}
+            onClose={() => setShowModelSheet(false)}
+            title="Select Model"
+            options={modelOptions}
+            value={currentModel}
+            onChange={handleModelChange}
+          />
+        </>
+      )}
     </div>
   )
 
