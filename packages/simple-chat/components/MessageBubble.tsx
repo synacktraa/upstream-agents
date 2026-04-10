@@ -10,21 +10,28 @@ import remarkGfm from "remark-gfm"
 interface MessageBubbleProps {
   message: Message
   isStreaming?: boolean
+  isMobile?: boolean
 }
 
-export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
+export function MessageBubble({ message, isStreaming, isMobile = false }: MessageBubbleProps) {
   const isUser = message.role === "user"
 
   return (
     <div className={cn("flex", isUser && "justify-end")}>
       {/* Content */}
-      <div className={cn("max-w-[90%]", isUser && "text-right")}>
+      <div className={cn(
+        isUser && "text-right",
+        isMobile ? "max-w-[95%]" : "max-w-[90%]"
+      )}>
         {isUser ? (
-          <div className="inline-block rounded-lg px-4 py-2 text-sm bg-muted text-foreground">
+          <div className={cn(
+            "inline-block rounded-lg bg-muted text-foreground",
+            isMobile ? "px-3 py-2 text-base" : "px-4 py-2 text-sm"
+          )}>
             <p className="whitespace-pre-wrap">{message.content}</p>
           </div>
         ) : (
-          <AssistantContent message={message} isStreaming={isStreaming} />
+          <AssistantContent message={message} isStreaming={isStreaming} isMobile={isMobile} />
         )}
       </div>
     </div>
@@ -35,19 +42,22 @@ export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
 // Assistant Content (with tool calls)
 // =============================================================================
 
-function MarkdownContent({ text }: { text: string }) {
+function MarkdownContent({ text, isMobile = false }: { text: string; isMobile?: boolean }) {
   return (
-    <div className="prose prose-sm dark:prose-invert max-w-none prose-p:leading-relaxed prose-li:leading-relaxed">
+    <div className={cn(
+      "prose dark:prose-invert max-w-none prose-p:leading-relaxed prose-li:leading-relaxed",
+      isMobile ? "prose-base" : "prose-sm"
+    )}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
           a: ({ children, ...props }) => (
-            <a {...props} target="_blank" rel="noopener noreferrer">
+            <a {...props} target="_blank" rel="noopener noreferrer" className="break-words">
               {children}
             </a>
           ),
           table: ({ children }) => (
-            <div className="overflow-x-auto my-2">
+            <div className="overflow-x-auto my-2 -mx-2 px-2">
               <table className="w-full border-collapse text-sm">{children}</table>
             </div>
           ),
@@ -59,6 +69,28 @@ function MarkdownContent({ text }: { text: string }) {
           td: ({ children }) => (
             <td className="border border-border px-3 py-1.5">{children}</td>
           ),
+          pre: ({ children }) => (
+            <pre className={cn(
+              "overflow-x-auto",
+              isMobile && "-mx-2 px-2 rounded-lg"
+            )}>
+              {children}
+            </pre>
+          ),
+          code: ({ children, className, ...props }) => {
+            const isInline = !className
+            return (
+              <code
+                {...props}
+                className={cn(
+                  className,
+                  isInline && "break-words"
+                )}
+              >
+                {children}
+              </code>
+            )
+          },
         }}
       >
         {text}
@@ -67,7 +99,7 @@ function MarkdownContent({ text }: { text: string }) {
   )
 }
 
-function AssistantContent({ message, isStreaming }: { message: Message; isStreaming?: boolean }) {
+function AssistantContent({ message, isStreaming, isMobile = false }: { message: Message; isStreaming?: boolean; isMobile?: boolean }) {
   const hasContent = message.content && message.content.trim().length > 0
   const hasToolCalls = message.toolCalls && message.toolCalls.length > 0
   const hasBlocks = message.contentBlocks && message.contentBlocks.length > 0
@@ -82,18 +114,21 @@ function AssistantContent({ message, isStreaming }: { message: Message; isStream
   }
 
   return (
-    <div className="space-y-3 text-sm leading-relaxed">
+    <div className={cn(
+      "leading-relaxed",
+      isMobile ? "space-y-4 text-base" : "space-y-3 text-sm"
+    )}>
       {hasBlocks ? (
         // Render content blocks in order (text and tool calls interleaved)
         message.contentBlocks!.map((block, index) => {
           if (block.type === "text" && block.text.trim()) {
-            return <MarkdownContent key={index} text={block.text} />
+            return <MarkdownContent key={index} text={block.text} isMobile={isMobile} />
           }
           if (block.type === "tool_calls") {
             return (
               <div key={index} className="space-y-2">
                 {block.toolCalls.map((tool, toolIndex) => (
-                  <ToolCallItem key={toolIndex} tool={tool} />
+                  <ToolCallItem key={toolIndex} tool={tool} isMobile={isMobile} />
                 ))}
               </div>
             )
@@ -103,11 +138,11 @@ function AssistantContent({ message, isStreaming }: { message: Message; isStream
       ) : (
         // Fallback: render content then tool calls (for messages without contentBlocks)
         <>
-          {hasContent && <MarkdownContent text={message.content} />}
+          {hasContent && <MarkdownContent text={message.content} isMobile={isMobile} />}
           {hasToolCalls && (
             <div className="space-y-2">
               {message.toolCalls!.map((tool, index) => (
-                <ToolCallItem key={index} tool={tool} />
+                <ToolCallItem key={index} tool={tool} isMobile={isMobile} />
               ))}
             </div>
           )}
@@ -135,9 +170,10 @@ interface ToolCallItemProps {
     fullSummary?: string
     output?: string
   }
+  isMobile?: boolean
 }
 
-function ToolCallItem({ tool }: ToolCallItemProps) {
+function ToolCallItem({ tool, isMobile = false }: ToolCallItemProps) {
   const [expanded, setExpanded] = useState(false)
 
   const Icon = getToolIcon(tool.tool)
@@ -148,26 +184,42 @@ function ToolCallItem({ tool }: ToolCallItemProps) {
       <button
         onClick={() => hasOutput && setExpanded(!expanded)}
         className={cn(
-          "flex items-center gap-2 w-full px-2 py-1 text-xs text-left",
-          hasOutput && "hover:bg-accent/50 cursor-pointer"
+          "flex items-center gap-2 w-full text-left",
+          isMobile ? "px-3 py-2.5 text-sm" : "px-2 py-1 text-xs",
+          hasOutput && "hover:bg-accent/50 active:bg-accent cursor-pointer touch-target"
         )}
       >
-        <Icon className="h-3 w-3 text-muted-foreground shrink-0" />
+        <Icon className={cn(
+          "text-muted-foreground shrink-0",
+          isMobile ? "h-4 w-4" : "h-3 w-3"
+        )} />
         <span className="flex-1 truncate font-mono">
           {tool.summary}
         </span>
         {hasOutput && (
           expanded ? (
-            <ChevronDown className="h-3 w-3 text-muted-foreground" />
+            <ChevronDown className={cn(
+              "text-muted-foreground shrink-0",
+              isMobile ? "h-4 w-4" : "h-3 w-3"
+            )} />
           ) : (
-            <ChevronRight className="h-3 w-3 text-muted-foreground" />
+            <ChevronRight className={cn(
+              "text-muted-foreground shrink-0",
+              isMobile ? "h-4 w-4" : "h-3 w-3"
+            )} />
           )
         )}
       </button>
 
       {expanded && tool.output && (
-        <div className="px-2 py-1 border-t border-border/50 bg-muted/30">
-          <pre className="text-xs font-mono whitespace-pre-wrap overflow-x-auto max-h-48">
+        <div className={cn(
+          "border-t border-border/50 bg-muted/30",
+          isMobile ? "px-3 py-2" : "px-2 py-1"
+        )}>
+          <pre className={cn(
+            "font-mono whitespace-pre-wrap overflow-x-auto mobile-scroll",
+            isMobile ? "text-sm max-h-64" : "text-xs max-h-48"
+          )}>
             {tool.output}
           </pre>
         </div>

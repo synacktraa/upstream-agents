@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { useSession } from "next-auth/react"
 import * as Dialog from "@radix-ui/react-dialog"
-import { X, Search, GitBranch, Loader2, Lock, Globe, ChevronDown } from "lucide-react"
+import { X, Search, GitBranch, Loader2, Lock, Globe, ChevronDown, ChevronLeft } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { fetchRepos, fetchBranches } from "@/lib/github"
 import type { GitHubRepo, GitHubBranch } from "@/lib/types"
@@ -12,11 +12,14 @@ interface RepoPickerModalProps {
   open: boolean
   onClose: () => void
   onSelect: (repo: string, branch: string) => void
+  isMobile?: boolean
 }
 
 type Step = "repo" | "branch"
 
-export function RepoPickerModal({ open, onClose, onSelect }: RepoPickerModalProps) {
+const SWIPE_THRESHOLD = 100 // Minimum swipe distance to dismiss
+
+export function RepoPickerModal({ open, onClose, onSelect, isMobile = false }: RepoPickerModalProps) {
   const { data: session } = useSession()
 
   const [step, setStep] = useState<Step>("repo")
@@ -29,6 +32,13 @@ export function RepoPickerModal({ open, onClose, onSelect }: RepoPickerModalProp
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
   const [branchSearch, setBranchSearch] = useState("")
+
+  // Swipe gesture state
+  const contentRef = useRef<HTMLDivElement>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const [dragY, setDragY] = useState(0)
+  const [startY, setStartY] = useState(0)
+  const [startTime, setStartTime] = useState(0)
 
   // Fetch repos on open
   useEffect(() => {
@@ -53,8 +63,51 @@ export function RepoPickerModal({ open, onClose, onSelect }: RepoPickerModalProp
       setBranchSearch("")
       setShowBranchDropdown(false)
       setError(null)
+      setDragY(0)
     }
   }, [open])
+
+  // Swipe gesture handlers
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (!isMobile) return
+
+    // Only enable swipe when at top of scroll
+    const content = contentRef.current
+    if (content && content.scrollTop > 0) return
+
+    setIsDragging(true)
+    setStartY(e.touches[0].clientY)
+    setStartTime(Date.now())
+    setDragY(0)
+  }, [isMobile])
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!isDragging || !isMobile) return
+
+    const currentY = e.touches[0].clientY
+    const diff = currentY - startY
+
+    // Only allow dragging down
+    if (diff > 0) {
+      setDragY(diff)
+    }
+  }, [isDragging, startY, isMobile])
+
+  const handleTouchEnd = useCallback(() => {
+    if (!isDragging || !isMobile) return
+
+    setIsDragging(false)
+
+    const duration = Date.now() - startTime
+    const velocity = Math.abs(dragY) / duration
+
+    // Close if dragged far enough or fast enough
+    if (dragY > SWIPE_THRESHOLD || velocity > 0.5) {
+      onClose()
+    }
+
+    setDragY(0)
+  }, [isDragging, dragY, startTime, onClose, isMobile])
 
   // Fetch branches when repo selected
   const handleSelectRepo = async (repo: GitHubRepo) => {
@@ -106,65 +159,138 @@ export function RepoPickerModal({ open, onClose, onSelect }: RepoPickerModalProp
   return (
     <Dialog.Root open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 bg-black/50 z-50" />
-        <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-popover border border-border rounded-lg shadow-lg z-50 overflow-visible">
+        <Dialog.Overlay className={cn(
+          "fixed inset-0 z-50 transition-opacity duration-300",
+          isMobile ? "bg-black/50" : "bg-black/50",
+          open ? "opacity-100" : "opacity-0"
+        )} />
+        <Dialog.Content
+          className={cn(
+            "fixed z-50 bg-popover overflow-hidden flex flex-col",
+            isMobile
+              ? "inset-x-0 bottom-0 top-0 rounded-none"
+              : "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md border border-border rounded-lg shadow-lg",
+            !isDragging && isMobile && "transition-transform duration-300"
+          )}
+          style={isMobile ? {
+            transform: `translateY(${dragY}px)`,
+          } : undefined}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
+          {/* Drag handle for mobile */}
+          {isMobile && (
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
+            </div>
+          )}
+
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-            <Dialog.Title className="text-sm font-semibold">
+          <div className={cn(
+            "flex items-center justify-between border-b border-border",
+            isMobile ? "px-4 py-3" : "px-4 py-3"
+          )}>
+            <Dialog.Title className={cn(
+              "font-semibold",
+              isMobile ? "text-lg" : "text-sm"
+            )}>
               {step === "repo" ? "Select Repository" : "Select Branch"}
             </Dialog.Title>
-            <Dialog.Close className="p-1 rounded hover:bg-accent transition-colors">
-              <X className="h-4 w-4" />
+            <Dialog.Close className={cn(
+              "rounded-lg hover:bg-accent active:bg-accent transition-colors touch-target",
+              isMobile ? "p-2 -mr-2" : "p-1"
+            )}>
+              <X className={cn(isMobile ? "h-5 w-5" : "h-4 w-4")} />
             </Dialog.Close>
           </div>
 
           {/* Breadcrumb for branch step */}
           {step === "branch" && selectedRepo && (
-            <div className="px-4 py-2 border-b border-border bg-muted/30">
+            <div className={cn(
+              "border-b border-border bg-muted/30",
+              isMobile ? "px-4 py-3" : "px-4 py-2"
+            )}>
               <button
                 onClick={() => setStep("repo")}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                className={cn(
+                  "flex items-center gap-1 text-muted-foreground hover:text-foreground active:text-foreground transition-colors",
+                  isMobile ? "text-sm" : "text-xs"
+                )}
               >
-                ← Back to repositories
+                <ChevronLeft className={cn(isMobile ? "h-4 w-4" : "h-3 w-3")} />
+                Back to repositories
               </button>
-              <div className="text-sm font-medium mt-1">{selectedRepo.full_name}</div>
+              <div className={cn(
+                "font-medium mt-1",
+                isMobile ? "text-base" : "text-sm"
+              )}>
+                {selectedRepo.full_name}
+              </div>
             </div>
           )}
 
           {/* Search - only for repo step */}
           {step === "repo" && (
-            <div className="p-4 border-b border-border">
+            <div className={cn(
+              "border-b border-border",
+              isMobile ? "p-4" : "p-4"
+            )}>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Search className={cn(
+                  "absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground",
+                  isMobile ? "h-5 w-5" : "h-4 w-4"
+                )} />
                 <input
                   type="text"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search repositories..."
-                  className="w-full pl-9 pr-4 py-2 text-sm bg-input border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+                  className={cn(
+                    "w-full bg-input border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring",
+                    isMobile ? "pl-11 pr-4 py-3 text-base" : "pl-9 pr-4 py-2 text-sm"
+                  )}
                 />
               </div>
             </div>
           )}
 
           {/* Content */}
-          <div className="max-h-80 overflow-y-auto">
+          <div
+            ref={contentRef}
+            className={cn(
+              "flex-1 overflow-y-auto mobile-scroll",
+              isMobile ? "max-h-none" : "max-h-80"
+            )}
+          >
             {error && (
-              <div className="p-4 text-sm text-destructive text-center">
+              <div className={cn(
+                "text-destructive text-center",
+                isMobile ? "p-6 text-base" : "p-4 text-sm"
+              )}>
                 {error}
               </div>
             )}
 
             {loading && (
-              <div className="p-8 flex items-center justify-center">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <div className={cn(
+                "flex items-center justify-center",
+                isMobile ? "p-12" : "p-8"
+              )}>
+                <Loader2 className={cn(
+                  "animate-spin text-muted-foreground",
+                  isMobile ? "h-8 w-8" : "h-6 w-6"
+                )} />
               </div>
             )}
 
             {!loading && !error && step === "repo" && (
-              <div className="p-2">
+              <div className={cn(isMobile ? "p-3" : "p-2")}>
                 {filteredRepos.length === 0 ? (
-                  <div className="p-4 text-sm text-muted-foreground text-center">
+                  <div className={cn(
+                    "text-muted-foreground text-center",
+                    isMobile ? "p-6 text-base" : "p-4 text-sm"
+                  )}>
                     No repositories found
                   </div>
                 ) : (
@@ -172,18 +298,33 @@ export function RepoPickerModal({ open, onClose, onSelect }: RepoPickerModalProp
                     <button
                       key={repo.id}
                       onClick={() => handleSelectRepo(repo)}
-                      className="flex items-center gap-3 w-full px-3 py-2 rounded-md hover:bg-accent transition-colors text-left"
+                      className={cn(
+                        "flex items-center gap-3 w-full rounded-lg hover:bg-accent active:bg-accent transition-colors text-left touch-target",
+                        isMobile ? "px-4 py-4" : "px-3 py-2"
+                      )}
                     >
                       {repo.private ? (
-                        <Lock className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <Lock className={cn(
+                          "text-muted-foreground shrink-0",
+                          isMobile ? "h-5 w-5" : "h-4 w-4"
+                        )} />
                       ) : (
-                        <Globe className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <Globe className={cn(
+                          "text-muted-foreground shrink-0",
+                          isMobile ? "h-5 w-5" : "h-4 w-4"
+                        )} />
                       )}
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium truncate">
+                        <div className={cn(
+                          "font-medium truncate",
+                          isMobile ? "text-base" : "text-sm"
+                        )}>
                           {repo.full_name}
                         </div>
-                        <div className="text-xs text-muted-foreground">
+                        <div className={cn(
+                          "text-muted-foreground",
+                          isMobile ? "text-sm" : "text-xs"
+                        )}>
                           Default: {repo.default_branch}
                         </div>
                       </div>
@@ -194,25 +335,45 @@ export function RepoPickerModal({ open, onClose, onSelect }: RepoPickerModalProp
             )}
 
             {!loading && !error && step === "branch" && (
-              <div className="p-4">
-                <div className="mb-4">
-                  <label className="block text-sm font-medium mb-2">Base Branch</label>
+              <div className={cn(isMobile ? "p-4" : "p-4")}>
+                <div className={cn(isMobile ? "mb-6" : "mb-4")}>
+                  <label className={cn(
+                    "block font-medium mb-2",
+                    isMobile ? "text-base" : "text-sm"
+                  )}>
+                    Base Branch
+                  </label>
                   <div className="relative">
                     <button
                       onClick={() => setShowBranchDropdown(!showBranchDropdown)}
-                      className="flex items-center justify-between w-full px-3 py-2 text-sm border border-border rounded-md hover:bg-accent/50 transition-colors cursor-pointer"
+                      className={cn(
+                        "flex items-center justify-between w-full border border-border rounded-md hover:bg-accent/50 active:bg-accent transition-colors",
+                        isMobile ? "px-4 py-3 text-base" : "px-3 py-2 text-sm"
+                      )}
                     >
                       <span className="flex items-center gap-2">
-                        <GitBranch className="h-4 w-4 text-muted-foreground" />
+                        <GitBranch className={cn(
+                          "text-muted-foreground",
+                          isMobile ? "h-5 w-5" : "h-4 w-4"
+                        )} />
                         {selectedBranch}
                       </span>
-                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                      <ChevronDown className={cn(
+                        "text-muted-foreground",
+                        isMobile ? "h-5 w-5" : "h-4 w-4"
+                      )} />
                     </button>
 
                     {showBranchDropdown && (
-                      <div className="fixed mt-1 bg-popover border border-border rounded-md shadow-lg z-[200] max-h-48 overflow-y-auto w-[calc(100%-2rem)] max-w-[calc(28rem-2rem)]" style={{ marginTop: '4px' }}>
+                      <div className={cn(
+                        "absolute left-0 right-0 mt-1 bg-popover border border-border rounded-md shadow-lg z-[200] overflow-y-auto",
+                        isMobile ? "max-h-60" : "max-h-48"
+                      )}>
                         {branches.length === 0 ? (
-                          <div className="p-2 text-sm text-muted-foreground text-center">
+                          <div className={cn(
+                            "text-muted-foreground text-center",
+                            isMobile ? "p-4 text-base" : "p-2 text-sm"
+                          )}>
                             No branches found
                           </div>
                         ) : (
@@ -221,11 +382,15 @@ export function RepoPickerModal({ open, onClose, onSelect }: RepoPickerModalProp
                               key={branch.name}
                               onClick={() => handleSelectBranchFromDropdown(branch)}
                               className={cn(
-                                "flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-accent transition-colors text-left cursor-pointer",
+                                "flex items-center gap-2 w-full text-left hover:bg-accent active:bg-accent transition-colors touch-target",
+                                isMobile ? "px-4 py-3 text-base" : "px-3 py-2 text-sm",
                                 branch.name === selectedBranch && "bg-accent"
                               )}
                             >
-                              <GitBranch className="h-3 w-3 text-muted-foreground" />
+                              <GitBranch className={cn(
+                                "text-muted-foreground",
+                                isMobile ? "h-4 w-4" : "h-3 w-3"
+                              )} />
                               {branch.name}
                             </button>
                           ))
@@ -238,14 +403,20 @@ export function RepoPickerModal({ open, onClose, onSelect }: RepoPickerModalProp
                 <div className="flex justify-end gap-2">
                   <button
                     onClick={() => setStep("repo")}
-                    className="px-4 py-2 text-sm rounded-md hover:bg-accent transition-colors cursor-pointer"
+                    className={cn(
+                      "rounded-md hover:bg-accent active:bg-accent transition-colors touch-target",
+                      isMobile ? "px-6 py-3 text-base" : "px-4 py-2 text-sm"
+                    )}
                   >
                     Back
                   </button>
                   <button
                     onClick={handleConfirm}
                     disabled={!selectedBranch}
-                    className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors cursor-pointer disabled:opacity-50"
+                    className={cn(
+                      "bg-primary text-primary-foreground rounded-md hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 touch-target",
+                      isMobile ? "px-6 py-3 text-base" : "px-4 py-2 text-sm"
+                    )}
                   >
                     OK
                   </button>
