@@ -60,45 +60,6 @@ A Next.js chat application for interacting with AI coding agents in isolated Day
 
    The app will be available at http://localhost:4000
 
-## Usage
-
-1. **Start a new chat**: Click the "+" button in the sidebar to create a new chat session
-
-2. **Select a repository** (optional): Click the repository selector to link a GitHub repository, or leave it as a new local repo
-
-3. **Choose an agent**: Select your preferred AI coding agent from the dropdown
-
-4. **Configure API keys**: In Settings, add API keys for the models you want to use
-
-5. **Send messages**: Type your coding request and the agent will work in an isolated sandbox
-
-## Project Structure
-
-```
-simple-chat/
-├── app/                    # Next.js app router pages
-│   ├── api/               # API routes
-│   │   ├── agent/         # Agent execution and status
-│   │   ├── auth/          # NextAuth authentication
-│   │   ├── chat/          # Chat utilities (name suggestions)
-│   │   ├── git/           # Git operations (push)
-│   │   └── sandbox/       # Sandbox creation/deletion
-│   ├── page.tsx           # Main chat page
-│   └── sdk/               # SDK documentation page
-├── components/            # React components
-│   ├── ChatPanel.tsx      # Main chat interface
-│   ├── MessageBubble.tsx  # Message display
-│   ├── Sidebar.tsx        # Chat list sidebar
-│   └── modals/            # Settings and repo picker modals
-├── lib/                   # Utilities and hooks
-│   ├── agent-session.ts   # Agent session management
-│   ├── auth.ts            # NextAuth configuration
-│   ├── hooks/             # React hooks
-│   ├── storage.ts         # Local storage helpers
-│   └── types.ts           # TypeScript types
-└── e2e/                   # Playwright E2E tests
-```
-
 ## Scripts
 
 | Command | Description |
