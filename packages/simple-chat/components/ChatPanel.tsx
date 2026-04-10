@@ -19,9 +19,10 @@ interface ChatPanelProps {
   onChangeRepo?: () => void
   onUpdateChat?: (updates: Partial<Chat>) => void
   onOpenSettings?: (highlightKey?: HighlightKey) => void
+  isMobile?: boolean
 }
 
-export function ChatPanel({ chat, settings, onSendMessage, onStopAgent, onChangeRepo, onUpdateChat, onOpenSettings }: ChatPanelProps) {
+export function ChatPanel({ chat, settings, onSendMessage, onStopAgent, onChangeRepo, onUpdateChat, onOpenSettings, isMobile = false }: ChatPanelProps) {
   const [input, setInput] = useState("")
   const [userHasScrolledUp, setUserHasScrolledUp] = useState(false)
   const [showAgentDropdown, setShowAgentDropdown] = useState(false)
@@ -63,19 +64,22 @@ export function ChatPanel({ chat, settings, onSendMessage, onStopAgent, onChange
     }
   }, [chat?.messages, userHasScrolledUp])
 
-  // Focus prompt when switching chats
+  // Focus prompt when switching chats (desktop only)
   useEffect(() => {
-    textareaRef.current?.focus()
-  }, [chat?.id])
+    if (!isMobile) {
+      textareaRef.current?.focus()
+    }
+  }, [chat?.id, isMobile])
 
   // Auto-resize textarea
   useEffect(() => {
     const textarea = textareaRef.current
     if (textarea) {
       textarea.style.height = "auto"
-      textarea.style.height = Math.min(textarea.scrollHeight, 200) + "px"
+      const maxHeight = isMobile ? 120 : 200
+      textarea.style.height = Math.min(textarea.scrollHeight, maxHeight) + "px"
     }
-  }, [input])
+  }, [input, isMobile])
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -147,7 +151,7 @@ export function ChatPanel({ chat, settings, onSendMessage, onStopAgent, onChange
     return (
       <div className="flex-1 flex items-center justify-center bg-background">
         <div className="text-center max-w-md px-4">
-          <h2 className="text-2xl font-semibold mb-2">Loading...</h2>
+          <h2 className={cn("font-semibold mb-2", isMobile ? "text-xl" : "text-2xl")}>Loading...</h2>
         </div>
       </div>
     )
@@ -159,18 +163,24 @@ export function ChatPanel({ chat, settings, onSendMessage, onStopAgent, onChange
 
   const agents: Agent[] = ["claude-code", "opencode", "codex", "gemini", "goose", "pi"]
 
-  // Chat input component (used in two places)
-  // Slightly wider than messages container (max-w-3xl = 48rem, this is ~52rem)
+  // Chat input component - responsive design
   const chatInput = (
-    <div className="w-full max-w-[52rem] mx-auto">
+    <div className={cn(
+      "w-full mx-auto",
+      isMobile ? "max-w-full" : "max-w-[52rem]"
+    )}>
       <div
         className={cn(
-          "flex flex-col rounded-2xl border shadow-sm",
-          "border-border bg-card focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20"
+          "flex flex-col border shadow-sm bg-card",
+          isMobile ? "rounded-xl border-border" : "rounded-2xl border-border",
+          "focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20"
         )}
       >
         {/* Text input area */}
-        <div className="flex items-end gap-2 px-4 py-3">
+        <div className={cn(
+          "flex items-end gap-2",
+          isMobile ? "px-3 py-2" : "px-4 py-3"
+        )}>
           <textarea
             ref={textareaRef}
             value={input}
@@ -185,50 +195,71 @@ export function ChatPanel({ chat, settings, onSendMessage, onStopAgent, onChange
             }
             rows={1}
             disabled={isCreating}
-            className="flex-1 resize-none bg-transparent text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none disabled:opacity-50"
+            className={cn(
+              "flex-1 resize-none bg-transparent text-foreground placeholder:text-muted-foreground/50 focus:outline-none disabled:opacity-50",
+              isMobile ? "text-base" : "text-sm"
+            )}
           />
 
-          {/* Button container - always takes space to prevent layout shift */}
-          <div className="w-8 h-8 shrink-0">
+          {/* Button container - larger on mobile */}
+          <div className={cn(
+            "shrink-0",
+            isMobile ? "w-11 h-11" : "w-8 h-8"
+          )}>
             {isRunning ? (
               <button
                 onClick={onStopAgent}
-                className="flex h-8 w-8 items-center justify-center rounded-md bg-red-500 text-white hover:bg-red-600 transition-colors cursor-pointer"
+                className={cn(
+                  "flex items-center justify-center rounded-md bg-red-500 text-white hover:bg-red-600 active:bg-red-700 transition-colors touch-target",
+                  isMobile ? "h-11 w-11" : "h-8 w-8"
+                )}
               >
-                <Square className="h-3 w-3 fill-current" />
+                <Square className={cn(isMobile ? "h-4 w-4" : "h-3 w-3", "fill-current")} />
               </button>
             ) : canSend ? (
               <button
                 onClick={handleSend}
-                className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer transition-colors"
+                className={cn(
+                  "flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80 transition-colors touch-target",
+                  isMobile ? "h-11 w-11" : "h-8 w-8"
+                )}
               >
-                <ArrowUp className="h-4 w-4" />
+                <ArrowUp className={cn(isMobile ? "h-5 w-5" : "h-4 w-4")} />
               </button>
             ) : null}
           </div>
         </div>
 
         {/* Bottom row with selectors */}
-        <div className="flex items-center gap-4 px-4 py-2">
+        <div className={cn(
+          "flex items-center gap-2 border-t border-border/50",
+          isMobile ? "px-3 py-2 flex-wrap" : "px-4 py-2 gap-4"
+        )}>
           {/* Repo selector - only show before agent starts */}
           {canChangeRepo && (
             <div className="flex items-center gap-1">
               {onChangeRepo && (
                 <button
                   onClick={onChangeRepo}
-                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                  className={cn(
+                    "flex items-center gap-1 text-muted-foreground hover:text-foreground active:text-foreground transition-colors",
+                    isMobile ? "text-sm py-1 px-2 rounded-md hover:bg-accent/50" : "text-xs"
+                  )}
                 >
                   {isNewRepo ? "Repository" : chat.repo}
-                  <ChevronDown className="h-3 w-3" />
+                  <ChevronDown className={cn(isMobile ? "h-4 w-4" : "h-3 w-3")} />
                 </button>
               )}
               {!isNewRepo && onUpdateChat && (
                 <button
                   onClick={() => onUpdateChat({ repo: NEW_REPOSITORY, baseBranch: "main" })}
-                  className="p-0.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                  className={cn(
+                    "rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors",
+                    isMobile ? "p-1.5" : "p-0.5"
+                  )}
                   title="Remove repository"
                 >
-                  <X className="h-3 w-3" />
+                  <X className={cn(isMobile ? "h-4 w-4" : "h-3 w-3")} />
                 </button>
               )}
             </div>
@@ -245,24 +276,31 @@ export function ChatPanel({ chat, settings, onSendMessage, onStopAgent, onChange
                 setShowAgentDropdown(!showAgentDropdown)
                 setShowModelDropdown(false)
               }}
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              className={cn(
+                "flex items-center gap-1 text-muted-foreground hover:text-foreground active:text-foreground transition-colors",
+                isMobile ? "text-sm py-1 px-2 rounded-md hover:bg-accent/50" : "text-xs"
+              )}
             >
-              <AgentIcon agent={currentAgent} className="h-3.5 w-3.5" />
+              <AgentIcon agent={currentAgent} className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
               {agentLabels[currentAgent]}
-              <ChevronDown className="h-3 w-3" />
+              <ChevronDown className={cn(isMobile ? "h-4 w-4" : "h-3 w-3")} />
             </button>
             {showAgentDropdown && (
-              <div className="absolute bottom-full right-0 mb-1 w-40 bg-popover border border-border rounded-md shadow-lg py-1 z-50">
+              <div className={cn(
+                "absolute bottom-full right-0 mb-1 bg-popover border border-border rounded-md shadow-lg py-1 z-50",
+                isMobile ? "w-48" : "w-40"
+              )}>
                 {agents.map((agent) => (
                   <button
                     key={agent}
                     onClick={() => handleAgentChange(agent)}
                     className={cn(
-                      "w-full px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors flex items-center gap-2",
+                      "w-full text-left hover:bg-accent active:bg-accent transition-colors flex items-center gap-2",
+                      isMobile ? "px-4 py-3 text-base" : "px-3 py-1.5 text-xs",
                       agent === currentAgent && "bg-accent"
                     )}
                   >
-                    <AgentIcon agent={agent} className="h-3.5 w-3.5" />
+                    <AgentIcon agent={agent} className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
                     {agentLabels[agent]}
                   </button>
                 ))}
@@ -279,16 +317,20 @@ export function ChatPanel({ chat, settings, onSendMessage, onStopAgent, onChange
                 setShowAgentDropdown(false)
               }}
               className={cn(
-                "flex items-center gap-1 text-xs transition-colors cursor-pointer",
+                "flex items-center gap-1 transition-colors",
+                isMobile ? "text-sm py-1 px-2 rounded-md hover:bg-accent/50" : "text-xs",
                 !hasRequiredCredentials ? "text-red-500 hover:text-red-600" : "text-muted-foreground hover:text-foreground"
               )}
             >
-              {!hasRequiredCredentials && <Key className="h-3 w-3" />}
+              {!hasRequiredCredentials && <Key className={cn(isMobile ? "h-4 w-4" : "h-3 w-3")} />}
               {getModelLabel(currentAgent, currentModel)}
-              <ChevronDown className="h-3 w-3" />
+              <ChevronDown className={cn(isMobile ? "h-4 w-4" : "h-3 w-3")} />
             </button>
             {showModelDropdown && (
-              <div className="absolute bottom-full right-0 mb-1 w-52 max-h-64 overflow-y-auto bg-popover border border-border rounded-md shadow-lg py-1 z-50">
+              <div className={cn(
+                "absolute bottom-full right-0 mb-1 max-h-64 overflow-y-auto bg-popover border border-border rounded-md shadow-lg py-1 z-50",
+                isMobile ? "w-60" : "w-52"
+              )}>
                 {availableModels.map((model: ModelOption) => {
                   const modelHasCredentials = hasCredentialsForModel(model, credentialFlags, currentAgent)
                   const needsKey = model.requiresKey !== "none" && !modelHasCredentials
@@ -297,12 +339,13 @@ export function ChatPanel({ chat, settings, onSendMessage, onStopAgent, onChange
                       key={model.value}
                       onClick={() => handleModelChange(model.value)}
                       className={cn(
-                        "w-full px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors flex items-center justify-between",
+                        "w-full text-left hover:bg-accent active:bg-accent transition-colors flex items-center justify-between",
+                        isMobile ? "px-4 py-3 text-base" : "px-3 py-1.5 text-xs",
                         model.value === currentModel && "bg-accent"
                       )}
                     >
                       <span>{model.label}</span>
-                      {needsKey && <Key className="h-3 w-3 text-red-500 shrink-0" />}
+                      {needsKey && <Key className={cn(isMobile ? "h-4 w-4" : "h-3 w-3", "text-red-500 shrink-0")} />}
                     </button>
                   )
                 })}
@@ -318,12 +361,20 @@ export function ChatPanel({ chat, settings, onSendMessage, onStopAgent, onChange
   // New chat - centered welcome with input
   if (isNewChat) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center bg-background p-4">
+      <div className={cn(
+        "flex-1 flex flex-col items-center justify-center bg-background",
+        isMobile ? "p-4 pb-safe" : "p-4"
+      )}>
         <div className="text-center mb-6">
-          <h2 className="text-2xl font-semibold">What would you like to build?</h2>
+          <h2 className={cn("font-semibold", isMobile ? "text-xl" : "text-2xl")}>
+            What would you like to build?
+          </h2>
         </div>
         {chatInput}
-        <p className="text-sm text-muted-foreground mt-4">
+        <p className={cn(
+          "text-muted-foreground mt-4 text-center",
+          isMobile ? "text-sm px-4" : "text-sm"
+        )}>
           Agents are isolated in Daytona sandboxes and tied to Git branches.
         </p>
       </div>
@@ -339,30 +390,51 @@ export function ChatPanel({ chat, settings, onSendMessage, onStopAgent, onChange
 
   // Chat with messages
   return (
-    <div className="flex-1 flex flex-col bg-background">
-      {/* Header with title */}
-      <div className="flex items-center justify-between pt-3" style={{ paddingLeft: "1.625rem", paddingRight: "1rem" }}>
-        <h1 className="text-sm font-medium text-foreground">{chatTitle}</h1>
-        {githubBranchUrl && (
-          <a
-            href={githubBranchUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="p-1.5 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-            title="View branch on GitHub"
-          >
-            <Github className="h-4 w-4" />
-          </a>
-        )}
-      </div>
+    <div className="flex-1 flex flex-col bg-background min-h-0">
+      {/* Header with title - hide on mobile since we have mobile header in page.tsx */}
+      {!isMobile && (
+        <div className="flex items-center justify-between pt-3" style={{ paddingLeft: "1.625rem", paddingRight: "1rem" }}>
+          <h1 className="text-sm font-medium text-foreground">{chatTitle}</h1>
+          {githubBranchUrl && (
+            <a
+              href={githubBranchUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-1.5 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              title="View branch on GitHub"
+            >
+              <Github className="h-4 w-4" />
+            </a>
+          )}
+        </div>
+      )}
+
+      {/* Mobile GitHub link - show as a subtle bar if branch exists */}
+      {isMobile && githubBranchUrl && (
+        <a
+          href={githubBranchUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center justify-center gap-2 px-4 py-2 text-xs text-muted-foreground hover:text-foreground bg-muted/30 border-b border-border"
+        >
+          <Github className="h-3.5 w-3.5" />
+          View on GitHub
+        </a>
+      )}
 
       {/* Messages */}
       <div
         ref={messagesContainerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto p-4"
+        className={cn(
+          "flex-1 overflow-y-auto mobile-scroll",
+          isMobile ? "p-3" : "p-4"
+        )}
       >
-        <div className="space-y-6 max-w-3xl mx-auto">
+        <div className={cn(
+          "space-y-4 mx-auto",
+          isMobile ? "max-w-full" : "max-w-3xl space-y-6"
+        )}>
           {chat.messages.map((message, index) => {
             const isLastAssistant =
               isRunning &&
@@ -373,6 +445,7 @@ export function ChatPanel({ chat, settings, onSendMessage, onStopAgent, onChange
                 key={message.id}
                 message={message}
                 isStreaming={isLastAssistant}
+                isMobile={isMobile}
               />
             )
           })}
@@ -380,8 +453,11 @@ export function ChatPanel({ chat, settings, onSendMessage, onStopAgent, onChange
         </div>
       </div>
 
-      {/* Input */}
-      <div className="px-4 pb-4">
+      {/* Input - fixed at bottom on mobile */}
+      <div className={cn(
+        "border-t border-border bg-background",
+        isMobile ? "px-3 py-3 pb-safe" : "px-4 pb-4 pt-2"
+      )}>
         {chatInput}
       </div>
     </div>

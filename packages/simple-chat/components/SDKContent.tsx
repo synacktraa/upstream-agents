@@ -2,8 +2,13 @@
 
 import { useState } from "react"
 import { Copy, Check } from "lucide-react"
+import { cn } from "@/lib/utils"
 
-function CopyButton({ text }: { text: string }) {
+interface SDKContentProps {
+  isMobile?: boolean
+}
+
+function CopyButton({ text, isMobile = false }: { text: string; isMobile?: boolean }) {
   const [copied, setCopied] = useState(false)
 
   const handleCopy = async () => {
@@ -15,21 +20,31 @@ function CopyButton({ text }: { text: string }) {
   return (
     <button
       onClick={handleCopy}
-      className="absolute top-2 right-2 p-1.5 rounded-md bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+      className={cn(
+        "absolute rounded-md bg-muted/50 hover:bg-muted active:bg-muted text-muted-foreground hover:text-foreground transition-colors touch-target",
+        isMobile ? "top-3 right-3 p-2" : "top-2 right-2 p-1.5"
+      )}
       title="Copy to clipboard"
     >
-      {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+      {copied ? (
+        <Check className={cn(isMobile ? "h-5 w-5" : "h-4 w-4")} />
+      ) : (
+        <Copy className={cn(isMobile ? "h-5 w-5" : "h-4 w-4")} />
+      )}
     </button>
   )
 }
 
-function CodeBlock({ children }: { children: string }) {
+function CodeBlock({ children, isMobile = false }: { children: string; isMobile?: boolean }) {
   return (
     <div className="relative group">
-      <pre className="bg-muted/50 rounded-lg p-4 overflow-x-auto text-sm font-mono">
+      <pre className={cn(
+        "bg-muted/50 rounded-lg overflow-x-auto mobile-scroll font-mono",
+        isMobile ? "p-4 text-sm" : "p-4 text-sm"
+      )}>
         <code>{children}</code>
       </pre>
-      <CopyButton text={children} />
+      <CopyButton text={children} isMobile={isMobile} />
     </div>
   )
 }
@@ -41,6 +56,7 @@ function Endpoint({
   requestBody,
   response,
   children,
+  isMobile = false,
 }: {
   method: "GET" | "POST" | "DELETE"
   path: string
@@ -48,6 +64,7 @@ function Endpoint({
   requestBody?: string
   response: string
   children?: React.ReactNode
+  isMobile?: boolean
 }) {
   const methodColors = {
     GET: "bg-green-500/20 text-green-600 dark:text-green-400",
@@ -57,41 +74,80 @@ function Endpoint({
 
   return (
     <div className="border border-border rounded-lg overflow-hidden">
-      <div className="flex items-center gap-3 p-4 bg-muted/30">
-        <span className={`px-2 py-1 rounded text-xs font-semibold ${methodColors[method]}`}>
+      <div className={cn(
+        "flex items-start gap-3 bg-muted/30",
+        isMobile ? "flex-col p-4" : "flex-row items-center p-4"
+      )}>
+        <span className={cn(
+          "px-2 py-1 rounded text-xs font-semibold shrink-0",
+          methodColors[method]
+        )}>
           {method}
         </span>
-        <code className="text-sm font-mono">{path}</code>
+        <code className={cn(
+          "font-mono break-all",
+          isMobile ? "text-sm" : "text-sm"
+        )}>
+          {path}
+        </code>
       </div>
-      <div className="p-4 space-y-4">
-        <p className="text-muted-foreground">{description}</p>
+      <div className={cn(
+        isMobile ? "p-4 space-y-4" : "p-4 space-y-4"
+      )}>
+        <p className={cn(
+          "text-muted-foreground",
+          isMobile ? "text-base" : "text-sm"
+        )}>
+          {description}
+        </p>
 
         {requestBody && (
           <div>
-            <h4 className="text-sm font-semibold mb-2">Request Body</h4>
-            <CodeBlock>{requestBody}</CodeBlock>
+            <h4 className={cn(
+              "font-semibold mb-2",
+              isMobile ? "text-base" : "text-sm"
+            )}>
+              Request Body
+            </h4>
+            <CodeBlock isMobile={isMobile}>{requestBody}</CodeBlock>
           </div>
         )}
 
         {children}
 
         <div>
-          <h4 className="text-sm font-semibold mb-2">Response</h4>
-          <CodeBlock>{response}</CodeBlock>
+          <h4 className={cn(
+            "font-semibold mb-2",
+            isMobile ? "text-base" : "text-sm"
+          )}>
+            Response
+          </h4>
+          <CodeBlock isMobile={isMobile}>{response}</CodeBlock>
         </div>
       </div>
     </div>
   )
 }
 
-export function SDKContent() {
+export function SDKContent({ isMobile = false }: SDKContentProps) {
   return (
-    <div className="flex-1 overflow-y-auto bg-background">
-      <div className="max-w-4xl mx-auto px-6 py-12">
+    <div className="flex-1 overflow-y-auto mobile-scroll bg-background">
+      <div className={cn(
+        "mx-auto",
+        isMobile ? "px-4 py-6 max-w-full" : "px-6 py-12 max-w-4xl"
+      )}>
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold">REST API Reference</h1>
-          <p className="text-muted-foreground mt-2">
+        <div className={cn(isMobile ? "mb-6" : "mb-8")}>
+          <h1 className={cn(
+            "font-bold",
+            isMobile ? "text-2xl" : "text-3xl"
+          )}>
+            REST API Reference
+          </h1>
+          <p className={cn(
+            "text-muted-foreground mt-2",
+            isMobile ? "text-base" : "text-sm"
+          )}>
             Use this API to programmatically create sandboxes, run agents, and push changes.
           </p>
         </div>
@@ -115,6 +171,7 @@ export function SDKContent() {
   "branch": "ai/feature",
   "previewUrlPattern": "https://{port}-xxx.daytonaproxy.net"
 }`}
+            isMobile={isMobile}
           />
 
           {/* Execute Agent */}
@@ -135,11 +192,20 @@ export function SDKContent() {
   "backgroundSessionId": "ses_xyz789",
   "status": "running"
 }`}
+            isMobile={isMobile}
           >
             <div>
-              <h4 className="text-sm font-semibold mb-2">Supported Agents</h4>
-              <div className="overflow-x-auto text-xs">
-                <table className="w-full">
+              <h4 className={cn(
+                "font-semibold mb-2",
+                isMobile ? "text-base" : "text-sm"
+              )}>
+                Supported Agents
+              </h4>
+              <div className="overflow-x-auto mobile-scroll -mx-4 px-4">
+                <table className={cn(
+                  "w-full min-w-[500px]",
+                  isMobile ? "text-sm" : "text-xs"
+                )}>
                   <thead>
                     <tr className="border-b border-border">
                       <th className="text-left py-2 pr-4 font-medium">Agent</th>
@@ -198,6 +264,7 @@ export function SDKContent() {
   "contentBlocks": [...],
   "error": null
 }`}
+            isMobile={isMobile}
           />
 
           {/* Push */}
@@ -212,6 +279,7 @@ export function SDKContent() {
   "githubToken": "ghp_xxxx"
 }`}
             response={`{ "success": true }`}
+            isMobile={isMobile}
           />
 
           {/* Delete Sandbox */}
@@ -221,6 +289,7 @@ export function SDKContent() {
             description="Delete a sandbox and clean up resources."
             requestBody={`{ "sandboxId": "sandbox_abc123" }`}
             response={`{ "success": true }`}
+            isMobile={isMobile}
           />
         </section>
       </div>
