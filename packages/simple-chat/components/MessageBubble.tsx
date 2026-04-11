@@ -288,36 +288,43 @@ function ToolCallGroup({ toolCalls, isMobile = false }: ToolCallGroupProps) {
           key={`${tool.tool}-${tool.summary}-${index}`}
           tool={tool}
           isMobile={isMobile}
-          isLast={index === toolCalls.length - 1}
         />
       ))}
     </div>
   )
 }
 
-// Individual tool call row within the accordion
+// Individual tool call row within the group
 interface ToolCallRowProps {
   tool: ToolCall
   isMobile?: boolean
-  isLast?: boolean
 }
 
-function ToolCallRow({ tool, isMobile = false, isLast = false }: ToolCallRowProps) {
+function ToolCallRow({ tool, isMobile = false }: ToolCallRowProps) {
   const [expanded, setExpanded] = useState(false)
   const Icon = getToolIcon(tool.tool)
   const hasOutput = !!tool.output
 
+  const toggleExpanded = () => {
+    if (hasOutput) setExpanded(!expanded)
+  }
+
   return (
-    <div className={cn(!isLast && "border-b border-border/30")}>
-      <button
-        onClick={() => hasOutput && setExpanded(!expanded)}
-        className={cn(
-          "flex items-center gap-2 w-full text-left text-muted-foreground transition-colors",
-          isMobile ? "px-3 py-2.5 text-sm touch-target" : "px-2.5 py-1.5 text-xs",
-          hasOutput && "hover:text-foreground hover:bg-muted/50 cursor-pointer"
-        )}
-      >
-        <Icon className={cn("shrink-0 text-muted-foreground", isMobile ? "h-4 w-4" : "h-3 w-3")} />
+    <div
+      onClick={toggleExpanded}
+      className={cn(
+        "transition-colors",
+        isMobile ? "px-3 py-1.5" : "px-2.5 py-1",
+        hasOutput && "cursor-pointer"
+      )}
+    >
+      {/* Tool call header */}
+      <div className={cn(
+        "flex items-center gap-2 text-muted-foreground transition-colors",
+        isMobile ? "text-sm" : "text-xs",
+        hasOutput && "hover:text-foreground"
+      )}>
+        <Icon className={cn("shrink-0", isMobile ? "h-4 w-4" : "h-3 w-3")} />
         <span className="flex-1 truncate">{tool.summary}</span>
         {hasOutput && (
           expanded ? (
@@ -326,20 +333,16 @@ function ToolCallRow({ tool, isMobile = false, isLast = false }: ToolCallRowProp
             <ChevronRight className={cn("shrink-0", isMobile ? "h-4 w-4" : "h-3 w-3")} />
           )
         )}
-      </button>
+      </div>
 
+      {/* Tool output - inline, smaller font */}
       {expanded && tool.output && (
-        <div className={cn(
-          "border-t border-border/30 bg-muted/20",
-          isMobile ? "px-3 py-2" : "px-2.5 py-1.5"
+        <pre className={cn(
+          "font-mono whitespace-pre-wrap overflow-x-auto mobile-scroll text-muted-foreground mt-1",
+          isMobile ? "text-xs max-h-64" : "text-[10px] max-h-48"
         )}>
-          <pre className={cn(
-            "font-mono whitespace-pre-wrap overflow-x-auto mobile-scroll",
-            isMobile ? "text-sm max-h-64" : "text-xs max-h-48"
-          )}>
-            {tool.output}
-          </pre>
-        </div>
+          {tool.output}
+        </pre>
       )}
     </div>
   )
