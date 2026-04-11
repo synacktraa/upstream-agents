@@ -18,10 +18,11 @@ Allow users to drag files onto the prompt bar, preview them, and upload them to 
 - No need to extend Message type - we'll inject file paths into the prompt text invisibly
 
 ### 2. Create Upload API Endpoint (`app/api/sandbox/upload/route.ts`)
-- Accept: `sandboxId`, `files` (as FormData with file blobs)
+- Accept: `sandboxId`, `repoPath`, `files` (as FormData with file blobs)
 - Use Daytona SDK `sandbox.fs.uploadFile()` to upload each file
-- Upload to `/home/daytona/uploads/` directory in sandbox
-- Return: array of uploaded file paths
+- Upload to the **repo directory** (e.g., `/home/daytona/my-repo/filename.png`)
+- **Auto-resolve naming conflicts**: if `file.png` exists, upload as `file-1.png`, `file-2.png`, etc.
+- Return: array of uploaded file paths (with resolved names)
 
 ### 3. Update ChatPanel Component
 - Add state: `pendingFiles: PendingFile[]`
@@ -74,11 +75,13 @@ Allow users to drag files onto the prompt bar, preview them, and upload them to 
 2. File appears as chip: `📎 image.png (24KB) ✕`
 3. User types: "Analyze this image"
 4. User clicks Send
-5. Frontend calls `POST /api/sandbox/upload` with the file
-6. API uploads to `/home/daytona/uploads/image.png`
-7. Frontend calls `onSendMessage` with:
+5. Frontend calls `POST /api/sandbox/upload` with the file + repoPath
+6. API checks if `image.png` exists in repo → if so, uses `image-1.png`
+7. API uploads to `/home/daytona/my-repo/image.png` (or resolved name)
+8. API returns: `{ uploadedFiles: ["/home/daytona/my-repo/image.png"] }`
+9. Frontend calls `onSendMessage` with:
    - Display text: "Analyze this image"
-   - Agent receives: "Analyze this image\n\n---\nUploaded files:\n- /home/daytona/uploads/image.png"
+   - Agent receives: "Analyze this image\n\n---\nUploaded files:\n- /home/daytona/my-repo/image.png"
 
 ## Files to Modify/Create
 
