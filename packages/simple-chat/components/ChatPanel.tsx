@@ -322,8 +322,11 @@ export function ChatPanel({ chat, settings, onSendMessage, onStopAgent, onChange
             />
           </div>
 
-          {/* Button container */}
-          <div className="shrink-0">
+          {/* Button container - fixed size to prevent layout shift */}
+          <div className={cn(
+            "shrink-0 flex items-center justify-center",
+            isMobile ? "h-9 w-9" : "h-7 w-7"
+          )}>
             {isRunning ? (
               <button
                 onClick={onStopAgent}
