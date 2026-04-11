@@ -313,7 +313,7 @@ function ToolCallRow({ tool, isMobile = false }: ToolCallRowProps) {
     <div
       onClick={toggleExpanded}
       className={cn(
-        isMobile ? "py-0.5" : "py-px",
+        isMobile ? "py-1" : "py-0.5",
         hasOutput && "cursor-pointer"
       )}
     >
@@ -334,11 +334,11 @@ function ToolCallRow({ tool, isMobile = false }: ToolCallRowProps) {
         )}
       </div>
 
-      {/* Tool output - inline, smaller font */}
+      {/* Tool output - block quote style with left border */}
       {expanded && tool.output && (
         <pre className={cn(
-          "font-mono whitespace-pre-wrap overflow-x-auto mobile-scroll text-muted-foreground mt-1",
-          isMobile ? "text-xs max-h-64" : "text-[10px] max-h-48"
+          "font-mono whitespace-pre-wrap overflow-x-auto mobile-scroll text-muted-foreground mt-1.5 pl-3 border-l-2 border-border",
+          isMobile ? "text-xs max-h-64 ml-5" : "text-[10px] max-h-48 ml-4"
         )}>
           {tool.output}
         </pre>
