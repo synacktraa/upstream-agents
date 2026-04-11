@@ -610,14 +610,9 @@ export function useGitDialogs({ chat, onAddMessage }: UseGitDialogsOptions): Use
           inMerge: true,
           conflictedFiles: data.conflictedFiles || [],
         })
-        const fileList = (data.conflictedFiles || [])
-          .map((f: string) => `- \`${f}\``)
-          .join("\n")
+        const fileList = (data.conflictedFiles || []).join(", ")
         addSystemMessage(
-          `**Merge conflict detected**\n\n` +
-          `Merging **${branchName}** into **${selectedBranch}** resulted in conflicts.\n\n` +
-          `**Conflicted files:**\n${fileList}\n\n` +
-          `You can ask the agent to resolve these conflicts.`
+          `Merge conflict: ${branchName} into ${selectedBranch}. Conflicted files: ${fileList}`
         )
         setMergeOpen(false)
         return
@@ -628,11 +623,11 @@ export function useGitDialogs({ chat, onAddMessage }: UseGitDialogsOptions): Use
       }
 
       addSystemMessage(
-        `**${squashMerge ? "Squash merged" : "Merged"}** **${branchName}** into **${selectedBranch}** and pushed.`
+        `${squashMerge ? "Squash merged" : "Merged"} ${branchName} into ${selectedBranch} and pushed.`
       )
       setMergeOpen(false)
     } catch (err: unknown) {
-      addSystemMessage(`**Merge failed:** ${err instanceof Error ? err.message : "Unknown error"}`, true)
+      addSystemMessage(`Merge failed: ${err instanceof Error ? err.message : "Unknown error"}`, true)
       setMergeOpen(false)
     } finally {
       setActionLoading(false)
@@ -667,14 +662,9 @@ export function useGitDialogs({ chat, onAddMessage }: UseGitDialogsOptions): Use
           inMerge: false,
           conflictedFiles: data.conflictedFiles || [],
         })
-        const fileList = (data.conflictedFiles || [])
-          .map((f: string) => `- \`${f}\``)
-          .join("\n")
+        const fileList = (data.conflictedFiles || []).join(", ")
         addSystemMessage(
-          `**Rebase conflict detected**\n\n` +
-          `Rebasing **${branchName}** onto **${selectedBranch}** resulted in conflicts.\n\n` +
-          `**Conflicted files:**\n${fileList}\n\n` +
-          `You can ask the agent to resolve these conflicts.`
+          `Rebase conflict: ${branchName} onto ${selectedBranch}. Conflicted files: ${fileList}`
         )
         setRebaseOpen(false)
         return
@@ -685,11 +675,11 @@ export function useGitDialogs({ chat, onAddMessage }: UseGitDialogsOptions): Use
       }
 
       addSystemMessage(
-        `**Rebased** **${branchName}** onto **${selectedBranch}**. The branch on GitHub now points at your rebased commits.`
+        `Rebased ${branchName} onto ${selectedBranch}. The branch on GitHub now points at your rebased commits.`
       )
       setRebaseOpen(false)
     } catch (err: unknown) {
-      addSystemMessage(`**Rebase failed:** ${err instanceof Error ? err.message : "Unknown error"}`, true)
+      addSystemMessage(`Rebase failed: ${err instanceof Error ? err.message : "Unknown error"}`, true)
       setRebaseOpen(false)
     } finally {
       setActionLoading(false)
@@ -720,11 +710,11 @@ export function useGitDialogs({ chat, onAddMessage }: UseGitDialogsOptions): Use
       }
 
       addSystemMessage(
-        `**Pull request created:** [#${data.number} - ${data.title}](${data.url})`
+        `Pull request created: #${data.number} - ${data.title} (${data.url})`
       )
       setPROpen(false)
     } catch (err: unknown) {
-      addSystemMessage(`**PR creation failed:** ${err instanceof Error ? err.message : "Unknown error"}`, true)
+      addSystemMessage(`PR creation failed: ${err instanceof Error ? err.message : "Unknown error"}`, true)
       setPROpen(false)
     } finally {
       setActionLoading(false)
@@ -754,11 +744,11 @@ export function useGitDialogs({ chat, onAddMessage }: UseGitDialogsOptions): Use
       setRebaseConflict(EMPTY_CONFLICT_STATE)
       addSystemMessage(
         isMerge
-          ? `**Merge aborted.** Your branch is back to its previous state.`
-          : `**Rebase aborted.** Your branch is back to its previous state.`
+          ? `Merge aborted. Your branch is back to its previous state.`
+          : `Rebase aborted. Your branch is back to its previous state.`
       )
     } catch (err: unknown) {
-      addSystemMessage(`**Abort failed:** ${err instanceof Error ? err.message : "Unknown error"}`, true)
+      addSystemMessage(`Abort failed: ${err instanceof Error ? err.message : "Unknown error"}`, true)
     } finally {
       setActionLoading(false)
     }
