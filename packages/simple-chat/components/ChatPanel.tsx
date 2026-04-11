@@ -318,27 +318,27 @@ export function ChatPanel({ chat, settings, onSendMessage, onStopAgent, onChange
           {/* Button container - larger on mobile */}
           <div className={cn(
             "shrink-0",
-            isMobile ? "w-11 h-11" : "w-8 h-8"
+            isMobile ? "w-10 h-10" : "w-7 h-7"
           )}>
             {isRunning ? (
               <button
                 onClick={onStopAgent}
                 className={cn(
                   "flex items-center justify-center rounded-md bg-red-500 text-white hover:bg-red-600 active:bg-red-700 transition-colors touch-target",
-                  isMobile ? "h-11 w-11" : "h-8 w-8"
+                  isMobile ? "h-10 w-10" : "h-7 w-7"
                 )}
               >
-                <Square className={cn(isMobile ? "h-4 w-4" : "h-3 w-3", "fill-current")} />
+                <Square className={cn(isMobile ? "h-3.5 w-3.5" : "h-3 w-3", "fill-current")} />
               </button>
             ) : canSend ? (
               <button
                 onClick={handleSend}
                 className={cn(
                   "flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80 transition-colors touch-target",
-                  isMobile ? "h-11 w-11" : "h-8 w-8"
+                  isMobile ? "h-10 w-10" : "h-7 w-7"
                 )}
               >
-                <ArrowUp className={cn(isMobile ? "h-5 w-5" : "h-4 w-4")} />
+                <ArrowUp className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
               </button>
             ) : null}
           </div>
