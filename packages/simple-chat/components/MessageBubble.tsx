@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { ChevronDown, ChevronRight, Terminal, FileText, Search, GitMerge, AlertCircle } from "lucide-react"
+import { ChevronDown, ChevronRight, Terminal, FileText, Search, GitMerge } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Message, ContentBlock } from "@/lib/types"
 import ReactMarkdown from "react-markdown"
@@ -166,27 +166,26 @@ function AssistantContent({ message, isStreaming, isMobile = false }: { message:
 }
 
 // =============================================================================
-// Git Operation Bubble (styled like tool calls but with different background)
+// Git Operation Bubble (same as tool calls, just different background color)
 // =============================================================================
 
 function GitOperationBubble({ content, isError = false, isMobile = false }: { content: string; isError?: boolean; isMobile?: boolean }) {
   const [expanded, setExpanded] = useState(false)
 
-  // For errors, extract the summary (before the colon) and details (after the colon)
+  // For errors, extract the summary (before colon) and details (after colon)
   let summary = content
   let details = ""
 
   if (isError) {
-    // Match pattern like "**Merge failed:** error details"
-    const match = content.match(/^(\*\*[^*]+\*\*:?)\s*(.*)$/s)
-    if (match) {
-      summary = match[1]
-      details = match[2].trim()
+    // Match pattern like "Merge failed: error details"
+    const colonIndex = content.indexOf(": ")
+    if (colonIndex !== -1) {
+      summary = content.slice(0, colonIndex)
+      details = content.slice(colonIndex + 2).trim()
     }
   }
 
   const hasDetails = isError && details.length > 0
-  const Icon = isError ? AlertCircle : GitMerge
 
   return (
     <div className={cn(
@@ -203,34 +202,13 @@ function GitOperationBubble({ content, isError = false, isMobile = false }: { co
           hasDetails && "hover:bg-accent/50 active:bg-accent cursor-pointer touch-target"
         )}
       >
-        <Icon className={cn(
+        <GitMerge className={cn(
           "shrink-0",
-          isError ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400",
+          isError ? "text-red-500 dark:text-red-400" : "text-green-600 dark:text-green-400",
           isMobile ? "h-4 w-4" : "h-3 w-3"
         )} />
-        <span className="flex-1 truncate">
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            components={{
-              p: ({ children }) => <span>{children}</span>,
-              strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-              a: ({ children, ...props }) => (
-                <a
-                  {...props}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={cn(
-                    "underline",
-                    isError ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"
-                  )}
-                >
-                  {children}
-                </a>
-              ),
-            }}
-          >
-            {hasDetails ? summary : content}
-          </ReactMarkdown>
+        <span className="flex-1 truncate font-mono">
+          {summary}
         </span>
         {hasDetails && (
           expanded ? (
