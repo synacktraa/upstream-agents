@@ -212,13 +212,24 @@ function SystemMessage({ icon: Icon, content, variant = "success", isMobile = fa
     isMobile ? "h-4 w-4" : "h-3.5 w-3.5"
   )
 
+  // Parse bold text (text between **)
+  const parseBoldText = (text: string) => {
+    const parts = text.split(/(\*\*[^*]+\*\*)/g)
+    return parts.map((part, index) => {
+      if (part.startsWith("**") && part.endsWith("**")) {
+        return <strong key={index}>{part.slice(2, -2)}</strong>
+      }
+      return part
+    })
+  }
+
   return (
     <div className={cn(
-      "flex items-start gap-2",
-      isMobile ? "text-base" : "text-sm"
+      "flex items-start gap-2 rounded-md bg-muted/20 dark:bg-muted/10",
+      isMobile ? "text-base px-3 py-2" : "text-sm px-2.5 py-1.5"
     )}>
       <Icon className={cn(iconClasses, "mt-0.5")} />
-      <span className="text-foreground">{content}</span>
+      <span className="text-foreground">{parseBoldText(content)}</span>
     </div>
   )
 }
