@@ -452,6 +452,12 @@ export function useChat() {
     }
   }, [])
 
+  // Add a message to a specific chat (used by git dialogs for system messages)
+  const addMessageToChat = useCallback((chatId: string, message: Message) => {
+    const newState = addMessage(chatId, message)
+    setState(newState)
+  }, [])
+
   return {
     // State
     chats: state.chats,
@@ -470,5 +476,6 @@ export function useChat() {
     sendMessage,
     stopAgent,
     updateSettings,
+    addMessage: addMessageToChat,
   }
 }
