@@ -299,43 +299,46 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       >
         <div
           className={cn(
-            "relative flex items-end gap-2 rounded-lg border px-3 py-2",
+            "flex items-end gap-2 rounded-lg border px-3 py-2",
             inRebaseConflict
               ? "border-red-800/70 bg-background/95 focus-within:border-red-700 focus-within:ring-1 focus-within:ring-red-700/35 dark:border-red-700/80 dark:focus-within:border-red-600 dark:focus-within:ring-red-600/40"
               : "border-border bg-card focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20"
           )}
         >
-          {/* Slash Command Menu - positioned above the input area */}
-          <SlashCommandMenu
-            input={input}
-            open={slashMenuOpen && !!onSlashCommand}
-            onSelect={handleSlashCommandSelect}
-            onClose={() => {
-              setSlashMenuOpen(false)
-              setSlashSelectedIndex(0)
-            }}
-            selectedIndex={slashSelectedIndex}
-            onSelectedIndexChange={setSlashSelectedIndex}
-          />
+          {/* Textarea wrapper with slash command menu */}
+          <div className="relative flex-1">
+            {/* Slash Command Menu - positioned above the textarea */}
+            <SlashCommandMenu
+              input={input}
+              open={slashMenuOpen && !!onSlashCommand}
+              onSelect={handleSlashCommandSelect}
+              onClose={() => {
+                setSlashMenuOpen(false)
+                setSlashSelectedIndex(0)
+              }}
+              selectedIndex={slashSelectedIndex}
+              onSelectedIndexChange={setSlashSelectedIndex}
+            />
 
-          <textarea
-            ref={ref}
-            value={input}
-            onChange={(e) => onInputChange(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={
-              branch.status === BRANCH_STATUS.CREATING
-                ? "Type your first message while the sandbox is being set up..."
-                : !branch.sandboxId
-                ? "Sandbox not available"
-                : branch.status === BRANCH_STATUS.STOPPED
-                ? "Sandbox paused \u2014 will resume on send..."
-                : "Describe what you want the agent to do..."
-            }
-            rows={1}
-            disabled={!isReady && branch.status !== BRANCH_STATUS.CREATING}
-            className="flex-1 resize-none bg-transparent text-base sm:text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none disabled:opacity-50"
-          />
+            <textarea
+              ref={ref}
+              value={input}
+              onChange={(e) => onInputChange(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={
+                branch.status === BRANCH_STATUS.CREATING
+                  ? "Type your first message while the sandbox is being set up..."
+                  : !branch.sandboxId
+                  ? "Sandbox not available"
+                  : branch.status === BRANCH_STATUS.STOPPED
+                  ? "Sandbox paused \u2014 will resume on send..."
+                  : "Describe what you want the agent to do..."
+              }
+              rows={1}
+              disabled={!isReady && branch.status !== BRANCH_STATUS.CREATING}
+              className="w-full resize-none bg-transparent text-base sm:text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none disabled:opacity-50"
+            />
+          </div>
           <Tooltip>
             <TooltipTrigger asChild>
               <button

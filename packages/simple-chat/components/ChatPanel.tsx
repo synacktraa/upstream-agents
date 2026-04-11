@@ -266,51 +266,54 @@ export function ChatPanel({ chat, settings, onSendMessage, onStopAgent, onChange
     )}>
       <div
         className={cn(
-          "relative flex flex-col border shadow-sm bg-card",
+          "flex flex-col border shadow-sm bg-card",
           isMobile ? "rounded-xl border-border" : "rounded-2xl border-border",
           "focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20"
         )}
       >
-        {/* Slash Command Menu - positioned above the input area */}
-        {onSlashCommand && (
-          <SlashCommandMenu
-            input={input}
-            open={slashMenuOpen}
-            onSelect={handleSlashCommandSelect}
-            onClose={() => {
-              setSlashMenuOpen(false)
-              setSlashSelectedIndex(0)
-            }}
-            selectedIndex={slashSelectedIndex}
-            onSelectedIndexChange={setSlashSelectedIndex}
-            isMobile={isMobile}
-          />
-        )}
-
         {/* Text input area */}
         <div className={cn(
           "flex items-end gap-2",
           isMobile ? "px-3 py-2" : "px-4 py-3"
         )}>
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={
-              isCreating
-                ? "Creating sandbox..."
-                : isRunning
-                ? "Agent is working..."
-                : "Message..."
-            }
-            rows={1}
-            disabled={isCreating}
-            className={cn(
-              "flex-1 resize-none bg-transparent text-foreground placeholder:text-muted-foreground/50 focus:outline-none disabled:opacity-50",
-              isMobile ? "text-base" : "text-sm"
+          {/* Textarea wrapper with slash command menu */}
+          <div className="relative flex-1">
+            {/* Slash Command Menu - positioned above the textarea */}
+            {onSlashCommand && (
+              <SlashCommandMenu
+                input={input}
+                open={slashMenuOpen}
+                onSelect={handleSlashCommandSelect}
+                onClose={() => {
+                  setSlashMenuOpen(false)
+                  setSlashSelectedIndex(0)
+                }}
+                selectedIndex={slashSelectedIndex}
+                onSelectedIndexChange={setSlashSelectedIndex}
+                isMobile={isMobile}
+              />
             )}
-          />
+
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={
+                isCreating
+                  ? "Creating sandbox..."
+                  : isRunning
+                  ? "Agent is working..."
+                  : "Message..."
+              }
+              rows={1}
+              disabled={isCreating}
+              className={cn(
+                "w-full resize-none bg-transparent text-foreground placeholder:text-muted-foreground/50 focus:outline-none disabled:opacity-50",
+                isMobile ? "text-base" : "text-sm"
+              )}
+            />
+          </div>
 
           {/* Button container - larger on mobile */}
           <div className={cn(
