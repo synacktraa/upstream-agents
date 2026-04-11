@@ -36,7 +36,7 @@ export function MessageBubble({ message, isStreaming, isMobile = false, repo }: 
             {/* Uploaded files display */}
             {hasUploadedFiles && (
               <div className={cn(
-                "mt-1 space-y-0.5 text-muted-foreground",
+                "mt-1 space-y-1 text-muted-foreground",
                 isMobile ? "text-sm" : "text-xs"
               )}>
                 {message.uploadedFiles!.map((filePath, index) => {
@@ -375,7 +375,7 @@ function ToolCallRow({ tool, isMobile = false }: ToolCallRowProps) {
     <div
       onClick={toggleExpanded}
       className={cn(
-        isMobile ? "py-1" : "py-px",
+        isMobile ? "py-1" : "py-0.5",
         hasOutput && "cursor-pointer"
       )}
     >
