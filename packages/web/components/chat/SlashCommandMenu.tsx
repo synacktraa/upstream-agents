@@ -76,7 +76,7 @@ export function SlashCommandMenu({
     <div
       ref={menuRef}
       className={cn(
-        "absolute bottom-full left-3 mb-1 w-64 rounded-lg border border-border bg-popover p-1 shadow-lg",
+        "absolute bottom-full left-0 mb-1 w-64 rounded-lg border border-border bg-popover p-1 shadow-lg",
         "z-50"
       )}
     >
