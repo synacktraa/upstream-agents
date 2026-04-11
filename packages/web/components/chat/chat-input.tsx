@@ -289,7 +289,7 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     return (
       <div
         className={cn(
-          "shrink-0 border-t relative",
+          "shrink-0 border-t",
           isMobile ? "px-3 pt-3" : "px-3 py-3 sm:px-6",
           inRebaseConflict
             ? "border-t-red-700 bg-red-700/12 dark:border-t-red-600 dark:bg-red-950/45"
@@ -297,27 +297,27 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
         )}
         style={isMobile ? { paddingBottom: 'calc(var(--safe-area-inset-bottom) + 0.75rem)' } : undefined}
       >
-        {/* Slash Command Menu */}
-        <SlashCommandMenu
-          input={input}
-          open={slashMenuOpen && !!onSlashCommand}
-          onSelect={handleSlashCommandSelect}
-          onClose={() => {
-            setSlashMenuOpen(false)
-            setSlashSelectedIndex(0)
-          }}
-          selectedIndex={slashSelectedIndex}
-          onSelectedIndexChange={setSlashSelectedIndex}
-        />
-
         <div
           className={cn(
-            "flex items-end gap-2 rounded-lg border px-3 py-2",
+            "relative flex items-end gap-2 rounded-lg border px-3 py-2",
             inRebaseConflict
               ? "border-red-800/70 bg-background/95 focus-within:border-red-700 focus-within:ring-1 focus-within:ring-red-700/35 dark:border-red-700/80 dark:focus-within:border-red-600 dark:focus-within:ring-red-600/40"
               : "border-border bg-card focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20"
           )}
         >
+          {/* Slash Command Menu - positioned above the input area */}
+          <SlashCommandMenu
+            input={input}
+            open={slashMenuOpen && !!onSlashCommand}
+            onSelect={handleSlashCommandSelect}
+            onClose={() => {
+              setSlashMenuOpen(false)
+              setSlashSelectedIndex(0)
+            }}
+            selectedIndex={slashSelectedIndex}
+            onSelectedIndexChange={setSlashSelectedIndex}
+          />
+
           <textarea
             ref={ref}
             value={input}

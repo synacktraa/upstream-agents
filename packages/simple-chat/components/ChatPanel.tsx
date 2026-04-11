@@ -256,32 +256,32 @@ export function ChatPanel({ chat, settings, onSendMessage, onStopAgent, onChange
   // Chat input component - responsive design
   const chatInput = (
     <div className={cn(
-      "w-full mx-auto relative",
+      "w-full mx-auto",
       isMobile ? "max-w-full" : "max-w-[52rem]"
     )}>
-      {/* Slash Command Menu */}
-      {onSlashCommand && (
-        <SlashCommandMenu
-          input={input}
-          open={slashMenuOpen}
-          onSelect={handleSlashCommandSelect}
-          onClose={() => {
-            setSlashMenuOpen(false)
-            setSlashSelectedIndex(0)
-          }}
-          selectedIndex={slashSelectedIndex}
-          onSelectedIndexChange={setSlashSelectedIndex}
-          isMobile={isMobile}
-        />
-      )}
-
       <div
         className={cn(
-          "flex flex-col border shadow-sm bg-card",
+          "relative flex flex-col border shadow-sm bg-card",
           isMobile ? "rounded-xl border-border" : "rounded-2xl border-border",
           "focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20"
         )}
       >
+        {/* Slash Command Menu - positioned above the input area */}
+        {onSlashCommand && (
+          <SlashCommandMenu
+            input={input}
+            open={slashMenuOpen}
+            onSelect={handleSlashCommandSelect}
+            onClose={() => {
+              setSlashMenuOpen(false)
+              setSlashSelectedIndex(0)
+            }}
+            selectedIndex={slashSelectedIndex}
+            onSelectedIndexChange={setSlashSelectedIndex}
+            isMobile={isMobile}
+          />
+        )}
+
         {/* Text input area */}
         <div className={cn(
           "flex items-end gap-2",
