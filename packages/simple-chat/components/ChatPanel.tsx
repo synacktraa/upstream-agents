@@ -322,8 +322,11 @@ export function ChatPanel({ chat, settings, onSendMessage, onStopAgent, onChange
             />
           </div>
 
-          {/* Button container */}
-          <div className="shrink-0">
+          {/* Button container - fixed size to prevent layout shift */}
+          <div className={cn(
+            "shrink-0 flex items-center justify-center",
+            isMobile ? "h-9 w-9" : "h-7 w-7"
+          )}>
             {isRunning ? (
               <button
                 onClick={onStopAgent}
@@ -353,8 +356,9 @@ export function ChatPanel({ chat, settings, onSendMessage, onStopAgent, onChange
           "flex items-center gap-2",
           isMobile ? "px-3 py-2 flex-wrap" : "px-4 py-2 gap-4"
         )}>
-          {/* Repo selector - show if can select or create repo */}
-          {showRepoButton && (
+          {/* Repo display/selector */}
+          {showRepoButton ? (
+            // Can change repo - show as button
             <div className="flex items-center gap-1">
               {onChangeRepo && (
                 <button
@@ -381,6 +385,14 @@ export function ChatPanel({ chat, settings, onSendMessage, onStopAgent, onChange
                 </button>
               )}
             </div>
+          ) : !isNewRepo && (
+            // Repo is locked - show as static text
+            <span className={cn(
+              "text-muted-foreground",
+              isMobile ? "text-sm" : "text-xs"
+            )}>
+              {chat.repo}
+            </span>
           )}
 
           {/* Spacer */}
