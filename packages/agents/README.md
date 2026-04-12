@@ -51,29 +51,6 @@ await sandbox.delete()
 | [Gemini](https://geminicli.com/docs/) | ✅ | `GEMINI_API_KEY` |
 | [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) | ✅ | Provider-specific (e.g. `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) |
 
-### Claude authentication
-
-Claude supports two authentication methods:
-
-1. **API Key** — Pass `ANTHROPIC_API_KEY` in the `env` object
-2. **OAuth credentials** — Pass `CLAUDE_CODE_CREDENTIALS` with the JSON content of `~/.claude/.credentials.json`
-
-```typescript
-// Option 1: API Key
-const session = await createSession("claude", {
-  sandbox,
-  env: { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY },
-})
-
-// Option 2: OAuth credentials (e.g., Claude Pro/Max subscription)
-const session = await createSession("claude", {
-  sandbox,
-  env: { CLAUDE_CODE_CREDENTIALS: '{"claudeAiOauth":{"accessToken":"..."}}' },
-})
-```
-
-When `CLAUDE_CODE_CREDENTIALS` is provided, the SDK automatically writes it to `~/.claude/.credentials.json` in the sandbox.
-
 ### CLI reference commands
 
 | Provider | CLI Command |
@@ -303,6 +280,22 @@ Set `CODING_AGENTS_DEBUG=1` to enable debug logging:
 ```bash
 CODING_AGENTS_DEBUG=1 npx tsx your-script.ts
 ```
+
+---
+
+## Claude OAuth credentials
+
+Claude can authenticate via `ANTHROPIC_API_KEY` or `CLAUDE_CODE_CREDENTIALS`. The latter uses OAuth credentials from a Claude Pro/Max subscription.
+
+To use OAuth credentials, pass the contents of your local credentials file as `CLAUDE_CODE_CREDENTIALS`:
+
+| OS | Credentials file path |
+|----|----------------------|
+| macOS | `~/.claude/.credentials.json` |
+| Linux | `~/.claude/.credentials.json` |
+| Windows | `%USERPROFILE%\.claude\.credentials.json` |
+
+The SDK automatically writes this to `~/.claude/.credentials.json` in the sandbox.
 
 ---
 
