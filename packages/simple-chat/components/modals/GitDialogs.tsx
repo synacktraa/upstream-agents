@@ -530,8 +530,8 @@ export function useGitDialogs({ chat, onAddMessage }: UseGitDialogsOptions): Use
   // Conflict state
   const [rebaseConflict, setRebaseConflict] = useState<RebaseConflictState>(EMPTY_CONFLICT_STATE)
 
-  // Get repo name from repo path (owner/name -> name)
-  const repoName = repoApiName || ""
+  // Always use "project" as the directory name - sandbox/create always uses this
+  const repoName = "project"
 
   // Add system message helper for git operations
   const addSystemMessage = useCallback((content: string, isError = false) => {

@@ -43,9 +43,8 @@ export async function POST(req: Request) {
     const daytona = new Daytona({ apiKey: daytonaApiKey })
     const sandbox = await daytona.get(sandboxId)
 
-    // 5. The repo name in the sandbox is just the repo part (not owner/repo)
-    const repoName = repoFullName.split("/")[1]
-    const repoPath = `${PATHS.SANDBOX_HOME}/${repoName}`
+    // 5. Always use "project" as the directory name - sandbox/create always uses this
+    const repoPath = `${PATHS.SANDBOX_HOME}/project`
 
     // 6. Set up the remote URL with auth token
     const remoteUrl = `https://x-access-token:${githubToken}@github.com/${repoFullName}.git`

@@ -273,7 +273,8 @@ export function useChat() {
       }
     }
 
-    const repoName = isNewRepo ? "project" : chat.repo.split("/")[1]
+    // Always use "project" as the directory name - sandbox/create always uses this
+    const repoName = "project"
 
     // 3. Upload files if any (now that sandbox exists)
     let uploadedFilePaths: string[] | undefined
