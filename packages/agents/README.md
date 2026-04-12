@@ -287,15 +287,21 @@ CODING_AGENTS_DEBUG=1 npx tsx your-script.ts
 
 Claude can authenticate via `ANTHROPIC_API_KEY` or `CLAUDE_CODE_CREDENTIALS`. The latter uses OAuth credentials from a Claude Pro/Max subscription.
 
-To use OAuth credentials, pass the contents of your local credentials file as `CLAUDE_CODE_CREDENTIALS`:
+First, sign in locally:
 
-| OS | Credentials file path |
-|----|----------------------|
-| macOS | `~/.claude/.credentials.json` |
-| Linux | `~/.claude/.credentials.json` |
-| Windows | `%USERPROFILE%\.claude\.credentials.json` |
+```bash
+claude auth login
+```
 
-The SDK automatically writes this to `~/.claude/.credentials.json` in the sandbox.
+Then retrieve your credentials:
+
+| OS | Command |
+|----|---------|
+| macOS | `security find-generic-password -s "Claude Code-credentials" -w` |
+| Linux | `cat ~/.claude/.credentials.json` |
+| Windows | `type %USERPROFILE%\.claude\.credentials.json` |
+
+Pass the output as `CLAUDE_CODE_CREDENTIALS`. The SDK automatically writes it to `~/.claude/.credentials.json` in the sandbox.
 
 ---
 
