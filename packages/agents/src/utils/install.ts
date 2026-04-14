@@ -78,6 +78,14 @@ export function installProvider(name: ProviderName): boolean {
 }
 
 /**
+ * Check if a provider is built-in and doesn't need installation.
+ */
+export function isBuiltInProvider(name: ProviderName): boolean {
+  // ELIZA is built-in: runs via node within the agents package
+  return name === "eliza"
+}
+
+/**
  * Ensure a provider CLI is installed, installing it if necessary
  * @param name - Provider name
  * @param autoInstall - Whether to automatically install if missing (default: false)
@@ -88,6 +96,11 @@ export function ensureCliInstalled(
   name: ProviderName,
   autoInstall: boolean = false
 ): boolean {
+  // Built-in providers don't need installation
+  if (isBuiltInProvider(name)) {
+    return true
+  }
+
   if (isCliInstalled(name)) {
     return true
   }
@@ -123,7 +136,8 @@ export function getInstallationStatus(): Record<ProviderName, boolean> {
   const status: Record<string, boolean> = {}
 
   for (const provider of providers) {
-    status[provider] = isCliInstalled(provider)
+    // Built-in providers are always "installed"
+    status[provider] = isBuiltInProvider(provider) || isCliInstalled(provider)
   }
 
   return status as Record<ProviderName, boolean>

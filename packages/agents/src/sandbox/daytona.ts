@@ -129,6 +129,11 @@ export function adaptDaytonaSandbox(
     },
 
     async ensureProvider(name: ProviderName): Promise<void> {
+      // ELIZA is built-in (runs via node within the agents package), no installation needed
+      if (name === "eliza") {
+        return
+      }
+
       // For goose, also check in ~/.local/bin which is the default install location
       const checkCommand = name === "goose"
         ? `which ${name} || test -x "$HOME/.local/bin/${name}"`
@@ -140,7 +145,14 @@ export function adaptDaytonaSandbox(
 
       // Check if provider uses shell installer or npm
       const shellInstaller = getShellInstaller(name)
-      const installCommand = shellInstaller ?? `npm install -g ${getPackageName(name)}`
+      const packageName = getPackageName(name)
+
+      // Skip installation if no package name and no shell installer (built-in provider)
+      if (!shellInstaller && !packageName) {
+        return
+      }
+
+      const installCommand = shellInstaller ?? `npm install -g ${packageName}`
 
       const installResult = await sandbox.process.executeCommand(
         installCommand, undefined, undefined, 120
