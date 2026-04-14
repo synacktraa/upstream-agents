@@ -39,6 +39,7 @@ export {
   getDefaultAgent,
   hasClaudeCodeCredentials,
   hasCodexCredentials,
+  hasElizaCredentials,
   hasGeminiCredentials,
   hasGooseCredentials,
   hasPiCredentials,
