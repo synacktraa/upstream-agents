@@ -143,6 +143,41 @@ export function GooseIcon({ className }: AgentIconProps) {
   )
 }
 
+// ELIZA icon - Classic therapist's couch with thought bubble
+// Represents the original ELIZA chatbot's role as a Rogerian psychotherapist
+export function ElizaIcon({ className }: AgentIconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={cn("h-4 w-4", className)}
+    >
+      {/* Thought bubble - representing conversation/therapy */}
+      <circle cx="17" cy="6" r="4" fill="currentColor" />
+      <circle cx="12" cy="9" r="2" fill="currentColor" fillOpacity="0.7" />
+      <circle cx="9" cy="11" r="1" fill="currentColor" fillOpacity="0.5" />
+      {/* Couch base */}
+      <path
+        d="M2 18C2 16.8954 2.89543 16 4 16H20C21.1046 16 22 16.8954 22 18V20C22 20.5523 21.5523 21 21 21H3C2.44772 21 2 20.5523 2 20V18Z"
+        fill="currentColor"
+      />
+      {/* Couch back */}
+      <path
+        d="M3 13C3 12.4477 3.44772 12 4 12H8C8.55228 12 9 12.4477 9 13V16H3V13Z"
+        fill="currentColor"
+        fillOpacity="0.8"
+      />
+      {/* Couch arm */}
+      <path
+        d="M19 14C19 13.4477 19.4477 13 20 13H21C21.5523 13 22 13.4477 22 14V16H19V14Z"
+        fill="currentColor"
+        fillOpacity="0.8"
+      />
+    </svg>
+  )
+}
+
 // Pi icon - Official Pi Coding Agent logo
 // Source: https://shittycodingagent.ai/logo.svg
 export function PiIcon({ className }: AgentIconProps) {
@@ -175,6 +210,8 @@ export function AgentIcon({ agent, className }: { agent: Agent; className?: stri
       return <ClaudeCodeIcon className={className} />
     case "codex":
       return <CodexIcon className={className} />
+    case "eliza":
+      return <ElizaIcon className={className} />
     case "opencode":
       return <OpenCodeIcon className={className} />
     case "gemini":
