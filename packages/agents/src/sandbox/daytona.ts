@@ -5,7 +5,7 @@
 import type { Sandbox } from "@daytonaio/sdk"
 import type { CodeAgentSandbox, AdaptSandboxOptions, ExecuteBackgroundOptions, ProviderName } from "../types/index"
 import { getPackageName, getShellInstaller } from "../utils/install"
-import { ELIZA_BUNDLE_CONTENT } from "../agents/eliza/bundle-content"
+import { ELIZA_BUNDLE_B64 } from "../agents/eliza/bundle-content"
 
 // Path to ELIZA bundle (uploaded to sandbox when needed)
 const ELIZA_SANDBOX_PATH = "/tmp/eliza-cli.bundle.js"
@@ -161,7 +161,7 @@ export function adaptDaytonaSandbox(
 
         // Upload the embedded bundle content to sandbox
         console.log(`Uploading ELIZA CLI bundle to sandbox...`)
-        const bundleBuffer = Buffer.from(ELIZA_BUNDLE_CONTENT, "utf-8")
+        const bundleBuffer = Buffer.from(ELIZA_BUNDLE_B64, "base64")
         await sandbox.fs.uploadFile(bundleBuffer, ELIZA_SANDBOX_PATH)
         console.log(`Uploaded ELIZA CLI bundle to ${ELIZA_SANDBOX_PATH}`)
         return

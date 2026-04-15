@@ -5,7 +5,7 @@
     "packages/*"
   ],
   "scripts": {
-    "postinstall": "cd packages/web && npx prisma generate",
+    "postinstall": "npm run build:eliza -w background-agents && cd packages/web && npx prisma generate",
     "dev": "cd packages/web && prisma generate && next dev --webpack",
     "dev:simple-chat": "npm run dev -w @upstream/simple-chat",
     "build": "npm run build -w background-agents && npm run build -w @upstream/web && npm run build -w @upstream/simple-chat",

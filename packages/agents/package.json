@@ -6,7 +6,8 @@
   "types": "src/index.ts",
   "type": "module",
   "scripts": {
-    "build": "tsc && npm run build:eliza-bundle && npm run build:eliza-embed",
+    "build": "npm run build:eliza && tsc",
+    "build:eliza": "npm run build:eliza-bundle && npm run build:eliza-embed",
     "build:eliza-bundle": "esbuild src/agents/eliza/cli.ts --bundle --platform=node --format=esm --outfile=dist/agents/eliza/cli.bundle.js",
     "build:eliza-embed": "npx tsx scripts/embed-eliza-bundle.ts",
     "test": "vitest run",

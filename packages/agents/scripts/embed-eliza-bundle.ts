@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 /**
- * Embeds the ELIZA CLI bundle as a string constant.
+ * Embeds the ELIZA CLI bundle as a base64 string constant.
  * Run after esbuild creates the bundle.
  */
 
@@ -19,13 +19,8 @@ if (!fs.existsSync(bundlePath)) {
   process.exit(1)
 }
 
-const bundleContent = fs.readFileSync(bundlePath, "utf-8")
-
-// Escape backticks and ${} for template literal
-const escaped = bundleContent
-  .replace(/\\/g, "\\\\")
-  .replace(/`/g, "\\`")
-  .replace(/\$\{/g, "\\${")
+const bundleBytes = fs.readFileSync(bundlePath)
+const b64 = bundleBytes.toString("base64")
 
 const output = `/**
  * ELIZA CLI bundle content - auto-generated, do not edit.
@@ -33,8 +28,8 @@ const output = `/**
  */
 
 // eslint-disable-next-line
-export const ELIZA_BUNDLE_CONTENT = \`${escaped}\`
+export const ELIZA_BUNDLE_B64 = ${JSON.stringify(b64)}
 `
 
 fs.writeFileSync(outputPath, output)
-console.log(`Embedded ELIZA bundle (${bundleContent.length} bytes) into ${outputPath}`)
+console.log(`Embedded ELIZA bundle (${bundleBytes.length} bytes, ${b64.length} b64 chars) into ${outputPath}`)
