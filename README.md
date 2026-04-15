@@ -206,7 +206,7 @@ This is an npm-workspaces monorepo with four packages:
 
 ```
 packages/
-├── agents/        # @upstream/agents      — TypeScript SDK for AI coding agents
+├── agents/        # background-agents      — TypeScript SDK for AI coding agents
 ├── common/        # @upstream/common      — Shared utilities and types
 ├── web/           # @upstream/web         — Main Next.js application
 └── simple-chat/   # @upstream/simple-chat — Standalone chat Next.js application
