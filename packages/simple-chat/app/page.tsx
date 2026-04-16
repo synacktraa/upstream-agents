@@ -194,11 +194,6 @@ export default function HomePage() {
       }
     }
 
-    // Reset the filter to "All repositories" if the selected repo is different from the filter
-    if (repoFilter !== ALL_REPOSITORIES && repoFilter !== repo) {
-      setRepoFilter(ALL_REPOSITORIES)
-    }
-
     updateChatRepo(currentChatId, repo, branch)
   }
 
@@ -209,6 +204,14 @@ export default function HomePage() {
       signIn("github")
       return
     }
+
+    // Reset filter to "All repositories" if this is the first message and the repo differs from filter
+    // This ensures the chat remains visible after it's started with a different repo
+    if (currentChat && currentChat.messages.length === 0 &&
+        repoFilter !== ALL_REPOSITORIES && repoFilter !== currentChat.repo) {
+      setRepoFilter(ALL_REPOSITORIES)
+    }
+
     sendMessage(message, agent, model, files)
   }
 
