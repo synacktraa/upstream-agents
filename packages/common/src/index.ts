@@ -160,9 +160,7 @@ export {
 // Search palette
 export {
   // Types
-  type SearchItem,
   type RecentItem,
-  type PaletteState,
   // Functions
   getRecentItems,
   addRecentItem,
