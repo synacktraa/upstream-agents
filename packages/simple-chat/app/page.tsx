@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { useSession, signIn } from "next-auth/react"
 import { Menu } from "lucide-react"
-import { Sidebar } from "@/components/Sidebar"
+import { Sidebar, ALL_REPOSITORIES, NO_REPOSITORY } from "@/components/Sidebar"
 import { ChatPanel } from "@/components/ChatPanel"
 import { SDKContent } from "@/components/SDKContent"
 import { RepoPickerModal } from "@/components/modals/RepoPickerModal"
@@ -53,6 +53,9 @@ export default function HomePage() {
   // Repos and branches for search palette
   const [repos, setRepos] = useState<GitHubRepo[]>([])
   const [branches, setBranches] = useState<GitHubBranch[]>([])
+
+  // Repository filter state (shared with Sidebar)
+  const [repoFilter, setRepoFilter] = useState<string>(ALL_REPOSITORIES)
 
   // Load repos when authenticated
   useEffect(() => {
@@ -131,9 +134,17 @@ export default function HomePage() {
     }
   }, [isHydrated, currentChatId, startNewChat])
 
-  // Handler for new chat - creates with NEW_REPOSITORY by default
+  // Handler for new chat - uses selected repo filter as default, or NEW_REPOSITORY if "All" is selected
   const handleNewChat = () => {
-    startNewChat()
+    // If a specific repo is selected in the filter, use it for the new chat
+    if (repoFilter !== ALL_REPOSITORIES && repoFilter !== NO_REPOSITORY) {
+      // Find the repo to get the default branch
+      const repo = repos.find(r => `${r.owner.login}/${r.name}` === repoFilter)
+      startNewChat(repoFilter, repo?.default_branch ?? "main")
+    } else {
+      // Default to NEW_REPOSITORY (no repo)
+      startNewChat()
+    }
     if (currentPage !== "chat") handleNavigate("chat")
   }
 
@@ -181,6 +192,11 @@ export default function HomePage() {
         console.error("Failed to set up remote:", error)
         return
       }
+    }
+
+    // Reset the filter to "All repositories" if the selected repo is different from the filter
+    if (repoFilter !== ALL_REPOSITORIES && repoFilter !== repo) {
+      setRepoFilter(ALL_REPOSITORIES)
     }
 
     updateChatRepo(currentChatId, repo, branch)
@@ -266,6 +282,8 @@ export default function HomePage() {
           currentPage={currentPage}
           onNavigate={handleNavigate}
           isMobile={false}
+          repoFilter={repoFilter}
+          onRepoFilterChange={setRepoFilter}
         />
       )}
 
@@ -289,6 +307,8 @@ export default function HomePage() {
           isMobile={true}
           mobileOpen={mobileSidebarOpen}
           onMobileClose={() => setMobileSidebarOpen(false)}
+          repoFilter={repoFilter}
+          onRepoFilterChange={setRepoFilter}
         />
       )}
 

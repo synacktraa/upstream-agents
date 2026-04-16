@@ -7,9 +7,9 @@ import { cn } from "@/lib/utils"
 import type { Chat } from "@/lib/types"
 import { NEW_REPOSITORY } from "@/lib/types"
 
-// Repository filter options
-const ALL_REPOSITORIES = "__all__"
-const NO_REPOSITORY = "__none__"
+// Repository filter options - exported for use in parent components
+export const ALL_REPOSITORIES = "__all__"
+export const NO_REPOSITORY = "__none__"
 
 const MIN_WIDTH = 140
 const MAX_WIDTH = 400
@@ -36,6 +36,9 @@ interface SidebarProps {
   isMobile?: boolean
   mobileOpen?: boolean
   onMobileClose?: () => void
+  // Repository filter (controlled from parent)
+  repoFilter?: string
+  onRepoFilterChange?: (filter: string) => void
 }
 
 export function Sidebar({
@@ -56,6 +59,8 @@ export function Sidebar({
   isMobile = false,
   mobileOpen = false,
   onMobileClose,
+  repoFilter: controlledRepoFilter,
+  onRepoFilterChange,
 }: SidebarProps) {
   const { data: session } = useSession()
   const isResizing = useRef(false)
@@ -68,8 +73,10 @@ export function Sidebar({
   const [startX, setStartX] = useState(0)
   const [startTime, setStartTime] = useState(0)
 
-  // Repository filter state
-  const [repoFilter, setRepoFilter] = useState<string>(ALL_REPOSITORIES)
+  // Repository filter state - supports controlled mode from parent
+  const [internalRepoFilter, setInternalRepoFilter] = useState<string>(ALL_REPOSITORIES)
+  const repoFilter = controlledRepoFilter ?? internalRepoFilter
+  const setRepoFilter = onRepoFilterChange ?? setInternalRepoFilter
   const [repoDropdownOpen, setRepoDropdownOpen] = useState(false)
   const repoDropdownRef = useRef<HTMLDivElement>(null)
 
