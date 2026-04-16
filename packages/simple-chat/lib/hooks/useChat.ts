@@ -109,9 +109,25 @@ export function useChat() {
   }, [])
 
   const selectChat = useCallback((chatId: string) => {
+    // Clean up empty chats (no messages) when switching away, except the one we're switching to
+    const currentId = state.currentChatId
+    if (currentId && currentId !== chatId) {
+      const currentChat = state.chats.find((c) => c.id === currentId)
+      if (currentChat && currentChat.messages.length === 0) {
+        // Delete the empty chat first, then select the new one
+        const afterDelete = deleteStoredChat(currentId)
+        const newState = {
+          ...afterDelete,
+          currentChatId: chatId,
+        }
+        saveState(newState)
+        setState(newState)
+        return
+      }
+    }
     const newState = setCurrentChat(chatId)
     setState(newState)
-  }, [])
+  }, [state.currentChatId, state.chats])
 
   // Track which chats are being deleted (for fade animation)
   const [deletingChatIds, setDeletingChatIds] = useState<Set<string>>(new Set())

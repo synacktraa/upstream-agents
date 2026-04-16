@@ -127,7 +127,7 @@ export function Sidebar({
   // Get display name for repository
   const getRepoDisplayName = (repo: string) => {
     if (repo === NEW_REPOSITORY) return "No repository"
-    if (repo === ALL_REPOSITORIES) return "All repositories"
+    if (repo === ALL_REPOSITORIES) return "All chats"
     if (repo === NO_REPOSITORY) return "No repository"
     return repo
   }
@@ -370,7 +370,7 @@ export function Sidebar({
                   className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-accent text-left"
                 >
                   <Check className={cn("h-4 w-4 flex-shrink-0", repoFilter === ALL_REPOSITORIES ? "opacity-100" : "opacity-0")} />
-                  <span className="flex-1">All repositories</span>
+                  <span className="flex-1">All chats</span>
                   <span className="text-muted-foreground">({repoCounts.total})</span>
                 </button>
 
@@ -571,7 +571,7 @@ export function Sidebar({
                   className="flex items-center gap-2 w-full px-3 py-1.5 text-sm hover:bg-accent text-left cursor-pointer"
                 >
                   <Check className={cn("h-3.5 w-3.5 flex-shrink-0", repoFilter === ALL_REPOSITORIES ? "opacity-100" : "opacity-0")} />
-                  <span className="flex-1">All repositories</span>
+                  <span className="flex-1">All chats</span>
                   <span className="text-muted-foreground">({repoCounts.total})</span>
                 </button>
 
