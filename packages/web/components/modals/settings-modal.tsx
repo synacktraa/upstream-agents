@@ -23,7 +23,7 @@ interface SettingsModalProps {
     squashOnMerge?: boolean
     prDescriptionMode?: string
   } | null
-  onCredentialsUpdate: () => void
+  onCredentialsUpdate: () => void | Promise<void>
   /** Field to highlight with error styling (e.g., "anthropicApiKey", "openaiApiKey") */
   highlightField?: string | null
   /** Callback to clear the highlight when user starts typing */
@@ -263,7 +263,7 @@ export function SettingsModal({ open, onClose, credentials, onCredentialsUpdate,
         keysToClear.size > 0
 
       if (credentialsChanged) {
-        onCredentialsUpdate()
+        await onCredentialsUpdate()
       }
       onClose()
     } catch {
