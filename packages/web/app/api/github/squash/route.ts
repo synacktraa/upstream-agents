@@ -189,6 +189,11 @@ export async function POST(req: Request) {
           `cd ${repoPath} && git fetch origin ${head} 2>&1`
         )
 
+        // Ensure we're on the correct branch before resetting
+        await sandbox.process.executeCommand(
+          `cd ${repoPath} && git checkout ${head} 2>&1`
+        )
+
         // Reset local branch to match the squashed remote
         await sandbox.process.executeCommand(
           `cd ${repoPath} && git reset --hard origin/${head} 2>&1`
