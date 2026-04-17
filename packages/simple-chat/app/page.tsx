@@ -301,7 +301,7 @@ export default function HomePage() {
       currentChatId={displayCurrentChatId}
       onSelectChat={handleSelectChat}
     >
-    <div className="flex h-screen overflow-hidden">
+    <div className={`flex overflow-hidden ${isMobile ? 'h-screen-mobile' : 'h-screen'}`}>
       {/* Desktop Sidebar */}
       {!isMobile && (
         <Sidebar

@@ -264,3 +264,27 @@
   min-width: var(--min-touch-target);
   min-height: var(--min-touch-target);
 }
+
+/* ============================================================================
+   Mobile Viewport Height Fix
+   ============================================================================ */
+
+/* Use dvh (dynamic viewport height) on mobile to account for browser chrome
+   that appears/disappears (address bar, toolbar, etc.). Falls back to vh. */
+.h-screen-mobile {
+  height: 100vh;
+  height: 100dvh;
+}
+
+/* Prevent body from being larger than viewport */
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Fix for iOS Safari 100vh issue */
+@supports (-webkit-touch-callout: none) {
+  .h-screen-mobile {
+    height: -webkit-fill-available;
+  }
+}
