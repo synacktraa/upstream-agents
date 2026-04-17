@@ -5,6 +5,7 @@ import { X, Terminal, Copy, Check, Loader2, Clock, Bot, Box, Key, ExternalLink, 
 import { useState, useEffect } from "react"
 import { useTheme } from "next-themes"
 import { Input } from "@/components/ui/input"
+import { PR_DESCRIPTION_LABELS, prDescriptionTypes, type PRDescriptionType } from "@/lib/shared/schemas"
 
 type SettingsTab = "agents" | "sandboxes" | "git" | "appearance"
 
@@ -80,8 +81,8 @@ export function SettingsModal({ open, onClose, credentials, onCredentialsUpdate,
   // Git preferences
   const [squashOnMerge, setSquashOnMerge] = useState(false)
   const [initialSquashOnMerge, setInitialSquashOnMerge] = useState(false)
-  const [prDescriptionMode, setPrDescriptionMode] = useState<"ai" | "commits">("ai")
-  const [initialPrDescriptionMode, setInitialPrDescriptionMode] = useState<"ai" | "commits">("ai")
+  const [prDescriptionMode, setPrDescriptionMode] = useState<PRDescriptionType>("short")
+  const [initialPrDescriptionMode, setInitialPrDescriptionMode] = useState<PRDescriptionType>("short")
 
   // Sandbox settings
   const [sandboxAutoStopInterval, setSandboxAutoStopInterval] = useState(5)
@@ -128,7 +129,7 @@ export function SettingsModal({ open, onClose, credentials, onCredentialsUpdate,
       setSandboxAutoStopInterval(interval)
       setInitialAutoStopInterval(interval)
       const sq = credentials?.squashOnMerge ?? false
-      const pr = (credentials?.prDescriptionMode as "ai" | "commits") ?? "ai"
+      const pr = (credentials?.prDescriptionMode as PRDescriptionType) ?? "short"
       setSquashOnMerge(sq)
       setInitialSquashOnMerge(sq)
       setPrDescriptionMode(pr)
@@ -787,24 +788,21 @@ export function SettingsModal({ open, onClose, credentials, onCredentialsUpdate,
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <span className="text-xs font-medium text-foreground">PR descriptions</span>
-                <span className="text-[11px] text-muted-foreground">How to generate pull request descriptions</span>
-                <div className="flex gap-2">
-                  {([
-                    { value: "ai" as const, label: "AI generated" },
-                    { value: "commits" as const, label: "Commit messages" },
-                  ]).map(({ value, label }) => (
+                <span className="text-xs font-medium text-foreground">Default PR description</span>
+                <span className="text-[11px] text-muted-foreground">Default format for pull request descriptions</span>
+                <div className="flex flex-wrap gap-2">
+                  {prDescriptionTypes.map((type) => (
                     <button
-                      key={value}
-                      onClick={() => setPrDescriptionMode(value)}
+                      key={type}
+                      onClick={() => setPrDescriptionMode(type)}
                       className={cn(
                         "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer",
-                        prDescriptionMode === value
+                        prDescriptionMode === type
                           ? "border-primary bg-primary/10 text-foreground"
                           : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/20"
                       )}
                     >
-                      {label}
+                      {PR_DESCRIPTION_LABELS[type].label}
                     </button>
                   ))}
                 </div>

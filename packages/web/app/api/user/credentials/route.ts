@@ -79,7 +79,7 @@ export async function POST(req: Request) {
     updateData.squashOnMerge = squashOnMerge
   }
 
-  if (prDescriptionMode === "ai" || prDescriptionMode === "commits") {
+  if (prDescriptionMode === "short" || prDescriptionMode === "long" || prDescriptionMode === "commits" || prDescriptionMode === "none") {
     updateData.prDescriptionMode = prDescriptionMode
   }
 
