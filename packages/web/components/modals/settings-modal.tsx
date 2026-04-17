@@ -357,8 +357,8 @@ export function SettingsModal({ open, onClose, credentials, onCredentialsUpdate,
   // Handle cancel - revert theme preview and close
   function handleCancel() {
     if (pendingTheme !== initialTheme && initialTheme) {
-      // Revert to original theme (commitTheme restores from next-themes state)
-      commitTheme(initialTheme)
+      // Revert visual preview (previewTheme only touched DOM, not localStorage)
+      previewTheme(initialTheme)
     }
     onClose()
   }
