@@ -1,6 +1,6 @@
 "use client"
 
-import { Loader2, Minus, Plus } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -13,8 +13,9 @@ interface SquashDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   branchName: string
-  squashCount: number
-  onSquashCountChange: (count: number) => void
+  baseBranch: string
+  commitsAhead: number
+  commitsLoading: boolean
   actionLoading: boolean
   onSquash: () => void
   onCancel: () => void
@@ -24,47 +25,67 @@ export function SquashDialog({
   open,
   onOpenChange,
   branchName,
-  squashCount,
-  onSquashCountChange,
+  baseBranch,
+  commitsAhead,
+  commitsLoading,
   actionLoading,
   onSquash,
   onCancel,
 }: SquashDialogProps) {
+  const canSquash = commitsAhead >= 2 && !commitsLoading
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle className="text-sm">Squash commits on {branchName}</DialogTitle>
+          <DialogTitle className="text-sm">Squash commits</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4">
+        <div className="space-y-3">
           <div>
             <label className="block text-xs text-muted-foreground mb-1">
-              Number of commits to squash
+              Current branch
             </label>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => onSquashCountChange(Math.max(2, squashCount - 1))}
-                disabled={squashCount <= 2}
-                className="rounded-md border border-border bg-input hover:bg-accent disabled:opacity-50 transition-colors p-2"
-              >
-                <Minus className="h-4 w-4" />
-              </button>
-              <div className="flex-1 text-center bg-input border border-border rounded-md py-2 text-base font-medium">
-                {squashCount}
-              </div>
-              <button
-                type="button"
-                onClick={() => onSquashCountChange(squashCount + 1)}
-                className="rounded-md border border-border bg-input hover:bg-accent transition-colors p-2"
-              >
-                <Plus className="h-4 w-4" />
-              </button>
+            <div className="bg-muted/50 rounded-md px-3 py-2 text-sm font-medium truncate">
+              {branchName || "No branch"}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Squash the last {squashCount} commits into a single commit
-            </p>
           </div>
+
+          <div>
+            <label className="block text-xs text-muted-foreground mb-1">
+              Base branch
+            </label>
+            <div className="bg-muted/50 rounded-md px-3 py-2 text-sm font-medium truncate">
+              {baseBranch || "main"}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs text-muted-foreground mb-1">
+              Commits to squash
+            </label>
+            {commitsLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Counting commits...
+              </div>
+            ) : (
+              <div className="bg-muted/50 rounded-md px-3 py-2 text-sm font-medium">
+                {commitsAhead} commit{commitsAhead !== 1 ? "s" : ""} ahead of {baseBranch || "main"}
+              </div>
+            )}
+          </div>
+
+          {!commitsLoading && commitsAhead < 2 && (
+            <p className="text-xs text-amber-500">
+              Need at least 2 commits to squash. This branch has {commitsAhead} commit{commitsAhead !== 1 ? "s" : ""} ahead of {baseBranch || "main"}.
+            </p>
+          )}
+
+          {canSquash && (
+            <p className="text-xs text-muted-foreground">
+              This will combine all {commitsAhead} commits into a single commit.
+            </p>
+          )}
         </div>
         <DialogFooter>
           <button
@@ -75,7 +96,7 @@ export function SquashDialog({
           </button>
           <button
             onClick={onSquash}
-            disabled={squashCount < 2 || actionLoading}
+            disabled={!canSquash || actionLoading}
             className="cursor-pointer flex items-center justify-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
             {actionLoading && <Loader2 className="h-3 w-3 animate-spin" />}

@@ -458,10 +458,49 @@ export function useGitDialogs({
   }, [sandboxId, branchId, checkRebaseStatus])
 
   // Squash-specific state
-  const [squashCount, setSquashCount] = useState(2)
+  const [commitsAhead, setCommitsAhead] = useState(0)
+  const [commitsLoading, setCommitsLoading] = useState(false)
+
+  // Fetch commits ahead when squash dialog opens
+  const fetchCommitsAhead = useCallback(async () => {
+    if (!branch || !repoOwner || !repoName || !branchBaseName) {
+      setCommitsAhead(0)
+      return
+    }
+    setCommitsLoading(true)
+    try {
+      const res = await fetch("/api/github/compare", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          owner: repoOwner,
+          repo: repoName,
+          base: branchBaseName,
+          head: branchName,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok && typeof data.ahead_by === "number") {
+        setCommitsAhead(data.ahead_by)
+      } else {
+        setCommitsAhead(0)
+      }
+    } catch {
+      setCommitsAhead(0)
+    } finally {
+      setCommitsLoading(false)
+    }
+  }, [branch, repoOwner, repoName, branchName, branchBaseName])
+
+  // Fetch commits ahead when squash dialog opens
+  useEffect(() => {
+    if (squashOpen) {
+      fetchCommitsAhead()
+    }
+  }, [squashOpen, fetchCommitsAhead])
 
   const handleSquash = useCallback(async () => {
-    if (!branch || !sandboxId || squashCount < 2) return
+    if (!branch || !sandboxId || commitsAhead < 2) return
     setActionLoading(true)
 
     const [ownerFromFull, repoFromFull] = repoFullName.split("/")
@@ -469,24 +508,22 @@ export function useGitDialogs({
     const apiRepo = repoName || repoFromFull || ""
 
     try {
-      const res = await fetch("/api/sandbox/git", {
+      const res = await fetch("/api/github/squash", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          owner: apiOwner,
+          repo: apiRepo,
+          head: branchName,
+          base: branchBaseName,
           sandboxId,
-          repoPath: `${PATHS.SANDBOX_HOME}/${repoName}`,
-          action: "squash",
-          squashCount,
-          currentBranch: branchName,
-          repoOwner: apiOwner,
-          repoApiName: apiRepo,
         }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Squash failed")
 
       addSystemMessage(
-        `::icon-success:: **Squashed** the last ${squashCount} commits into one.`
+        `::icon-success:: **Squashed** ${commitsAhead} commits into one on **${branchName}**.`
       )
       setSquashOpen(false)
     } catch (err: unknown) {
@@ -495,7 +532,7 @@ export function useGitDialogs({
     } finally {
       setActionLoading(false)
     }
-  }, [branch, sandboxId, squashCount, branchName, repoName, repoOwner, repoFullName, addSystemMessage])
+  }, [branch, sandboxId, commitsAhead, branchName, branchBaseName, repoName, repoOwner, repoFullName, addSystemMessage])
 
   return {
     // Dialog open states
@@ -528,8 +565,9 @@ export function useGitDialogs({
     setPRDescriptionType,
 
     // Squash state
-    squashCount,
-    setSquashCount,
+    commitsAhead,
+    commitsLoading,
+    baseBranch: branchBaseName,
 
     // Current branch info (for display)
     branchName,

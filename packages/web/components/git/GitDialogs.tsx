@@ -63,8 +63,9 @@ export function GitDialogs({ gitDialogs }: GitDialogsProps) {
         open={gitDialogs.squashOpen}
         onOpenChange={(open) => !open && gitDialogs.setSquashOpen(false)}
         branchName={gitDialogs.branchName}
-        squashCount={gitDialogs.squashCount}
-        onSquashCountChange={gitDialogs.setSquashCount}
+        baseBranch={gitDialogs.baseBranch}
+        commitsAhead={gitDialogs.commitsAhead}
+        commitsLoading={gitDialogs.commitsLoading}
         actionLoading={gitDialogs.actionLoading}
         onSquash={gitDialogs.handleSquash}
         onCancel={() => gitDialogs.setSquashOpen(false)}

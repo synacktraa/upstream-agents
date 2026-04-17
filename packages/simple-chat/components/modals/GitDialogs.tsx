@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import * as Dialog from "@radix-ui/react-dialog"
-import { X, Loader2, GitMerge, GitBranch, GitPullRequest, GitCommitVertical, ChevronDown, Minus, Plus } from "lucide-react"
+import { X, Loader2, GitMerge, GitBranch, GitPullRequest, GitCommitVertical, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Chat, Message } from "@/lib/types"
 import { PATHS } from "@/lib/constants"
@@ -46,8 +46,9 @@ export interface UseGitDialogsResult {
   setSquashMerge: (squash: boolean) => void
 
   // Squash-specific state
-  squashCount: number
-  setSquashCount: (count: number) => void
+  commitsAhead: number
+  commitsLoading: boolean
+  baseBranch: string
 
   // Current branch info
   branchName: string
@@ -580,6 +581,8 @@ interface SquashDialogProps {
 }
 
 export function SquashDialog({ open, onClose, gitDialogs, chat, isMobile = false }: SquashDialogProps) {
+  const canSquash = gitDialogs.commitsAhead >= 2 && !gitDialogs.commitsLoading
+
   return (
     <BaseDialog
       open={open}
@@ -606,43 +609,55 @@ export function SquashDialog({ open, onClose, gitDialogs, chat, isMobile = false
           <label className={cn(
             "block text-muted-foreground mb-1",
             isMobile ? "text-sm" : "text-xs"
-          )}>Number of commits to squash</label>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => gitDialogs.setSquashCount(Math.max(2, gitDialogs.squashCount - 1))}
-              disabled={gitDialogs.squashCount <= 2}
-              className={cn(
-                "rounded-md border border-border bg-input hover:bg-accent disabled:opacity-50 transition-colors",
-                isMobile ? "p-3" : "p-2"
-              )}
-            >
-              <Minus className={cn(isMobile ? "h-5 w-5" : "h-4 w-4")} />
-            </button>
-            <div className={cn(
-              "flex-1 text-center bg-input border border-border rounded-md font-medium",
-              isMobile ? "py-3 text-lg" : "py-2 text-base"
-            )}>
-              {gitDialogs.squashCount}
-            </div>
-            <button
-              type="button"
-              onClick={() => gitDialogs.setSquashCount(gitDialogs.squashCount + 1)}
-              className={cn(
-                "rounded-md border border-border bg-input hover:bg-accent transition-colors",
-                isMobile ? "p-3" : "p-2"
-              )}
-            >
-              <Plus className={cn(isMobile ? "h-5 w-5" : "h-4 w-4")} />
-            </button>
+          )}>Base branch</label>
+          <div className={cn(
+            "bg-muted/50 rounded-md px-3 font-medium truncate",
+            isMobile ? "py-3 text-base" : "py-2 text-sm"
+          )}>
+            {gitDialogs.baseBranch || "main"}
           </div>
+        </div>
+
+        <div>
+          <label className={cn(
+            "block text-muted-foreground mb-1",
+            isMobile ? "text-sm" : "text-xs"
+          )}>Commits to squash</label>
+          {gitDialogs.commitsLoading ? (
+            <div className={cn(
+              "flex items-center gap-2 text-muted-foreground",
+              isMobile ? "py-3 text-base" : "py-2 text-sm"
+            )}>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Counting commits...
+            </div>
+          ) : (
+            <div className={cn(
+              "bg-muted/50 rounded-md px-3 font-medium",
+              isMobile ? "py-3 text-base" : "py-2 text-sm"
+            )}>
+              {gitDialogs.commitsAhead} commit{gitDialogs.commitsAhead !== 1 ? "s" : ""} ahead of {gitDialogs.baseBranch || "main"}
+            </div>
+          )}
+        </div>
+
+        {!gitDialogs.commitsLoading && gitDialogs.commitsAhead < 2 && (
           <p className={cn(
-            "text-muted-foreground mt-1",
+            "text-amber-500",
             isMobile ? "text-sm" : "text-xs"
           )}>
-            Squash the last {gitDialogs.squashCount} commits into a single commit
+            Need at least 2 commits to squash.
           </p>
-        </div>
+        )}
+
+        {canSquash && (
+          <p className={cn(
+            "text-muted-foreground",
+            isMobile ? "text-sm" : "text-xs"
+          )}>
+            This will combine all {gitDialogs.commitsAhead} commits into a single commit.
+          </p>
+        )}
 
         <div className="flex justify-end gap-2 pt-2">
           <button
@@ -659,7 +674,7 @@ export function SquashDialog({ open, onClose, gitDialogs, chat, isMobile = false
               await gitDialogs.handleSquash()
               onClose()
             }}
-            disabled={gitDialogs.squashCount < 2 || gitDialogs.actionLoading}
+            disabled={!canSquash || gitDialogs.actionLoading}
             className={cn(
               "rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2",
               isMobile ? "px-4 py-2.5 text-base" : "px-3 py-1.5 text-sm"
@@ -703,7 +718,8 @@ export function useGitDialogs({ chat, onAddMessage }: UseGitDialogsOptions): Use
   const [squashMerge, setSquashMerge] = useState(false)
 
   // Squash-specific state
-  const [squashCount, setSquashCount] = useState(2)
+  const [commitsAhead, setCommitsAhead] = useState(0)
+  const [commitsLoading, setCommitsLoading] = useState(false)
 
   // Conflict state
   const [rebaseConflict, setRebaseConflict] = useState<RebaseConflictState>(EMPTY_CONFLICT_STATE)
@@ -933,23 +949,59 @@ export function useGitDialogs({ chat, onAddMessage }: UseGitDialogsOptions): Use
     }
   }, [sandboxId, repoName, rebaseConflict.inMerge, addSystemMessage])
 
-  // Handle squash
-  const handleSquash = useCallback(async () => {
-    if (!branchName || !sandboxId || squashCount < 2) return
-    setActionLoading(true)
-
+  // Fetch commits ahead when squash dialog opens
+  const fetchCommitsAhead = useCallback(async () => {
+    if (!repoOwner || !repoApiName || !baseBranch || !branchName) {
+      setCommitsAhead(0)
+      return
+    }
+    setCommitsLoading(true)
     try {
-      const res = await fetch("/api/sandbox/git", {
+      const res = await fetch("/api/github/compare", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          owner: repoOwner,
+          repo: repoApiName,
+          base: baseBranch,
+          head: branchName,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok && typeof data.ahead_by === "number") {
+        setCommitsAhead(data.ahead_by)
+      } else {
+        setCommitsAhead(0)
+      }
+    } catch {
+      setCommitsAhead(0)
+    } finally {
+      setCommitsLoading(false)
+    }
+  }, [repoOwner, repoApiName, baseBranch, branchName])
+
+  // Fetch commits ahead when squash dialog opens
+  useEffect(() => {
+    if (squashOpen) {
+      fetchCommitsAhead()
+    }
+  }, [squashOpen, fetchCommitsAhead])
+
+  // Handle squash
+  const handleSquash = useCallback(async () => {
+    if (!branchName || !sandboxId || commitsAhead < 2) return
+    setActionLoading(true)
+
+    try {
+      const res = await fetch("/api/github/squash", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          owner: repoOwner,
+          repo: repoApiName,
+          head: branchName,
+          base: baseBranch,
           sandboxId,
-          repoPath: `${PATHS.SANDBOX_HOME}/${repoName}`,
-          action: "squash",
-          squashCount,
-          currentBranch: branchName,
-          repoOwner,
-          repoApiName,
         }),
       })
 
@@ -957,7 +1009,7 @@ export function useGitDialogs({ chat, onAddMessage }: UseGitDialogsOptions): Use
       if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Squash failed")
 
       addSystemMessage(
-        `Squashed the last ${squashCount} commits into one.`
+        `Squashed ${commitsAhead} commits into one on ${branchName}.`
       )
       setSquashOpen(false)
     } catch (err: unknown) {
@@ -966,7 +1018,7 @@ export function useGitDialogs({ chat, onAddMessage }: UseGitDialogsOptions): Use
     } finally {
       setActionLoading(false)
     }
-  }, [branchName, sandboxId, squashCount, repoName, repoOwner, repoApiName, addSystemMessage])
+  }, [branchName, sandboxId, commitsAhead, baseBranch, repoOwner, repoApiName, addSystemMessage])
 
   // Check rebase status
   const checkRebaseStatus = useCallback(async () => {
@@ -1019,8 +1071,9 @@ export function useGitDialogs({ chat, onAddMessage }: UseGitDialogsOptions): Use
     actionLoading,
     squashMerge,
     setSquashMerge,
-    squashCount,
-    setSquashCount,
+    commitsAhead,
+    commitsLoading,
+    baseBranch,
     branchName,
     handleMerge,
     handleRebase,
