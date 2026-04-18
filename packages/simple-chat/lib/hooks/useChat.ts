@@ -391,6 +391,10 @@ export function useChat() {
       const executeData = await response.json()
       const { backgroundSessionId } = executeData
 
+      // Save backgroundSessionId for recovery after page refresh
+      newState = updateChat(chat.id, { backgroundSessionId })
+      setState(newState)
+
       // 4. Start SSE streaming for status
       startStreaming(chat.id, sandboxId!, repoName, backgroundSessionId, previewUrlPattern || chat.previewUrlPattern)
 
@@ -514,8 +518,11 @@ export function useChat() {
           // Clean up stream from store
           useStreamStore.getState().stopStream(chatId)
 
-          // Store sessionId for conversation continuity
-          const updates: Partial<Chat> = { status: data.status === "error" ? "error" : "ready" }
+          // Store sessionId for conversation continuity, clear backgroundSessionId
+          const updates: Partial<Chat> = {
+            status: data.status === "error" ? "error" : "ready",
+            backgroundSessionId: undefined,  // Clear - execution is done
+          }
           if (data.sessionId) {
             updates.sessionId = data.sessionId
           }
@@ -570,7 +577,10 @@ export function useChat() {
           // Clean up and update status
           useStreamStore.getState().stopStream(chatId)
 
-          const newState = updateChat(chatId, { status: "error" })
+          const newState = updateChat(chatId, {
+            status: "error",
+            backgroundSessionId: undefined,  // Clear - execution failed
+          })
           setState(newState)
         } catch {
           // This is a connection error, not a server-sent error event
@@ -626,6 +636,31 @@ export function useChat() {
       setState(newState)
     }
   }, [currentChat])
+
+  // Recovery: resume streaming for chats that were running when page was closed
+  useEffect(() => {
+    if (!isHydrated) return
+
+    const runningChats = state.chats.filter(
+      (c) => c.backgroundSessionId && c.sandboxId
+    )
+
+    for (const chat of runningChats) {
+      // Skip if already streaming (e.g., from a previous recovery attempt)
+      if (useStreamStore.getState().isStreaming(chat.id)) continue
+
+      console.log(`Recovering stream for chat ${chat.id}`)
+      startStreaming(
+        chat.id,
+        chat.sandboxId!,
+        "project",
+        chat.backgroundSessionId!,
+        chat.previewUrlPattern
+      )
+    }
+    // Only run once on hydration, not on every state change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isHydrated])
 
   // Cleanup on unmount - stop all streams
   useEffect(() => {
