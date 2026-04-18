@@ -37,6 +37,8 @@ export const SYNONYMS = {
   happy: "(happy|elated|glad|joyful|cheerful|excited|good|great|wonderful)",
   // Desire verbs
   desire: "(want|need|desire|crave|wish for)",
+  // Anxiety/worry emotions
+  anxious: "(worried|anxious|nervous|stressed|afraid|scared|fearful|terrified|panicked|overwhelmed)",
 }
 
 /**
@@ -223,6 +225,21 @@ export const ELIZA_PATTERNS: ElizaPattern[] = [
   // STANDARD (0-1)
   // ===================
 
+  // MY (general) - Original ELIZA's MEMORY keyword!
+  // This is the key pattern that makes ELIZA remember things.
+  // Lower rank (1) so specific patterns like "my family" (rank 2) take priority.
+  {
+    pattern: /my ([a-z]+)(.*)/i,
+    rank: 1,
+    responses: [
+      "Your {0}?",
+      "Why do you say your {0}{1}?",
+      "Does that suggest anything else which belongs to you?",
+      "Is it important to you that your {0}{1}?",
+    ],
+    memoryResponse: "Does that have anything to do with the fact that your {0}{1}?",
+  },
+
   // ALWAYS - Original rank 1
   {
     pattern: /always/i,
@@ -319,6 +336,46 @@ export const ELIZA_PATTERNS: ElizaPattern[] = [
     ],
   },
 
+  // I AM ANXIOUS/WORRIED - with synonym expansion (with memory)
+  {
+    pattern: syn(`i('m| am) @anxious`),
+    rank: 2,
+    responses: [
+      "What specifically makes you feel {1}?",
+      "How long have you been feeling {1}?",
+      "What do you think is causing you to feel {1}?",
+      "When did you first start feeling {1}?",
+      "Is there something in particular that triggers this feeling?",
+    ],
+    memoryResponse: "Earlier you mentioned feeling {1}. Has that anxiety lessened?",
+  },
+
+  // I AM ANXIOUS/WORRIED ABOUT - captures the subject (with memory)
+  {
+    pattern: syn(`i('m| am) @anxious (about|of) (.*)`),
+    rank: 3,
+    responses: [
+      "What is it about {3} that makes you {1}?",
+      "How long have you been {1} about {3}?",
+      "Why does {3} make you feel this way?",
+      "Tell me more about your concerns regarding {3}.",
+    ],
+    memoryResponse: "You mentioned being {1} about {3}. How are you feeling about that now?",
+  },
+
+  // I WORRY/FEAR - alternative phrasing (with memory)
+  {
+    pattern: /i (worry|fear|dread) (that |about )?(.*)/i,
+    rank: 2,
+    responses: [
+      "What makes you {0} about {2}?",
+      "How often do you {0} about {2}?",
+      "Do you think your {0} is justified?",
+      "What would happen if {2} came true?",
+    ],
+    memoryResponse: "Earlier you said you {0} about {2}. Is that still troubling you?",
+  },
+
   // "I am" patterns (general)
   {
     pattern: /i am (.*)/i,
@@ -373,7 +430,7 @@ export const ELIZA_PATTERNS: ElizaPattern[] = [
     ],
   },
 
-  // Want/need patterns
+  // Want/need patterns (with memory)
   {
     pattern: /i (want|need) (.*)/i,
     rank: 0,
@@ -384,9 +441,10 @@ export const ELIZA_PATTERNS: ElizaPattern[] = [
       "What if you never got {1}?",
       "What would getting {1} mean to you?",
     ],
+    memoryResponse: "Earlier you said you {0} {1}. Do you still feel that way?",
   },
 
-  // I WISH
+  // I WISH (with memory)
   {
     pattern: /i wish (.*)/i,
     rank: 0,
@@ -396,9 +454,10 @@ export const ELIZA_PATTERNS: ElizaPattern[] = [
       "What would it mean if {0}?",
       "Suppose {0} - what then?",
     ],
+    memoryResponse: "You mentioned wishing {0}. Is that still important to you?",
   },
 
-  // Can't patterns
+  // Can't patterns (with memory)
   {
     pattern: /i can'?t (.*)/i,
     rank: 0,
@@ -408,6 +467,7 @@ export const ELIZA_PATTERNS: ElizaPattern[] = [
       "Perhaps you could {0} now.",
       "What would it take for you to {0}?",
     ],
+    memoryResponse: "Earlier you said you can't {0}. Have you made any progress on that?",
   },
 
   // Because patterns
@@ -471,7 +531,7 @@ export const ELIZA_PATTERNS: ElizaPattern[] = [
     ],
   },
 
-  // Think patterns
+  // Think patterns (with memory)
   {
     pattern: /i think (.*)/i,
     rank: 0,
@@ -481,9 +541,10 @@ export const ELIZA_PATTERNS: ElizaPattern[] = [
       "Do you doubt {0}?",
       "What makes you think {0}?",
     ],
+    memoryResponse: "You mentioned thinking {0}. Do you still believe that?",
   },
 
-  // I BELIEVE
+  // I BELIEVE (with memory)
   {
     pattern: /i believe (.*)/i,
     rank: 0,
@@ -493,6 +554,7 @@ export const ELIZA_PATTERNS: ElizaPattern[] = [
       "Are you sure {0}?",
       "What makes you believe {0}?",
     ],
+    memoryResponse: "Earlier you said you believe {0}. Has that belief changed?",
   },
 
   // WHAT - Original keyword

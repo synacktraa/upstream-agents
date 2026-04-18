@@ -189,7 +189,6 @@ async function runEliza(prompt: string): Promise<void> {
 
   // Check if we should recall from memory instead of using fallback
   let finalResponse = response
-  let usedMemory = false
 
   if (isFromFallback && hasMemories()) {
     // Pop from memory using visible Bash tool calls
@@ -336,7 +335,6 @@ async function runEliza(prompt: string): Promise<void> {
 
         // Use the memory content as our response
         finalResponse = memoryContent
-        usedMemory = true
       } catch {
         // Memory read failed, fall back to normal response
       }
