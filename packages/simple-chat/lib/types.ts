@@ -66,6 +66,9 @@ export interface Chat {
   sessionId: string | null      // Agent session ID for conversation continuity
   previewUrlPattern?: string    // URL pattern for dev server previews
 
+  // Active execution (for recovery after page refresh)
+  backgroundSessionId?: string  // Set when agent starts, cleared on completion
+
   // Agent config (per-chat, can be changed)
   agent?: string        // "claude-code" | "opencode" | "codex" | etc.
   model?: string        // Model ID for the agent
