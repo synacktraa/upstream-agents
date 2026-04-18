@@ -7,6 +7,7 @@ import type { AppState, Chat, Settings, Message } from "./types"
 import type { UserCredentialFlags } from "@upstream/common"
 
 const STORAGE_KEY = "simple-chat-state"
+const UNSEEN_KEY = "simple-chat-unseen-completions"
 
 const DEFAULT_SETTINGS: Settings = {
   anthropicApiKey: "",
@@ -224,6 +225,33 @@ export function updateMessage(
   }
   saveState(newState)
   return newState
+}
+
+/**
+ * Load the set of chat IDs with unseen completions
+ */
+export function loadUnseenChatIds(): Set<string> {
+  if (typeof window === "undefined") return new Set()
+  try {
+    const stored = localStorage.getItem(UNSEEN_KEY)
+    if (!stored) return new Set()
+    const parsed = JSON.parse(stored) as string[]
+    return new Set(parsed)
+  } catch {
+    return new Set()
+  }
+}
+
+/**
+ * Save the set of chat IDs with unseen completions
+ */
+export function saveUnseenChatIds(ids: Set<string>): void {
+  if (typeof window === "undefined") return
+  try {
+    localStorage.setItem(UNSEEN_KEY, JSON.stringify([...ids]))
+  } catch (error) {
+    console.error("Failed to save unseen chat ids:", error)
+  }
 }
 
 /**

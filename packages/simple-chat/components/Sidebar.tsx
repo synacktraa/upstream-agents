@@ -21,6 +21,7 @@ interface SidebarProps {
   chats: Chat[]
   currentChatId: string | null
   deletingChatIds: Set<string>
+  unseenChatIds?: Set<string>
   onSelectChat: (chatId: string) => void
   onNewChat: () => void
   onDeleteChat: (chatId: string) => void
@@ -45,6 +46,7 @@ export function Sidebar({
   chats,
   currentChatId,
   deletingChatIds,
+  unseenChatIds,
   onSelectChat,
   onNewChat,
   onDeleteChat,
@@ -96,14 +98,16 @@ export function Sidebar({
     })
   }, [chats])
 
-  // Filter chats by selected repository
+  // Filter chats by selected repository, sorted newest-first by last activity
   const filteredChats = useMemo(() => {
-    return chats.filter((chat) => {
-      if (chat.messages.length === 0) return false
-      if (repoFilter === ALL_REPOSITORIES) return true
-      if (repoFilter === NO_REPOSITORY) return chat.repo === NEW_REPOSITORY
-      return chat.repo === repoFilter
-    })
+    return chats
+      .filter((chat) => {
+        if (chat.messages.length === 0) return false
+        if (repoFilter === ALL_REPOSITORIES) return true
+        if (repoFilter === NO_REPOSITORY) return chat.repo === NEW_REPOSITORY
+        return chat.repo === repoFilter
+      })
+      .sort((a, b) => (b.lastActiveAt ?? b.createdAt) - (a.lastActiveAt ?? a.createdAt))
   }, [chats, repoFilter])
 
   // Count chats per repository (for dropdown display)
@@ -409,6 +413,7 @@ export function Sidebar({
                   chat={chat}
                   isActive={chat.id === currentChatId}
                   isDeleting={deletingChatIds.has(chat.id)}
+                  isUnseen={unseenChatIds?.has(chat.id) ?? false}
                   onSelect={() => handleSelectChat(chat.id)}
                   onDelete={() => onDeleteChat(chat.id)}
                   onRename={(newName) => onRenameChat(chat.id, newName)}
@@ -610,6 +615,7 @@ export function Sidebar({
                   isActive={chat.id === currentChatId}
                   collapsed={collapsed}
                   isDeleting={deletingChatIds.has(chat.id)}
+                  isUnseen={unseenChatIds?.has(chat.id) ?? false}
                   onSelect={() => onSelectChat(chat.id)}
                   onDelete={() => onDeleteChat(chat.id)}
                   onRename={(newName) => onRenameChat(chat.id, newName)}
@@ -720,12 +726,13 @@ interface MobileChatItemProps {
   chat: Chat
   isActive: boolean
   isDeleting: boolean
+  isUnseen: boolean
   onSelect: () => void
   onDelete: () => void
   onRename: (newName: string) => void
 }
 
-function MobileChatItem({ chat, isActive, isDeleting, onSelect, onDelete, onRename }: MobileChatItemProps) {
+function MobileChatItem({ chat, isActive, isDeleting, isUnseen, onSelect, onDelete, onRename }: MobileChatItemProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [editName, setEditName] = useState("")
@@ -807,9 +814,11 @@ function MobileChatItem({ chat, isActive, isDeleting, onSelect, onDelete, onRena
       <div className="flex-1 min-w-0">
         <div className="text-sm truncate">{displayName}</div>
       </div>
-      {chat.status === "running" && (
+      {chat.status === "running" ? (
         <Loader2 className="h-3.5 w-3.5 flex-shrink-0 animate-spin text-muted-foreground" />
-      )}
+      ) : isUnseen ? (
+        <div className="h-2 w-2 flex-shrink-0 rounded-full bg-foreground" />
+      ) : null}
 
       {/* Menu button */}
       <div className="relative" ref={menuRef}>
@@ -939,12 +948,13 @@ interface ChatItemProps {
   isActive: boolean
   collapsed: boolean
   isDeleting: boolean
+  isUnseen: boolean
   onSelect: () => void
   onDelete: () => void
   onRename: (newName: string) => void
 }
 
-function ChatItem({ chat, isActive, collapsed, isDeleting, onSelect, onDelete, onRename }: ChatItemProps) {
+function ChatItem({ chat, isActive, collapsed, isDeleting, isUnseen, onSelect, onDelete, onRename }: ChatItemProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [editName, setEditName] = useState("")
@@ -1031,11 +1041,15 @@ function ChatItem({ chat, isActive, collapsed, isDeleting, onSelect, onDelete, o
           </div>
 
           <div className="relative" ref={menuRef}>
-            {chat.status === "running" && (
+            {chat.status === "running" ? (
               <div className="absolute inset-0 flex items-center justify-center group-hover:opacity-0 transition-opacity pointer-events-none">
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
               </div>
-            )}
+            ) : isUnseen ? (
+              <div className="absolute inset-0 flex items-center justify-center group-hover:opacity-0 transition-opacity pointer-events-none">
+                <div className="h-2 w-2 rounded-full bg-foreground" />
+              </div>
+            ) : null}
             <button
               onClick={(e) => {
                 e.stopPropagation()

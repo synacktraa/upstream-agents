@@ -77,6 +77,8 @@ export interface Chat {
   messages: Message[]
   createdAt: number
   updatedAt: number
+  /** Timestamp of last activity: user message sent, agent content received, or agent completion. Used for sort order. */
+  lastActiveAt?: number
 
   // Display name (auto-generated from first prompt)
   displayName: string | null

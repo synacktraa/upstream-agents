@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { nanoid } from "nanoid"
 import { useSession } from "next-auth/react"
-import type { AppState, Chat, Message, Settings, SSEUpdateEvent, SSECompleteEvent } from "@/lib/types"
+import type { AppState, Chat, ChatStatus, Message, Settings, SSEUpdateEvent, SSECompleteEvent } from "@/lib/types"
 import { NEW_REPOSITORY } from "@/lib/types"
 import {
   loadState,
@@ -16,6 +16,8 @@ import {
   updateLastMessage,
   updateMessage,
   updateSettings as updateStoredSettings,
+  loadUnseenChatIds,
+  saveUnseenChatIds,
 } from "@/lib/storage"
 import { generateBranchName } from "@/lib/utils"
 import { useStreamStore } from "@/lib/stores/stream-store"
@@ -45,12 +47,60 @@ export function useChat() {
   // Start with empty state to avoid hydration mismatch
   const [state, setState] = useState<AppState>(DEFAULT_STATE)
   const [isHydrated, setIsHydrated] = useState(false)
+  const [unseenChatIds, setUnseenChatIds] = useState<Set<string>>(new Set())
+  const prevStatuses = useRef<Map<string, ChatStatus>>(new Map())
 
   // Load from localStorage after mount (client-side only)
   useEffect(() => {
     setState(loadState())
+    setUnseenChatIds(loadUnseenChatIds())
     setIsHydrated(true)
   }, [])
+
+  // Persist unseen set
+  useEffect(() => {
+    if (isHydrated) {
+      saveUnseenChatIds(unseenChatIds)
+    }
+  }, [unseenChatIds, isHydrated])
+
+  // Detect running → non-running transitions and mark unseen
+  useEffect(() => {
+    if (!isHydrated) return
+
+    setUnseenChatIds((prev) => {
+      let next = prev
+      const currentIds = new Set<string>()
+
+      for (const chat of state.chats) {
+        currentIds.add(chat.id)
+        const prevStatus = prevStatuses.current.get(chat.id)
+        if (
+          prevStatus === "running" &&
+          chat.status !== "running" &&
+          chat.id !== state.currentChatId &&
+          !prev.has(chat.id)
+        ) {
+          if (next === prev) next = new Set(prev)
+          next.add(chat.id)
+        }
+        prevStatuses.current.set(chat.id, chat.status)
+      }
+
+      // Drop deleted chats from unseen and prevStatuses
+      for (const id of prev) {
+        if (!currentIds.has(id)) {
+          if (next === prev) next = new Set(prev)
+          next.delete(id)
+        }
+      }
+      for (const id of prevStatuses.current.keys()) {
+        if (!currentIds.has(id)) prevStatuses.current.delete(id)
+      }
+
+      return next
+    })
+  }, [state.chats, state.currentChatId, isHydrated])
 
   // Stream state is now managed by useStreamStore (per-chat isolation)
   // This eliminates race conditions from shared refs
@@ -91,6 +141,14 @@ export function useChat() {
   }, [])
 
   const selectChat = useCallback((chatId: string) => {
+    // Mark as seen
+    setUnseenChatIds((prev) => {
+      if (!prev.has(chatId)) return prev
+      const next = new Set(prev)
+      next.delete(chatId)
+      return next
+    })
+
     // Clean up empty chats (no messages) when switching away, except the one we're switching to
     const currentId = state.currentChatId
     if (currentId && currentId !== chatId) {
@@ -226,6 +284,7 @@ export function useChat() {
     }
 
     let newState = addMessage(chat.id, userMessage)
+    newState = updateChat(chat.id, { lastActiveAt: Date.now() })
     setState(newState)
 
     // 2. If no sandbox, create one (first message)
@@ -499,11 +558,12 @@ export function useChat() {
           // Get accumulated and update React state
           const accumulated = store.getAccumulated(chatId)
           if (accumulated) {
-            const newState = updateLastMessage(chatId, {
+            let newState = updateLastMessage(chatId, {
               content: accumulated.content,
               toolCalls: accumulated.toolCalls,
               contentBlocks: accumulated.contentBlocks,
             })
+            newState = updateChat(chatId, { lastActiveAt: Date.now() })
             setState(newState)
           }
         } catch (err) {
@@ -522,6 +582,7 @@ export function useChat() {
           const updates: Partial<Chat> = {
             status: data.status === "error" ? "error" : "ready",
             backgroundSessionId: undefined,  // Clear - execution is done
+            lastActiveAt: Date.now(),
           }
           if (data.sessionId) {
             updates.sessionId = data.sessionId
@@ -686,6 +747,7 @@ export function useChat() {
     settings: state.settings,
     isHydrated,
     deletingChatIds,
+    unseenChatIds,
 
     // Actions
     startNewChat,
