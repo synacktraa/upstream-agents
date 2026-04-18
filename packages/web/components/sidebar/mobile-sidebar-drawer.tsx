@@ -137,7 +137,11 @@ export function MobileSidebarDrawer({
         `/api/github/branches?owner=${encodeURIComponent(activeRepo.owner)}&repo=${encodeURIComponent(activeRepo.name)}`
       )
       const data = await res.json()
-      setGithubBranches(data.branches || [])
+      // API returns GitHubBranch objects with {name, protected?}, extract just the names
+      const branches = (data.branches || []).map((b: { name: string } | string) =>
+        typeof b === "string" ? b : b.name
+      )
+      setGithubBranches(branches)
     } catch {
       setGithubBranches([])
     } finally {
