@@ -5,6 +5,11 @@
  * A fake agent that outputs Claude Code compatible JSON lines.
  * Uses classic ELIZA pattern matching (deterministic, not random/LLM).
  * Can create and delete actual files as "therapeutic exercises".
+ *
+ * Memory system (like original ELIZA):
+ * - Certain patterns store a "memory response" for later recall
+ * - When the fallback pattern would trigger, ELIZA recalls from memory instead
+ * - Both push and pop use visible Bash tool calls
  */
 
 import { randomUUID } from "node:crypto"
@@ -18,6 +23,9 @@ const cwd = process.env.ELIZA_CWD || process.cwd()
 // Delay multiplier for testing (e.g., ELIZA_DELAY_MULTIPLIER=10 for 10x slower)
 const delayMultiplier = Math.max(1, Number(process.env.ELIZA_DELAY_MULTIPLIER) || 1)
 
+// Memory directory for storing responses to recall later
+const memoryDir = path.join(cwd, ".eliza_memory")
+
 /**
  * Sleep for a given number of milliseconds
  */
@@ -30,6 +38,120 @@ function sleep(ms: number): Promise<void> {
  */
 function generateId(): string {
   return randomUUID().replace(/-/g, "").slice(0, 12)
+}
+
+/**
+ * Push a memory response to the memory stack using Bash tool calls.
+ * Creates a timestamped file in .eliza_memory/
+ */
+async function pushMemory(
+  memoryResponse: string,
+  interEventDelay: number
+): Promise<void> {
+  const toolId = `toolu_${generateId()}`
+  const filename = `${Date.now()}_${generateId()}.txt`
+  const memoryFile = path.join(memoryDir, filename)
+
+  // Escape single quotes for shell
+  const escapedResponse = memoryResponse.replace(/'/g, "'\\''")
+  const command = `mkdir -p "${memoryDir}" && echo '${escapedResponse}' > "${memoryFile}"`
+
+  // Emit Bash tool_use
+  await emit(
+    {
+      type: "assistant",
+      message: {
+        id: `msg_${generateId()}`,
+        type: "message",
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: toolId,
+            name: "Bash",
+            input: {
+              command,
+              description: "Store thought for later",
+            },
+          },
+        ],
+      },
+      session_id: sessionId,
+    },
+    interEventDelay
+  )
+
+  // Actually write the file
+  await sleep(100)
+  try {
+    fs.mkdirSync(memoryDir, { recursive: true })
+    fs.writeFileSync(memoryFile, memoryResponse)
+
+    await emit(
+      {
+        type: "user",
+        message: {
+          content: [
+            {
+              tool_use_id: toolId,
+              type: "tool_result",
+              content: "Stored for later",
+            },
+          ],
+        },
+        session_id: sessionId,
+      },
+      interEventDelay
+    )
+  } catch {
+    await emit(
+      {
+        type: "user",
+        message: {
+          content: [
+            {
+              tool_use_id: toolId,
+              type: "tool_result",
+              content: "Failed to store",
+              is_error: true,
+            },
+          ],
+        },
+        session_id: sessionId,
+      },
+      interEventDelay
+    )
+  }
+}
+
+/**
+ * Check if there are any memories stored
+ */
+function hasMemories(): boolean {
+  try {
+    if (!fs.existsSync(memoryDir)) return false
+    const files = fs.readdirSync(memoryDir).filter((f) => f.endsWith(".txt"))
+    return files.length > 0
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Get the newest memory file path (for Bash commands)
+ */
+function getNewestMemoryFile(): string | null {
+  try {
+    if (!fs.existsSync(memoryDir)) return null
+    const files = fs.readdirSync(memoryDir)
+      .filter((f) => f.endsWith(".txt"))
+      .sort()
+      .reverse() // Newest first (timestamps sort naturally)
+    if (files.length === 0) return null
+    return path.join(memoryDir, files[0])
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -65,7 +187,125 @@ async function runEliza(prompt: string): Promise<void> {
   await sleep(thinkingDelay)
 
   // Match pattern and get response
-  const { response, fileAction } = matchPattern(prompt)
+  const { response, fileAction, memoryResponse, isFromFallback } = matchPattern(prompt)
+
+  // If this pattern has a memory response, store it for later (visible Bash tool call)
+  if (memoryResponse) {
+    await pushMemory(memoryResponse, interEventDelay)
+  }
+
+  // Check if we should recall from memory instead of using fallback
+  let finalResponse = response
+  let usedMemory = false
+
+  if (isFromFallback && hasMemories()) {
+    // Pop from memory using visible Bash tool calls
+    const memoryFile = getNewestMemoryFile()
+    if (memoryFile) {
+      const toolId = `toolu_${generateId()}`
+
+      // Emit Bash tool_use to read the memory file
+      await emit(
+        {
+          type: "assistant",
+          message: {
+            id: `msg_${generateId()}`,
+            type: "message",
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: toolId,
+                name: "Bash",
+                input: {
+                  command: `cat "${memoryFile}"`,
+                  description: "Recall from memory",
+                },
+              },
+            ],
+          },
+          session_id: sessionId,
+        },
+        interEventDelay
+      )
+
+      // Actually read the memory
+      await sleep(100)
+      try {
+        const memoryContent = fs.readFileSync(memoryFile, "utf-8").trim()
+
+        // Emit tool result with the memory content
+        await emit(
+          {
+            type: "user",
+            message: {
+              content: [
+                {
+                  tool_use_id: toolId,
+                  type: "tool_result",
+                  content: memoryContent,
+                },
+              ],
+            },
+            session_id: sessionId,
+          },
+          interEventDelay
+        )
+
+        // Delete the memory file (pop from stack)
+        const deleteToolId = `toolu_${generateId()}`
+        await emit(
+          {
+            type: "assistant",
+            message: {
+              id: `msg_${generateId()}`,
+              type: "message",
+              role: "assistant",
+              content: [
+                {
+                  type: "tool_use",
+                  id: deleteToolId,
+                  name: "Bash",
+                  input: {
+                    command: `rm "${memoryFile}"`,
+                    description: "Clear recalled memory",
+                  },
+                },
+              ],
+            },
+            session_id: sessionId,
+          },
+          interEventDelay
+        )
+
+        // Actually delete it
+        fs.unlinkSync(memoryFile)
+
+        await emit(
+          {
+            type: "user",
+            message: {
+              content: [
+                {
+                  tool_use_id: deleteToolId,
+                  type: "tool_result",
+                  content: "Memory cleared",
+                },
+              ],
+            },
+            session_id: sessionId,
+          },
+          interEventDelay
+        )
+
+        // Use the memory content as our response
+        finalResponse = memoryContent
+        usedMemory = true
+      } catch {
+        // Memory read failed, fall back to normal response
+      }
+    }
+  }
 
   // Emit text response
   const msgId = `msg_${generateId()}`
@@ -76,7 +316,7 @@ async function runEliza(prompt: string): Promise<void> {
         id: msgId,
         type: "message",
         role: "assistant",
-        content: [{ type: "text", text: response }],
+        content: [{ type: "text", text: finalResponse }],
       },
       session_id: sessionId,
     },
@@ -366,7 +606,7 @@ async function runEliza(prompt: string): Promise<void> {
       type: "result",
       subtype: "success",
       is_error: false,
-      result: response,
+      result: finalResponse,
       session_id: sessionId,
     },
     interEventDelay

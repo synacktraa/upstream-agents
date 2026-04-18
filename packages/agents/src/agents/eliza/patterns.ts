@@ -20,6 +20,7 @@ export interface ElizaPattern {
   responses: string[]
   rank?: number // Higher rank = higher priority (like original ELIZA)
   fileAction?: FileAction
+  memoryResponse?: string // If set, store this response for later recall (like original ELIZA's $ flag)
 }
 
 /**
@@ -102,7 +103,7 @@ export const ELIZA_PATTERNS: ElizaPattern[] = [
   // MEDIUM (3-9)
   // ===================
 
-  // REMEMBER - Original rank 5
+  // REMEMBER - Original rank 5 (with memory)
   {
     pattern: /i remember (.*)/i,
     rank: 5,
@@ -114,6 +115,7 @@ export const ELIZA_PATTERNS: ElizaPattern[] = [
       "What in the present situation reminds you of {0}?",
       "What is the connection between me and {0}?",
     ],
+    memoryResponse: "You mentioned remembering {0}. What else comes to mind about that?",
   },
 
   // DO YOU REMEMBER - Original rank 5
@@ -165,7 +167,7 @@ export const ELIZA_PATTERNS: ElizaPattern[] = [
     ],
   },
 
-  // DREAM - Original rank 3
+  // DREAM - Original rank 3 (with memory)
   {
     pattern: /dream(s|ed|ing)? (about |of )?(.*)/i,
     rank: 3,
@@ -176,9 +178,10 @@ export const ELIZA_PATTERNS: ElizaPattern[] = [
       "Don't you believe that dream has something to do with your problem?",
       "Do you ever wish you could escape from reality through dreams?",
     ],
+    memoryResponse: "Earlier you mentioned having a dream about {2}. What else can you tell me about that?",
   },
 
-  // MY FAMILY - Original rank 2
+  // MY FAMILY - Original rank 2 (with memory)
   {
     pattern: syn(`my @family (.*)`),
     rank: 2,
@@ -188,6 +191,7 @@ export const ELIZA_PATTERNS: ElizaPattern[] = [
       "Your {0}?",
       "What else comes to mind when you think of your family?",
     ],
+    memoryResponse: "Let's discuss further why your {0} {1}.",
   },
 
   // WAS - Original rank 2
@@ -290,7 +294,7 @@ export const ELIZA_PATTERNS: ElizaPattern[] = [
     ],
   },
 
-  // I AM SAD - with synonym expansion
+  // I AM SAD - with synonym expansion (with memory)
   {
     pattern: syn(`i am @sad`),
     rank: 0,
@@ -300,6 +304,7 @@ export const ELIZA_PATTERNS: ElizaPattern[] = [
       "I'm sure it's not pleasant to be {0}.",
       "Can you explain what made you {0}?",
     ],
+    memoryResponse: "Earlier you said you were {0}. Are you still feeling that way?",
   },
 
   // I AM HAPPY - with synonym expansion
@@ -622,6 +627,8 @@ export interface MatchResult {
     fileName: string
     content?: string
   }
+  memoryResponse?: string // Pre-formed response to store for later recall
+  isFromFallback?: boolean // True if this matched the fallback pattern
 }
 
 /**
@@ -681,5 +688,20 @@ export function matchPattern(input: string): MatchResult {
     }
   }
 
-  return { response, fileAction }
+  // Prepare memory response if pattern has one (substitute placeholders now)
+  let memoryResponse: string | undefined
+  if (pattern.memoryResponse) {
+    memoryResponse = pattern.memoryResponse
+    for (let i = 1; i < match.length; i++) {
+      memoryResponse = memoryResponse.replace(
+        new RegExp(`\\{${i - 1}\\}`, "g"),
+        match[i] || ""
+      )
+    }
+  }
+
+  // Check if this is the fallback pattern
+  const isFromFallback = (pattern.rank ?? 0) < 0
+
+  return { response, fileAction, memoryResponse, isFromFallback }
 }
