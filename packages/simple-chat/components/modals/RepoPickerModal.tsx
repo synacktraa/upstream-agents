@@ -63,7 +63,7 @@ export function RepoPickerModal({ open, onClose, onSelect, isMobile = false, mod
   // Create repo form state
   const [newRepoName, setNewRepoName] = useState("")
   const [newRepoDescription, setNewRepoDescription] = useState("")
-  const [newRepoIsPrivate, setNewRepoIsPrivate] = useState(false)
+  const [newRepoIsPrivate, setNewRepoIsPrivate] = useState(true)
   const [creating, setCreating] = useState(false)
 
   // Swipe gesture state
@@ -123,7 +123,7 @@ export function RepoPickerModal({ open, onClose, onSelect, isMobile = false, mod
       // Reset create form
       setNewRepoName("")
       setNewRepoDescription("")
-      setNewRepoIsPrivate(false)
+      setNewRepoIsPrivate(true)
       setCreating(false)
     }
   }, [open, allowSelect, suggestedName])
@@ -435,10 +435,10 @@ export function RepoPickerModal({ open, onClose, onSelect, isMobile = false, mod
                   </div>
                 )}
 
-                <div className={cn(isMobile ? "space-y-5" : "space-y-4")}>
+                <div className="space-y-5">
                   {/* Repository Name */}
-                  <div className="flex items-center gap-3">
-                    <label className="text-sm font-medium w-28 flex-shrink-0">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium block">
                       Name <span className="text-destructive">*</span>
                     </label>
                     <Input
@@ -447,12 +447,11 @@ export function RepoPickerModal({ open, onClose, onSelect, isMobile = false, mod
                       onChange={(e) => setNewRepoName(e.target.value)}
                       placeholder="my-new-repo"
                       disabled={creating}
-                      className="flex-1"
                     />
                   </div>
 
-                  <div className="flex items-center gap-3">
-                    <label className="text-sm font-medium w-28 flex-shrink-0">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium block">
                       Description
                     </label>
                     <Input
@@ -461,15 +460,12 @@ export function RepoPickerModal({ open, onClose, onSelect, isMobile = false, mod
                       onChange={(e) => setNewRepoDescription(e.target.value)}
                       placeholder="Optional"
                       disabled={creating}
-                      className="flex-1"
                     />
                   </div>
 
                   {/* Visibility */}
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-medium w-28 flex-shrink-0">
-                      Visibility
-                    </span>
+                  <div className="space-y-1.5">
+                    <span className="text-sm font-medium block">Visibility</span>
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="checkbox"
@@ -482,8 +478,15 @@ export function RepoPickerModal({ open, onClose, onSelect, isMobile = false, mod
                     </label>
                   </div>
 
-                  {/* Create Button */}
-                  <div className="flex justify-end pt-2">
+                  {/* Actions */}
+                  <div className="flex justify-end gap-2 pt-3">
+                    <button
+                      onClick={onClose}
+                      disabled={creating}
+                      className="rounded-md hover:bg-accent transition-colors disabled:opacity-50 px-3 py-1.5 text-sm cursor-pointer"
+                    >
+                      Cancel
+                    </button>
                     <button
                       onClick={handleCreateRepo}
                       disabled={creating || !newRepoName.trim()}

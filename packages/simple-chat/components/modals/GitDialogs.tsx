@@ -251,7 +251,7 @@ export function MergeDialog({ open, onClose, gitDialogs, chat, isMobile = false 
       icon={<GitMerge className={cn(isMobile ? "h-5 w-5" : "h-4 w-4")} />}
       isMobile={isMobile}
     >
-      <div className={cn("space-y-4", isMobile && "space-y-5")}>
+      <div className={cn("space-y-5")}>
         <div>
           <label className={cn(
             "block text-muted-foreground mb-1",
@@ -343,7 +343,7 @@ export function RebaseDialog({ open, onClose, gitDialogs, chat, isMobile = false
       icon={<GitBranch className={cn(isMobile ? "h-5 w-5" : "h-4 w-4")} />}
       isMobile={isMobile}
     >
-      <div className={cn("space-y-4", isMobile && "space-y-5")}>
+      <div className={cn("space-y-5")}>
         <div>
           <label className={cn(
             "block text-muted-foreground mb-1",
@@ -437,7 +437,7 @@ export function PRDialog({ open, onClose, gitDialogs, chat, isMobile = false }: 
       icon={<GitPullRequest className={cn(isMobile ? "h-5 w-5" : "h-4 w-4")} />}
       isMobile={isMobile}
     >
-      <div className={cn("space-y-4", isMobile && "space-y-5")}>
+      <div className={cn("space-y-5")}>
         {!isGitHubRepo ? (
           <p className={cn(
             "text-muted-foreground",
@@ -582,7 +582,7 @@ export function SquashDialog({ open, onClose, gitDialogs, chat, isMobile = false
       icon={<GitCommitVertical className={cn(isMobile ? "h-5 w-5" : "h-4 w-4")} />}
       isMobile={isMobile}
     >
-      <div className={cn("space-y-4", isMobile && "space-y-5")}>
+      <div className={cn("space-y-5")}>
         <div>
           <label className={cn(
             "block text-muted-foreground mb-1",
