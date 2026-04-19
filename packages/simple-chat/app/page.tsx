@@ -93,6 +93,7 @@ export default function HomePage() {
   const [previewWidth, setPreviewWidth] = useState(520)
   const [previewItem, setPreviewItem] = useState<PreviewItem | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
+  const [isResizingPreview, setIsResizingPreview] = useState(false)
   const [availableServers, setAvailableServers] = useState<Array<{ port: number; url: string }>>([])
   // Helper that replaces the item AND ensures the pane is open.
   const openPreview = useCallback((next: PreviewItem) => {
@@ -103,6 +104,7 @@ export default function HomePage() {
   const startPreviewResize = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
     resizingPreview.current = true
+    setIsResizingPreview(true)
     document.body.style.cursor = "col-resize"
     document.body.style.userSelect = "none"
   }, [])
@@ -120,6 +122,7 @@ export default function HomePage() {
     const up = () => {
       if (!resizingPreview.current) return
       resizingPreview.current = false
+      setIsResizingPreview(false)
       document.body.style.cursor = ""
       document.body.style.userSelect = ""
     }
@@ -742,6 +745,12 @@ export default function HomePage() {
           <SDKContent isMobile={isMobile} />
         )}
       </div>
+
+      {/* Transparent full-screen shield during split drag so the cursor isn't
+          swallowed by iframes or other child elements. */}
+      {isResizingPreview && (
+        <div className="fixed inset-0 z-[999] cursor-col-resize" />
+      )}
 
       <RepoPickerModal
         open={repoSelectOpen}
