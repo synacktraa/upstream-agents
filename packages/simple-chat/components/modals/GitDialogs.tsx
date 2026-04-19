@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import * as Dialog from "@radix-ui/react-dialog"
 import { Loader2, GitMerge, GitBranch, GitPullRequest, GitCommitVertical, ChevronDown } from "lucide-react"
-import { ModalHeader } from "@/components/ui/modal-header"
+import { ModalHeader, focusChatPrompt } from "@/components/ui/modal-header"
 import { cn } from "@/lib/utils"
 import type { Chat, Message } from "@/lib/types"
 import { PATHS } from "@/lib/constants"
@@ -122,6 +122,7 @@ function BaseDialog({ open, onClose, title, icon, children, isMobile = false }: 
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/15 backdrop-blur-[1px]" />
         <Dialog.Content
+          onCloseAutoFocus={(e) => { e.preventDefault(); focusChatPrompt() }}
           className={cn(
             "fixed z-50 bg-popover overflow-hidden flex flex-col",
             isMobile
