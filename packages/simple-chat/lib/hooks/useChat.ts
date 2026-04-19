@@ -290,7 +290,7 @@ export function useChat() {
     }
 
     let newState = addMessage(chat.id, userMessage)
-    newState = updateChat(chat.id, { lastActiveAt: Date.now() })
+    newState = updateChat(chat.id, { lastActiveAt: Date.now(), queuePaused: false })
     setState(newState)
 
     // 2. If no sandbox, create one (first message)
@@ -700,7 +700,11 @@ export function useChat() {
     // Close SSE connection - the agent will continue in background but we won't show updates
     if (currentChat) {
       useStreamStore.getState().stopStream(currentChat.id)
-      const newState = updateChat(currentChat.id, { status: "ready" })
+      const hasQueue = (currentChat.queuedMessages?.length ?? 0) > 0
+      const newState = updateChat(currentChat.id, {
+        status: "ready",
+        ...(hasQueue && { queuePaused: true }),
+      })
       setState(newState)
     }
   }, [currentChat])
@@ -751,7 +755,10 @@ export function useChat() {
     if (!currentChat) return
     const queued: QueuedMessage = { id: nanoid(), content, agent, model }
     const existing = currentChat.queuedMessages ?? []
-    const newState = updateChat(currentChat.id, { queuedMessages: [...existing, queued] })
+    const newState = updateChat(currentChat.id, {
+      queuedMessages: [...existing, queued],
+      queuePaused: false,
+    })
     setState(newState)
   }, [currentChat])
 
@@ -848,6 +855,7 @@ export function useChat() {
         c.sandboxId &&
         c.status !== "running" &&
         c.status !== "creating" &&
+        !c.queuePaused &&
         c.queuedMessages &&
         c.queuedMessages.length > 0
     )

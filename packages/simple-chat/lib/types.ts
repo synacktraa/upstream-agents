@@ -82,6 +82,8 @@ export interface Chat {
 
   /** Messages queued while the agent was running. The next one is dispatched automatically on completion. */
   queuedMessages?: QueuedMessage[]
+  /** When true, auto-dispatch of queued messages is suspended (e.g. user clicked Stop). Cleared when the user sends or queues again. */
+  queuePaused?: boolean
 
   // Display name (auto-generated from first prompt)
   displayName: string | null
