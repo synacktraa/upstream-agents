@@ -413,6 +413,31 @@ export default function HomePage() {
     return out
   }, [chats])
 
+  const handleRequestMergeChats = useCallback((sourceId: string, targetId?: string) => {
+    const source = chats.find((c) => c.id === sourceId)
+    const target = targetId ? chats.find((c) => c.id === targetId) : null
+    if (!source) return
+    selectChat(source.id)
+    setTimeout(() => {
+      if (target?.branch) {
+        gitDialogs.setSelectedBranch(target.branch)
+      } else {
+        gitDialogs.setSelectedBranch("")
+      }
+      gitDialogs.setMergeOpen(true)
+    }, 0)
+  }, [chats, selectChat, gitDialogs])
+
+  const handleRequestRebaseChat = useCallback((sourceId: string) => {
+    const source = chats.find((c) => c.id === sourceId)
+    if (!source) return
+    selectChat(source.id)
+    setTimeout(() => {
+      gitDialogs.setSelectedBranch("")
+      gitDialogs.setRebaseOpen(true)
+    }, 0)
+  }, [chats, selectChat, gitDialogs])
+
   const handleNavigateChat = useCallback((direction: "up" | "down") => {
     if (treeOrderedChatIds.length === 0) return
     const idx = currentChatId ? treeOrderedChatIds.indexOf(currentChatId) : -1
@@ -492,6 +517,8 @@ export default function HomePage() {
           onRepoFilterChange={setRepoFilter}
           collapsedChatIds={collapsedChatIds}
           onToggleChatCollapsed={toggleChatCollapsed}
+          onRequestMergeChats={handleRequestMergeChats}
+          onRequestRebaseChat={handleRequestRebaseChat}
         />
       )}
 
@@ -521,6 +548,8 @@ export default function HomePage() {
           onRepoFilterChange={setRepoFilter}
           collapsedChatIds={collapsedChatIds}
           onToggleChatCollapsed={toggleChatCollapsed}
+          onRequestMergeChats={handleRequestMergeChats}
+          onRequestRebaseChat={handleRequestRebaseChat}
         />
       )}
 

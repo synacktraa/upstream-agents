@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect, useMemo } from "react"
 import { useSession, signIn, signOut } from "next-auth/react"
-import { Plus, Trash2, Settings, LogOut, PanelLeft, MoreHorizontal, Pin, Pencil, Code2, X, ChevronDown, ChevronRight, FolderGit2, Check, Loader2, HelpCircle } from "lucide-react"
+import { Plus, Trash2, Settings, LogOut, PanelLeft, MoreHorizontal, Pin, Pencil, Code2, X, ChevronDown, ChevronRight, FolderGit2, Check, Loader2, HelpCircle, GitMerge, GitBranch } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Chat } from "@/lib/types"
 import { NEW_REPOSITORY } from "@/lib/types"
@@ -45,6 +45,11 @@ interface SidebarProps {
   // can expand branches programmatically).
   collapsedChatIds?: Set<string>
   onToggleChatCollapsed?: (id: string) => void
+  /** Drag a chat onto another (same repo) to kick off a merge, or pick Merge
+   *  from a chat's context menu (target left unspecified). */
+  onRequestMergeChats?: (sourceId: string, targetId?: string) => void
+  /** Pick Rebase from a chat's context menu. */
+  onRequestRebaseChat?: (sourceId: string) => void
 }
 
 export function Sidebar({
@@ -71,6 +76,8 @@ export function Sidebar({
   onRepoFilterChange,
   collapsedChatIds: controlledCollapsedChatIds,
   onToggleChatCollapsed: controlledToggleChatCollapsed,
+  onRequestMergeChats,
+  onRequestRebaseChat,
 }: SidebarProps) {
   const { data: session } = useSession()
   const isResizing = useRef(false)
@@ -137,6 +144,25 @@ export function Sidebar({
     () => filteredChats.filter((c) => !(c.parentChatId && visibleIds.has(c.parentChatId))),
     [filteredChats, visibleIds],
   )
+
+  // Drag-to-merge state: which chat is being dragged, and which chat the
+  // pointer is currently over (valid target only).
+  const [dragSourceId, setDragSourceId] = useState<string | null>(null)
+  const [dragOverId, setDragOverId] = useState<string | null>(null)
+  const chatById = useMemo(() => {
+    const m = new Map<string, Chat>()
+    for (const c of chats) m.set(c.id, c)
+    return m
+  }, [chats])
+  const canDrop = useCallback((sourceId: string | null, targetId: string): boolean => {
+    if (!sourceId || sourceId === targetId) return false
+    const source = chatById.get(sourceId)
+    const target = chatById.get(targetId)
+    if (!source || !target) return false
+    if (!source.branch || !target.branch) return false
+    if (source.repo === NEW_REPOSITORY || source.repo !== target.repo) return false
+    return true
+  }, [chatById])
 
   // Track which parent chats are collapsed. Default: expanded. Can be
   // overridden by the parent to keep state in sync with keyboard navigation.
@@ -637,6 +663,22 @@ export function Sidebar({
                 onSelectChat,
                 onDeleteChat,
                 onRenameChat,
+                onMerge: onRequestMergeChats ? (id) => onRequestMergeChats(id) : undefined,
+                onRebase: onRequestRebaseChat ? (id) => onRequestRebaseChat(id) : undefined,
+                dragSourceId,
+                dragOverId,
+                canDrop,
+                onDragStartChat: (id) => setDragSourceId(id),
+                onDragEndChat: () => { setDragSourceId(null); setDragOverId(null) },
+                onDragEnterChat: (id) => setDragOverId(id),
+                onDragLeaveChat: (id) => setDragOverId((prev) => (prev === id ? null : prev)),
+                onDropChat: (id) => {
+                  if (onRequestMergeChats && dragSourceId) {
+                    onRequestMergeChats(dragSourceId, id)
+                  }
+                  setDragSourceId(null)
+                  setDragOverId(null)
+                },
               })}
             </div>
           </div>
@@ -967,6 +1009,16 @@ interface RenderChatTreeArgs {
   onSelectChat: (id: string) => void
   onDeleteChat: (id: string) => void
   onRenameChat: (id: string, newName: string) => void
+  onMerge?: (id: string) => void
+  onRebase?: (id: string) => void
+  dragSourceId?: string | null
+  dragOverId?: string | null
+  canDrop?: (sourceId: string | null, targetId: string) => boolean
+  onDragStartChat?: (id: string) => void
+  onDragEndChat?: () => void
+  onDragEnterChat?: (id: string) => void
+  onDragLeaveChat?: (id: string) => void
+  onDropChat?: (id: string) => void
 }
 
 function renderChatTree(args: RenderChatTreeArgs): React.ReactNode[] {
@@ -974,6 +1026,7 @@ function renderChatTree(args: RenderChatTreeArgs): React.ReactNode[] {
   const walk = (chat: Chat, depth: number) => {
     const children = args.childrenByParent.get(chat.id) ?? []
     const isExpanded = !args.collapsedChatIds.has(chat.id)
+    const canAcceptDrop = !!(args.canDrop && args.canDrop(args.dragSourceId ?? null, chat.id))
     out.push(
       <ChatItem
         key={chat.id}
@@ -989,6 +1042,22 @@ function renderChatTree(args: RenderChatTreeArgs): React.ReactNode[] {
         onSelect={() => args.onSelectChat(chat.id)}
         onDelete={() => args.onDeleteChat(chat.id)}
         onRename={(newName) => args.onRenameChat(chat.id, newName)}
+        onMerge={args.onMerge ? () => args.onMerge!(chat.id) : undefined}
+        onRebase={args.onRebase ? () => args.onRebase!(chat.id) : undefined}
+        isDragSource={args.dragSourceId === chat.id}
+        isDropTarget={canAcceptDrop && args.dragOverId === chat.id}
+        onDragStartRow={args.onDragStartChat ? () => args.onDragStartChat!(chat.id) : undefined}
+        onDragEndRow={args.onDragEndChat}
+        onDragEnterRow={
+          canAcceptDrop && args.onDragEnterChat ? () => args.onDragEnterChat!(chat.id) : undefined
+        }
+        onDragOverRow={
+          canAcceptDrop ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move" } : undefined
+        }
+        onDragLeaveRow={args.onDragLeaveChat ? () => args.onDragLeaveChat!(chat.id) : undefined}
+        onDropRow={
+          canAcceptDrop && args.onDropChat ? () => args.onDropChat!(chat.id) : undefined
+        }
       />
     )
     if (isExpanded) {
@@ -1012,9 +1081,20 @@ interface ChatItemProps {
   onSelect: () => void
   onDelete: () => void
   onRename: (newName: string) => void
+  onMerge?: () => void
+  onRebase?: () => void
+  // Drag-to-merge props (optional; when omitted, drag is disabled).
+  isDragSource?: boolean
+  isDropTarget?: boolean
+  onDragStartRow?: () => void
+  onDragEndRow?: () => void
+  onDragEnterRow?: () => void
+  onDragOverRow?: (e: React.DragEvent) => void
+  onDragLeaveRow?: () => void
+  onDropRow?: () => void
 }
 
-function ChatItem({ chat, isActive, collapsed, isDeleting, isUnseen, depth = 0, hasChildren = false, isExpanded = true, onToggleExpanded, onSelect, onDelete, onRename }: ChatItemProps) {
+function ChatItem({ chat, isActive, collapsed, isDeleting, isUnseen, depth = 0, hasChildren = false, isExpanded = true, onToggleExpanded, onSelect, onDelete, onRename, onMerge, onRebase, isDragSource, isDropTarget, onDragStartRow, onDragEndRow, onDragEnterRow, onDragOverRow, onDragLeaveRow, onDropRow }: ChatItemProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [editName, setEditName] = useState("")
@@ -1082,8 +1162,11 @@ function ChatItem({ chat, isActive, collapsed, isDeleting, isUnseen, depth = 0, 
 
   const indentPx = collapsed ? 0 : depth * 32
 
+  const draggable = !!(onDragStartRow && chat.branch && chat.repo !== NEW_REPOSITORY)
+
   return (
     <div
+      draggable={draggable}
       className={cn(
         "group flex items-center gap-2 rounded-md transition-colors select-none",
         collapsed ? "justify-center p-2" : "px-2 py-1.5",
@@ -1092,13 +1175,25 @@ function ChatItem({ chat, isActive, collapsed, isDeleting, isUnseen, depth = 0, 
           : "cursor-pointer",
         !isDeleting && (isActive
           ? "bg-accent text-accent-foreground"
-          : "hover:bg-accent/50 text-sidebar-foreground")
+          : "hover:bg-accent/50 text-sidebar-foreground"),
+        isDragSource && "opacity-50",
+        isDropTarget && "ring-2 ring-primary/60 bg-primary/10"
       )}
       style={indentPx ? { paddingLeft: `calc(0.5rem + ${indentPx}px)` } : undefined}
       onMouseDown={(e) => {
         // Prevent the browser's native select-on-double-click from highlighting the title text.
         if (e.detail >= 2) e.preventDefault()
       }}
+      onDragStart={draggable ? (e) => {
+        e.dataTransfer.effectAllowed = "move"
+        try { e.dataTransfer.setData("text/plain", chat.id) } catch {}
+        onDragStartRow?.()
+      } : undefined}
+      onDragEnd={draggable ? () => onDragEndRow?.() : undefined}
+      onDragEnter={onDragEnterRow ? (e) => { e.preventDefault(); onDragEnterRow() } : undefined}
+      onDragOver={onDragOverRow}
+      onDragLeave={onDragLeaveRow ? () => onDragLeaveRow() : undefined}
+      onDrop={onDropRow ? (e) => { e.preventDefault(); onDropRow() } : undefined}
       onClick={isDeleting ? undefined : onSelect}
       onDoubleClick={hasChildren && !isDeleting ? (e) => { e.stopPropagation(); onToggleExpanded?.() } : undefined}
     >
@@ -1164,6 +1259,32 @@ function ChatItem({ chat, isActive, collapsed, isDeleting, isUnseen, depth = 0, 
                   <Pencil className="h-3.5 w-3.5" />
                   Rename
                 </button>
+                {onMerge && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onMerge()
+                      setMenuOpen(false)
+                    }}
+                    className="flex items-center gap-2 w-full px-3 py-1.5 text-sm hover:bg-accent cursor-pointer"
+                  >
+                    <GitMerge className="h-3.5 w-3.5" />
+                    Merge
+                  </button>
+                )}
+                {onRebase && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onRebase()
+                      setMenuOpen(false)
+                    }}
+                    className="flex items-center gap-2 w-full px-3 py-1.5 text-sm hover:bg-accent cursor-pointer"
+                  >
+                    <GitBranch className="h-3.5 w-3.5" />
+                    Rebase
+                  </button>
+                )}
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
