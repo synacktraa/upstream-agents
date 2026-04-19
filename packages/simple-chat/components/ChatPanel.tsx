@@ -384,31 +384,6 @@ export function ChatPanel({ chat, settings, onSendMessage, onEnqueueMessage, onR
       "w-full mx-auto",
       isMobile ? "max-w-full" : "max-w-[52rem]"
     )}>
-      {/* Queue shelf sits above the prompt card, narrower so it's visually distinct */}
-      {chat.queuedMessages && chat.queuedMessages.length > 0 && (
-        <div className={cn(
-          "border border-b-0 border-border bg-card rounded-t-md",
-          isMobile ? "mx-4" : "mx-6"
-        )}>
-          {chat.queuedMessages.map((m) => (
-            <div
-              key={m.id}
-              className="flex items-center gap-2 px-3 py-1.5 border-b border-border/40 last:border-b-0"
-            >
-              <span className="flex-1 min-w-0 truncate text-sm text-foreground/80">{m.content}</span>
-              {onRemoveQueuedMessage && (
-                <button
-                  onClick={() => onRemoveQueuedMessage(m.id)}
-                  className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer"
-                  aria-label="Remove queued message"
-                >
-                  <X className="h-2.5 w-2.5" />
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
       <div
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -930,6 +905,32 @@ export function ChatPanel({ chat, settings, onSendMessage, onEnqueueMessage, onR
           {isCreating && (
             <div className="text-2xl text-muted-foreground animate-pulse">
               ...
+            </div>
+          )}
+          {/* Queue shelf — lives at the bottom of the scroll area so it
+              scrolls out of view with the conversation. */}
+          {chat.queuedMessages && chat.queuedMessages.length > 0 && (
+            <div className={cn(
+              "border border-b-0 border-border bg-card rounded-t-md -mb-4",
+              isMobile ? "mx-4" : "mx-6"
+            )}>
+              {chat.queuedMessages.map((m) => (
+                <div
+                  key={m.id}
+                  className="flex items-center gap-2 px-3 py-1.5 border-b border-border/40 last:border-b-0"
+                >
+                  <span className="flex-1 min-w-0 truncate text-sm text-foreground/80">{m.content}</span>
+                  {onRemoveQueuedMessage && (
+                    <button
+                      onClick={() => onRemoveQueuedMessage(m.id)}
+                      className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer"
+                      aria-label="Remove queued message"
+                    >
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
             </div>
           )}
           <div ref={messagesEndRef} />
