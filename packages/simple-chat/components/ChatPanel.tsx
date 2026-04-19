@@ -31,10 +31,11 @@ interface ChatPanelProps {
   onRequireSignIn?: () => void
   onDeleteChat?: () => void
   onOpenHelp?: () => void
+  onOpenFile?: (filePath: string) => void
   isMobile?: boolean
 }
 
-export function ChatPanel({ chat, settings, onSendMessage, onEnqueueMessage, onRemoveQueuedMessage, onResumeQueue, onStopAgent, onChangeRepo, onUpdateChat, onOpenSettings, onSlashCommand, onRequireSignIn, onDeleteChat, onOpenHelp, isMobile = false }: ChatPanelProps) {
+export function ChatPanel({ chat, settings, onSendMessage, onEnqueueMessage, onRemoveQueuedMessage, onResumeQueue, onStopAgent, onChangeRepo, onUpdateChat, onOpenSettings, onSlashCommand, onRequireSignIn, onDeleteChat, onOpenHelp, onOpenFile, isMobile = false }: ChatPanelProps) {
   const [input, setInput] = useState("")
   const [userHasScrolledUp, setUserHasScrolledUp] = useState(false)
   const [showAgentDropdown, setShowAgentDropdown] = useState(false)
@@ -945,6 +946,7 @@ export function ChatPanel({ chat, settings, onSendMessage, onEnqueueMessage, onR
                 isStreaming={isLastAssistant}
                 isMobile={isMobile}
                 repo={isNewRepo ? undefined : chat.repo}
+                onOpenFile={onOpenFile}
               />
             )
           })}

@@ -1,6 +1,31 @@
 @import 'tailwindcss';
+@import "xterm/css/xterm.css";
 
 @custom-variant dark (&:is(.dark *));
+
+/* sugar-high syntax highlighting */
+:root {
+  --sh-class: #1e88e5;
+  --sh-identifier: #354150;
+  --sh-sign: #8996a3;
+  --sh-property: #0550ae;
+  --sh-entity: #6f42c1;
+  --sh-jsxliterals: #0550ae;
+  --sh-string: #067d17;
+  --sh-keyword: #d32f2f;
+  --sh-comment: #8996a3;
+}
+.dark {
+  --sh-class: #89ddff;
+  --sh-identifier: #d4d4d4;
+  --sh-sign: #8996a3;
+  --sh-property: #82aaff;
+  --sh-entity: #c792ea;
+  --sh-jsxliterals: #82aaff;
+  --sh-string: #c3e88d;
+  --sh-keyword: #ff79c6;
+  --sh-comment: #676e95;
+}
 
 /* ============================================================================
    Mobile-First Foundation

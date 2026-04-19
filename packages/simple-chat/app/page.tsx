@@ -167,6 +167,45 @@ export default function HomePage() {
     }
   }, [session?.accessToken])
 
+  // Poll for listening dev servers in the current sandbox every 5s so the
+  // preview pane's Open menu stays fresh when the agent starts a server.
+  useEffect(() => {
+    const sandboxId = currentChat?.sandboxId
+    const pattern = currentChat?.previewUrlPattern
+    if (!sandboxId) {
+      setAvailableServers([])
+      return
+    }
+    let cancelled = false
+    const poll = async () => {
+      try {
+        const res = await fetch("/api/sandbox/files", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sandboxId, action: "list-servers" }),
+        })
+        if (!res.ok) return
+        const data = await res.json()
+        if (cancelled) return
+        const ports: number[] = Array.isArray(data.ports) ? data.ports : []
+        setAvailableServers(
+          ports.map((port) => ({
+            port,
+            url: pattern ? pattern.replace("{port}", String(port)) : `http://localhost:${port}`,
+          }))
+        )
+      } catch {
+        // Swallow — polling errors are non-fatal.
+      }
+    }
+    poll()
+    const id = window.setInterval(poll, 5000)
+    return () => {
+      cancelled = true
+      window.clearInterval(id)
+    }
+  }, [currentChat?.sandboxId, currentChat?.previewUrlPattern])
+
   // Load branches when current chat has a repo
   useEffect(() => {
     if (session?.accessToken && currentChat?.repo && currentChat.repo !== NEW_REPOSITORY) {
@@ -501,6 +540,31 @@ export default function HomePage() {
     if (githubBranchUrl) window.open(githubBranchUrl, "_blank", "noopener,noreferrer")
   }, [githubBranchUrl])
 
+  // Open the current chat's sandbox in VS Code via an SSH remote link.
+  const handleOpenInVSCode = useCallback(async () => {
+    const sandboxId = currentChat?.sandboxId
+    if (!sandboxId) return
+    try {
+      const res = await fetch("/api/sandbox/ssh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sandboxId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to open SSH")
+      const cmd: string = data.sshCommand
+      const userHost = cmd.match(/(\S+@\S+)/)?.[1]
+      const port = cmd.match(/-p\s+(\d+)/)?.[1] ?? "22"
+      if (!userHost) return
+      const host = port !== "22" ? `${userHost}:${port}` : userHost
+      // sandbox/create clones into /home/daytona/project — hardcoded there too.
+      const remotePath = "/home/daytona/project"
+      window.open(`vscode://vscode-remote/ssh-remote+${host}${remotePath}`, "_blank")
+    } catch (err) {
+      console.error("Failed to open in VS Code:", err)
+    }
+  }, [currentChat?.sandboxId])
+
   // Don't render chats until hydrated to avoid SSR mismatch
   const displayChats = isHydrated ? chats : []
   const displayCurrentChatId = isHydrated ? currentChatId : null
@@ -525,6 +589,7 @@ export default function HomePage() {
       onSignIn={!session ? () => signIn("github") : undefined}
       onSignOut={session ? () => signOut() : undefined}
       onDeleteChat={displayCurrentChatId ? () => setDeleteConfirmChatId(displayCurrentChatId) : undefined}
+      onOpenInVSCode={currentChat?.sandboxId ? handleOpenInVSCode : undefined}
       chatIds={displayChats.map((c) => c.id)}
       onNavigateChat={handleNavigateChat}
       currentChatId={displayCurrentChatId}
@@ -630,6 +695,10 @@ export default function HomePage() {
                 onRequireSignIn={!session ? () => setSignInModalOpen(true) : undefined}
                 onDeleteChat={displayCurrentChatId ? () => removeChat(displayCurrentChatId) : undefined}
                 onOpenHelp={() => setHelpOpen(true)}
+                onOpenFile={(filePath) => {
+                  const filename = filePath.split("/").pop() || filePath
+                  setPreviewItem({ type: "file", filePath, filename })
+                }}
                 isMobile={isMobile}
               />
             </div>
@@ -647,6 +716,7 @@ export default function HomePage() {
                   style={{ width: previewWidth }}
                   className="flex-shrink-0"
                   item={previewItem}
+                  sandboxId={currentChat?.sandboxId ?? null}
                   availableServers={availableServers}
                   terminalAvailable={!!currentChat?.sandboxId}
                   onOpenTerminal={() => {

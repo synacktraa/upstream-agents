@@ -12,9 +12,11 @@ interface MessageBubbleProps {
   isStreaming?: boolean
   isMobile?: boolean
   repo?: string
+  /** Called when the user clicks a tool-call row that references a file. */
+  onOpenFile?: (filePath: string) => void
 }
 
-export function MessageBubble({ message, isStreaming, isMobile = false, repo }: MessageBubbleProps) {
+export function MessageBubble({ message, isStreaming, isMobile = false, repo, onOpenFile }: MessageBubbleProps) {
   const isUser = message.role === "user"
   const hasUploadedFiles = isUser && message.uploadedFiles && message.uploadedFiles.length > 0
 
@@ -52,7 +54,7 @@ export function MessageBubble({ message, isStreaming, isMobile = false, repo }: 
             )}
           </div>
         ) : (
-          <AssistantContent message={message} isStreaming={isStreaming} isMobile={isMobile} repo={repo} />
+          <AssistantContent message={message} isStreaming={isStreaming} isMobile={isMobile} repo={repo} onOpenFile={onOpenFile} />
         )}
       </div>
     </div>
@@ -137,7 +139,7 @@ function MarkdownContent({ text, isMobile = false }: { text: string; isMobile?: 
   )
 }
 
-function AssistantContent({ message, isStreaming, isMobile = false, repo }: { message: Message; isStreaming?: boolean; isMobile?: boolean; repo?: string }) {
+function AssistantContent({ message, isStreaming, isMobile = false, repo, onOpenFile }: { message: Message; isStreaming?: boolean; isMobile?: boolean; repo?: string; onOpenFile?: (filePath: string) => void }) {
   const hasContent = message.content && message.content.trim().length > 0
   const hasToolCalls = message.toolCalls && message.toolCalls.length > 0
   const hasBlocks = message.contentBlocks && message.contentBlocks.length > 0
@@ -188,6 +190,7 @@ function AssistantContent({ message, isStreaming, isMobile = false, repo }: { me
                 key={index}
                 toolCalls={block.toolCalls}
                 isMobile={isMobile}
+                onOpenFile={onOpenFile}
               />
             )
           }
@@ -201,6 +204,7 @@ function AssistantContent({ message, isStreaming, isMobile = false, repo }: { me
             <ToolCallGroup
               toolCalls={message.toolCalls!}
               isMobile={isMobile}
+              onOpenFile={onOpenFile}
             />
           )}
         </>
@@ -340,10 +344,11 @@ function mergeConsecutiveToolCalls(blocks: ContentBlock[]): ContentBlock[] {
 
 interface ToolCallGroupProps {
   toolCalls: ToolCall[]
+  onOpenFile?: (filePath: string) => void
   isMobile?: boolean
 }
 
-function ToolCallGroup({ toolCalls, isMobile = false }: ToolCallGroupProps) {
+function ToolCallGroup({ toolCalls, isMobile = false, onOpenFile }: ToolCallGroupProps) {
   if (toolCalls.length === 0) return null
 
   return (
@@ -353,6 +358,7 @@ function ToolCallGroup({ toolCalls, isMobile = false }: ToolCallGroupProps) {
           key={`${tool.tool}-${tool.summary}-${index}`}
           tool={tool}
           isMobile={isMobile}
+          onOpenFile={onOpenFile}
         />
       ))}
     </div>
@@ -363,34 +369,40 @@ function ToolCallGroup({ toolCalls, isMobile = false }: ToolCallGroupProps) {
 interface ToolCallRowProps {
   tool: ToolCall
   isMobile?: boolean
+  onOpenFile?: (filePath: string) => void
 }
 
-function ToolCallRow({ tool, isMobile = false }: ToolCallRowProps) {
+function ToolCallRow({ tool, isMobile = false, onOpenFile }: ToolCallRowProps) {
   const [expanded, setExpanded] = useState(false)
   const Icon = getToolIcon(tool.tool)
   const hasOutput = !!tool.output
+  const hasFileLink = !!(tool.filePath && onOpenFile)
 
-  const toggleExpanded = () => {
+  const handleClick = () => {
+    if (hasFileLink && tool.filePath) {
+      onOpenFile!(tool.filePath)
+      return
+    }
     if (hasOutput) setExpanded(!expanded)
   }
 
   return (
     <div
-      onClick={toggleExpanded}
+      onClick={handleClick}
       className={cn(
         isMobile ? "py-1" : "py-0.5",
-        hasOutput && "cursor-pointer"
+        (hasOutput || hasFileLink) && "cursor-pointer"
       )}
     >
       {/* Tool call header */}
       <div className={cn(
         "flex items-center gap-1.5 text-muted-foreground transition-colors",
         isMobile ? "text-sm" : "text-xs",
-        hasOutput && "hover:text-foreground"
+        (hasOutput || hasFileLink) && "hover:text-foreground"
       )}>
         <Icon className={cn("shrink-0", isMobile ? "h-4 w-4" : "h-3 w-3")} />
-        <span className="truncate">{tool.summary}</span>
-        {hasOutput && (
+        <span className={cn("truncate", hasFileLink && "underline decoration-dotted underline-offset-2")}>{tool.summary}</span>
+        {hasOutput && !hasFileLink && (
           expanded ? (
             <ChevronDown className={cn("shrink-0", isMobile ? "h-4 w-4" : "h-3 w-3")} />
           ) : (
