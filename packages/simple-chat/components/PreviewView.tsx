@@ -391,8 +391,13 @@ async function connectTerminal(
       const { cols, rows } = term
       sock.send(JSON.stringify({ type: "resize", cols, rows }))
     } catch {}
-    // Bring focus to the terminal so the user can start typing immediately.
-    try { term.focus() } catch {}
+    // Focus on the next frame so the status change above has re-rendered
+    // (removing the visibility:hidden on the host), and so we land *after*
+    // the PaletteProvider's setTimeout(0) that refocuses the chat prompt
+    // when a palette closes.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => { try { term.focus() } catch {} })
+    })
   }
   sock.onmessage = (ev) => {
     try {
@@ -468,10 +473,12 @@ function TerminalBody({ sandboxId }: { sandboxId: string | null }) {
       setupAndConnect(session, sandboxId, theme)
     } else {
       // Refit after reattach so xterm recomputes size against the new parent,
-      // and return focus to the terminal when the user re-opens it.
+      // and return focus to the terminal when the user re-opens it. Double
+      // rAF so we land after any setTimeout(0) that refocuses elsewhere
+      // (e.g. the PaletteProvider's prompt refocus on palette close).
       requestAnimationFrame(() => {
         try { session!.fit?.fit() } catch {}
-        try { session!.term?.focus() } catch {}
+        requestAnimationFrame(() => { try { session!.term?.focus() } catch {} })
       })
     }
 
