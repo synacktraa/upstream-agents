@@ -576,7 +576,7 @@ export function ChatPanel({ chat, settings, onSendMessage, onEnqueueMessage, onR
                 <button
                   onClick={onChangeRepo}
                   className={cn(
-                    "flex items-center gap-1 text-muted-foreground hover:text-foreground active:text-foreground transition-colors",
+                    "flex items-center gap-1 text-muted-foreground hover:text-foreground active:text-foreground transition-colors cursor-pointer",
                     isMobile ? "text-sm py-1 px-2 rounded-md hover:bg-accent/50" : "text-xs"
                   )}
                 >
@@ -588,7 +588,7 @@ export function ChatPanel({ chat, settings, onSendMessage, onEnqueueMessage, onR
                 <button
                   onClick={() => onUpdateChat({ repo: NEW_REPOSITORY, baseBranch: "main" })}
                   className={cn(
-                    "rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors",
+                    "rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors cursor-pointer",
                     isMobile ? "p-1.5" : "p-0.5"
                   )}
                   title="Remove repository"
@@ -621,7 +621,7 @@ export function ChatPanel({ chat, settings, onSendMessage, onEnqueueMessage, onR
             // Mobile: Use bottom sheet
             <button
               onClick={() => setShowAgentSheet(true)}
-              className="flex items-center gap-1 text-sm py-1 px-2 rounded-md hover:bg-accent/50 text-muted-foreground hover:text-foreground active:text-foreground transition-colors"
+              className="flex items-center gap-1 text-sm py-1 px-2 rounded-md hover:bg-accent/50 text-muted-foreground hover:text-foreground active:text-foreground transition-colors cursor-pointer"
             >
               <AgentIcon agent={currentAgent} className="h-4 w-4" />
               {agentLabels[currentAgent]}
@@ -636,7 +636,7 @@ export function ChatPanel({ chat, settings, onSendMessage, onEnqueueMessage, onR
                   setShowAgentDropdown(!showAgentDropdown)
                   setShowModelDropdown(false)
                 }}
-                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground active:text-foreground transition-colors"
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground active:text-foreground transition-colors cursor-pointer"
               >
                 <AgentIcon agent={currentAgent} className="h-3.5 w-3.5" />
                 {agentLabels[currentAgent]}
@@ -649,7 +649,7 @@ export function ChatPanel({ chat, settings, onSendMessage, onEnqueueMessage, onR
                       key={agent}
                       onClick={() => handleAgentChange(agent)}
                       className={cn(
-                        "w-full text-left hover:bg-accent active:bg-accent transition-colors flex items-center gap-2 px-3 py-1.5 text-xs",
+                        "w-full text-left hover:bg-accent active:bg-accent transition-colors flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer",
                         agent === currentAgent && "bg-accent"
                       )}
                     >
@@ -668,7 +668,7 @@ export function ChatPanel({ chat, settings, onSendMessage, onEnqueueMessage, onR
             <button
               onClick={() => setShowModelSheet(true)}
               className={cn(
-                "flex items-center gap-1 text-sm py-1 px-2 rounded-md hover:bg-accent/50 transition-colors",
+                "flex items-center gap-1 text-sm py-1 px-2 rounded-md hover:bg-accent/50 transition-colors cursor-pointer",
                 !hasRequiredCredentials ? "text-red-500 hover:text-red-600" : "text-muted-foreground hover:text-foreground"
               )}
             >
@@ -686,7 +686,7 @@ export function ChatPanel({ chat, settings, onSendMessage, onEnqueueMessage, onR
                   setShowAgentDropdown(false)
                 }}
                 className={cn(
-                  "flex items-center gap-1 text-xs transition-colors",
+                  "flex items-center gap-1 text-xs transition-colors cursor-pointer",
                   !hasRequiredCredentials ? "text-red-500 hover:text-red-600" : "text-muted-foreground hover:text-foreground"
                 )}
               >
@@ -704,7 +704,7 @@ export function ChatPanel({ chat, settings, onSendMessage, onEnqueueMessage, onR
                         key={model.value}
                         onClick={() => handleModelChange(model.value)}
                         className={cn(
-                          "w-full text-left hover:bg-accent active:bg-accent transition-colors flex items-center justify-between px-3 py-1.5 text-xs",
+                          "w-full text-left hover:bg-accent active:bg-accent transition-colors flex items-center justify-between px-3 py-1.5 text-xs cursor-pointer",
                           model.value === currentModel && "bg-accent"
                         )}
                       >
