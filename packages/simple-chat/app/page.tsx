@@ -639,7 +639,7 @@ export default function HomePage() {
                   aria-label="Resize preview"
                   role="separator"
                 >
-                  <span className="absolute inset-y-4 left-1/2 -translate-x-1/2 w-px bg-border/60 group-hover:bg-border group-active:bg-primary transition-colors" />
+                  <span className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-px bg-border/60 group-hover:bg-border group-active:bg-primary transition-colors" />
                 </div>
                 <PreviewView
                   style={{ width: previewWidth }}
