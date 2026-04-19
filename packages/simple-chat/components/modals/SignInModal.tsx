@@ -4,7 +4,7 @@ import { signIn } from "next-auth/react"
 import * as Dialog from "@radix-ui/react-dialog"
 import { Github, MessageSquare } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { ModalHeader } from "@/components/ui/modal-header"
+import { ModalHeader, focusChatPrompt } from "@/components/ui/modal-header"
 
 interface SignInModalProps {
   open: boolean
@@ -25,6 +25,7 @@ export function SignInModal({ open, onClose, isMobile = false }: SignInModalProp
           open ? "opacity-100" : "opacity-0"
         )} />
         <Dialog.Content
+          onCloseAutoFocus={(e) => { e.preventDefault(); focusChatPrompt() }}
           className={cn(
             "fixed z-50 bg-popover overflow-hidden flex flex-col",
             isMobile

@@ -6,6 +6,17 @@ import { X } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 /**
+ * Focus the chat prompt textarea. Used as onCloseAutoFocus for modals so the
+ * user can keep typing after dismissing one.
+ */
+export function focusChatPrompt() {
+  const el = document.querySelector<HTMLTextAreaElement>("[data-chat-prompt]")
+  if (el) {
+    setTimeout(() => el.focus(), 0)
+  }
+}
+
+/**
  * Consistent modal header: title on the left, small close button in the
  * top-right, and a horizontal rule below the title that is inset from both
  * edges (doesn't span the full width).
