@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect, useMemo } from "react"
 import { useSession, signIn, signOut } from "next-auth/react"
-import { Plus, Trash2, Settings, LogOut, PanelLeft, MoreHorizontal, Pin, Pencil, Code2, X, ChevronDown, FolderGit2, Check, Loader2 } from "lucide-react"
+import { Plus, Trash2, Settings, LogOut, PanelLeft, MoreHorizontal, Pin, Pencil, Code2, X, ChevronDown, FolderGit2, Check, Loader2, HelpCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Chat } from "@/lib/types"
 import { NEW_REPOSITORY } from "@/lib/types"
@@ -33,6 +33,7 @@ interface SidebarProps {
   onWidthChange: (width: number) => void
   currentPage?: "chat" | "sdk"
   onNavigate?: (page: "chat" | "sdk") => void
+  onOpenHelp?: () => void
   // Mobile drawer props
   isMobile?: boolean
   mobileOpen?: boolean
@@ -58,6 +59,7 @@ export function Sidebar({
   onWidthChange,
   currentPage = "chat",
   onNavigate,
+  onOpenHelp,
   isMobile = false,
   mobileOpen = false,
   onMobileClose,
@@ -257,14 +259,6 @@ export function Sidebar({
     }
   }
 
-  // Close mobile drawer when navigating
-  const handleNavigate = (page: "chat" | "sdk") => {
-    onNavigate?.(page)
-    if (isMobile && onMobileClose) {
-      onMobileClose()
-    }
-  }
-
   // Prevent body scroll when drawer is open
   useEffect(() => {
     if (isMobile && mobileOpen) {
@@ -420,22 +414,6 @@ export function Sidebar({
                 />
               ))}
             </div>
-          </div>
-
-          {/* API Reference Link */}
-          <div className="px-3 py-2">
-            <button
-              onClick={() => handleNavigate(currentPage === "sdk" ? "chat" : "sdk")}
-              className={cn(
-                "flex items-center gap-2 w-full px-3 py-2 rounded-lg text-xs transition-colors",
-                currentPage === "sdk"
-                  ? "bg-accent text-accent-foreground"
-                  : "text-muted-foreground hover:bg-accent/50 active:bg-accent hover:text-foreground"
-              )}
-            >
-              <Code2 className="h-4 w-4" />
-              <span>API Reference</span>
-            </button>
           </div>
 
           {/* Footer - User & Settings */}
@@ -629,29 +607,14 @@ export function Sidebar({
       {/* Spacer when collapsed */}
       {collapsed && <div className="flex-1" />}
 
-      {/* API Reference Link */}
-      <div className="px-2 py-2">
-        <button
-          onClick={() => onNavigate?.(currentPage === "sdk" ? "chat" : "sdk")}
-          className={cn(
-            "flex items-center gap-2 rounded-md transition-colors cursor-pointer",
-            collapsed ? "p-1.5 justify-center w-full" : "w-full px-2 py-1.5",
-            currentPage === "sdk"
-              ? "bg-accent text-accent-foreground"
-              : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-          )}
-        >
-          <Code2 className="h-4 w-4" />
-          {!collapsed && <span className="text-xs">API Reference</span>}
-        </button>
-      </div>
-
       {/* Footer - User & Settings */}
-      <div className={cn("p-3", !collapsed && "border-t border-sidebar-border")}>
+      <div className={cn("p-1.5", !collapsed && "border-t border-sidebar-border")}>
         {session?.user ? (
           <UserMenu
             user={session.user}
             onOpenSettings={onOpenSettings}
+            onOpenApiReference={() => onNavigate?.("sdk")}
+            onOpenHelp={onOpenHelp}
             collapsed={collapsed}
           />
         ) : (
@@ -836,10 +799,12 @@ interface UserMenuProps {
     image?: string | null
   }
   onOpenSettings: () => void
+  onOpenApiReference?: () => void
+  onOpenHelp?: () => void
   collapsed: boolean
 }
 
-function UserMenu({ user, onOpenSettings, collapsed }: UserMenuProps) {
+function UserMenu({ user, onOpenSettings, onOpenApiReference, onOpenHelp, collapsed }: UserMenuProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -875,7 +840,7 @@ function UserMenu({ user, onOpenSettings, collapsed }: UserMenuProps) {
           "flex items-center gap-2 cursor-pointer rounded-md transition-colors",
           collapsed
             ? "p-0"
-            : "w-full min-w-0 px-2 py-1 hover:bg-accent text-left"
+            : "w-full min-w-0 px-2 py-1.5 hover:bg-accent text-left"
         )}
         aria-haspopup="menu"
         aria-expanded={menuOpen}
@@ -907,6 +872,30 @@ function UserMenu({ user, onOpenSettings, collapsed }: UserMenuProps) {
             <Settings className="h-4 w-4" />
             Settings
           </button>
+          {onOpenApiReference && (
+            <button
+              onClick={() => {
+                onOpenApiReference()
+                setMenuOpen(false)
+              }}
+              className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-accent cursor-pointer"
+            >
+              <Code2 className="h-4 w-4" />
+              API Reference
+            </button>
+          )}
+          {onOpenHelp && (
+            <button
+              onClick={() => {
+                onOpenHelp()
+                setMenuOpen(false)
+              }}
+              className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-accent cursor-pointer"
+            >
+              <HelpCircle className="h-4 w-4" />
+              Help
+            </button>
+          )}
           <button
             onClick={() => signOut()}
             className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-accent cursor-pointer"

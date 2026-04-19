@@ -384,6 +384,7 @@ export default function HomePage() {
           onWidthChange={setSidebarWidth}
           currentPage={currentPage}
           onNavigate={handleNavigate}
+          onOpenHelp={() => setHelpOpen(true)}
           isMobile={false}
           repoFilter={repoFilter}
           onRepoFilterChange={setRepoFilter}
@@ -408,6 +409,7 @@ export default function HomePage() {
           onWidthChange={() => {}}
           currentPage={currentPage}
           onNavigate={handleNavigate}
+          onOpenHelp={() => setHelpOpen(true)}
           isMobile={true}
           mobileOpen={mobileSidebarOpen}
           onMobileClose={() => setMobileSidebarOpen(false)}

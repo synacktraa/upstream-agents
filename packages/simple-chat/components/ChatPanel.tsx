@@ -741,9 +741,19 @@ export function ChatPanel({ chat, settings, onSendMessage, onEnqueueMessage, onR
   if (isNewChat) {
     return (
       <div className={cn(
-        "flex-1 flex flex-col items-center justify-center bg-background",
+        "flex-1 flex flex-col items-center justify-center bg-background relative",
         isMobile ? "p-4 pb-safe" : "p-4"
       )}>
+        {onOpenHelp && (
+          <button
+            onClick={onOpenHelp}
+            className="absolute top-3 right-3 p-1.5 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+            title="Help"
+            aria-label="Help"
+          >
+            <HelpCircle className="h-4 w-4" />
+          </button>
+        )}
         <div className="text-center mb-6">
           <h2 className={cn("font-semibold", isMobile ? "text-xl" : "text-2xl")}>
             What would you like to build?
@@ -759,7 +769,7 @@ export function ChatPanel({ chat, settings, onSendMessage, onEnqueueMessage, onR
             href="https://www.daytona.io/"
             target="_blank"
             rel="noopener noreferrer"
-            className="underline hover:text-foreground transition-colors"
+            className="text-foreground/80 hover:text-foreground transition-colors"
           >
             Daytona sandboxes
           </a>
@@ -887,18 +897,6 @@ export function ChatPanel({ chat, settings, onSendMessage, onEnqueueMessage, onR
               )}
             </div>
           )}
-          <div className="flex items-center gap-1">
-            {onOpenHelp && (
-              <button
-                onClick={onOpenHelp}
-                className="p-1.5 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                title="Help"
-                aria-label="Help"
-              >
-                <HelpCircle className="h-4 w-4" />
-              </button>
-            )}
-          </div>
         </div>
       )}
 
