@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import { useSession } from "next-auth/react"
 import * as Dialog from "@radix-ui/react-dialog"
 import { Search, GitBranch, Loader2, Lock, Globe, ChevronDown, ChevronLeft, Plus } from "lucide-react"
-import { ModalHeader, focusChatPrompt } from "@/components/ui/modal-header"
+import { ModalHeader } from "@/components/ui/modal-header"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { fetchRepos, fetchBranches, createRepository } from "@/lib/github"
@@ -259,22 +259,6 @@ export function RepoPickerModal({ open, onClose, onSelect, isMobile = false, mod
           open ? "opacity-100" : "opacity-0"
         )} />
         <Dialog.Content
-          onCloseAutoFocus={(e) => { e.preventDefault(); focusChatPrompt() }}
-          onOpenAutoFocus={(e) => {
-            e.preventDefault()
-            setTimeout(() => {
-              if (mode === "create") {
-                // Focus the Name input when opening the Create form.
-                const input = document.querySelector<HTMLInputElement>(
-                  "[data-repo-create-name]"
-                )
-                input?.focus()
-                input?.select()
-              } else {
-                searchInputRef.current?.focus()
-              }
-            }, 0)
-          }}
           className={cn(
             "fixed z-50 bg-popover overflow-hidden flex flex-col",
             isMobile

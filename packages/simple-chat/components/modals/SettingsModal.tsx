@@ -5,7 +5,6 @@ import { useTheme } from "next-themes"
 import * as Dialog from "@radix-ui/react-dialog"
 import { X, Eye, EyeOff, Key, Sun, Moon, Monitor, Bot, ChevronDown, Settings as SettingsIcon, Terminal, Copy, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { focusChatPrompt } from "@/components/ui/modal-header"
 import type { Settings, Theme, Agent, ModelOption } from "@/lib/types"
 import { agentModels, agentLabels, hasCredentialsForModel } from "@/lib/types"
 import { getCredentialFlags } from "@/lib/storage"
@@ -496,7 +495,6 @@ export function SettingsModal({ open, onClose, settings, onSave, highlightKey, i
           open ? "opacity-100" : "opacity-0"
         )} />
         <Dialog.Content
-          onCloseAutoFocus={(e) => { e.preventDefault(); focusChatPrompt() }}
           className={cn(
             "fixed z-50 bg-popover overflow-hidden flex flex-col",
             isMobile
