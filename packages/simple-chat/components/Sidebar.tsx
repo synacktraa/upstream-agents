@@ -1191,8 +1191,19 @@ function ChatItem({ chat, isActive, collapsed, isDeleting, isUnseen, depth = 0, 
       } : undefined}
       onDragEnd={draggable ? () => onDragEndRow?.() : undefined}
       onDragEnter={onDragEnterRow ? (e) => { e.preventDefault(); onDragEnterRow() } : undefined}
-      onDragOver={onDragOverRow}
-      onDragLeave={onDragLeaveRow ? () => onDragLeaveRow() : undefined}
+      onDragOver={onDragOverRow ? (e) => {
+        // Continuously reassert that this row is the active drop target so
+        // cursor movements over nested children don't flicker the highlight.
+        onDragOverRow(e)
+        onDragEnterRow?.()
+      } : undefined}
+      onDragLeave={onDragLeaveRow ? (e) => {
+        // Ignore leaves into descendant elements — dragleave fires on the
+        // parent whenever the cursor moves to a child node.
+        const related = e.relatedTarget as Node | null
+        if (related && e.currentTarget.contains(related)) return
+        onDragLeaveRow()
+      } : undefined}
       onDrop={onDropRow ? (e) => { e.preventDefault(); onDropRow() } : undefined}
       onClick={isDeleting ? undefined : onSelect}
       onDoubleClick={hasChildren && !isDeleting ? (e) => { e.stopPropagation(); onToggleExpanded?.() } : undefined}
