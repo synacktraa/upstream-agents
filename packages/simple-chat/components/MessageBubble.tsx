@@ -161,6 +161,7 @@ function AssistantContent({ message, isStreaming, isMobile = false, repo }: { me
         variant={message.isError ? "error" : "success"}
         isMobile={isMobile}
         repo={repo}
+        linkBranch={message.linkBranch}
       />
     )
   }
@@ -225,9 +226,10 @@ interface SystemMessageProps {
   variant?: "success" | "error"
   isMobile?: boolean
   repo?: string
+  linkBranch?: string
 }
 
-function SystemMessage({ icon: Icon, content, variant = "success", isMobile = false, repo }: SystemMessageProps) {
+function SystemMessage({ icon: Icon, content, variant = "success", isMobile = false, repo, linkBranch }: SystemMessageProps) {
   const iconClasses = cn(
     "shrink-0",
     variant === "error" && "text-red-500 dark:text-red-400",
@@ -235,29 +237,30 @@ function SystemMessage({ icon: Icon, content, variant = "success", isMobile = fa
     isMobile ? "h-4 w-4" : "h-3.5 w-3.5"
   )
 
-  // Parse git merge messages to extract branches and target for link
-  // Format: "Merged X into Y" or "Squash merged X into Y"
+  // Link the merge message to the target branch on GitHub, if we know it.
+  const branchUrl = repo && linkBranch ? `https://github.com/${repo}/tree/${linkBranch}` : null
+
+  // Parse "Merged X into Y" / "Squash merged X into Y" to bold the two names,
+  // whether they're branch names or chat titles.
   const parseMergeMessage = (text: string) => {
-    const mergeMatch = text.match(/^((?:Squash )?[Mm]erged )(.+?)( into )(\S+)(.*)$/)
+    const mergeMatch = text.match(/^((?:Squash )?[Mm]erged )(.+?)( into )(.+?)([.]?)$/)
     if (mergeMatch) {
-      const [, prefix, sourceBranch, mid, targetBranch, suffix] = mergeMatch
-      return { prefix, sourceBranch, mid, targetBranch, suffix }
+      const [, prefix, source, mid, target, suffix] = mergeMatch
+      return { prefix, source, mid, target, suffix }
     }
     return null
   }
 
   const parsed = parseMergeMessage(content)
-  const branchUrl = repo && parsed ? `https://github.com/${repo}/tree/${parsed.targetBranch}` : null
 
-  // Render content with bold branch names
   const renderContent = () => {
     if (!parsed) return content
     return (
       <>
         {parsed.prefix}
-        <span className="font-semibold">{parsed.sourceBranch}</span>
+        <span className="font-semibold">{parsed.source}</span>
         {parsed.mid}
-        <span className="font-semibold">{parsed.targetBranch}</span>
+        <span className="font-semibold">{parsed.target}</span>
         {parsed.suffix}
       </>
     )

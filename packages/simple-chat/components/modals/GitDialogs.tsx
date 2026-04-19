@@ -725,7 +725,7 @@ export function useGitDialogs({ chat, onAddMessage, onAddMessageToBranch, resolv
   const repoName = "project"
 
   // Add system message helper for git operations
-  const addSystemMessage = useCallback((content: string, isError = false) => {
+  const addSystemMessage = useCallback((content: string, isError = false, linkBranch?: string) => {
     if (!onAddMessage) return
     onAddMessage({
       id: generateId(),
@@ -734,6 +734,7 @@ export function useGitDialogs({ chat, onAddMessage, onAddMessageToBranch, resolv
       messageType: "git-operation",
       isError,
       timestamp: Date.now(),
+      linkBranch,
     })
   }, [onAddMessage])
 
@@ -816,16 +817,18 @@ export function useGitDialogs({ chat, onAddMessage, onAddMessageToBranch, resolv
       const verb = squashMerge ? "Squash merged" : "Merged"
       const sourceName = chat?.displayName || branchName
       const targetName = resolveChatName?.(selectedBranch) || selectedBranch
-      addSystemMessage(`${verb} ${sourceName} into ${targetName}.`)
+      const summary = `${verb} ${sourceName} into ${targetName}.`
+      addSystemMessage(summary, false, selectedBranch)
       // Mirror the message to whichever chat is tracking the merged-into
       // branch so both sides see the history.
       if (onAddMessageToBranch) {
         onAddMessageToBranch(selectedBranch, {
           id: generateId(),
           role: "assistant",
-          content: `${verb} ${sourceName} into ${targetName}.`,
+          content: summary,
           messageType: "git-operation",
           timestamp: Date.now(),
+          linkBranch: selectedBranch,
         })
       }
       setMergeOpen(false)

@@ -48,6 +48,8 @@ export interface Message {
   contentBlocks?: ContentBlock[]
   /** Files uploaded with this message (for user messages) */
   uploadedFiles?: string[]
+  /** For git-operation merge messages: the branch the link should point at on GitHub. */
+  linkBranch?: string
 }
 
 // Special value for new repository (local git repo, no GitHub)
