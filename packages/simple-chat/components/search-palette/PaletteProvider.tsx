@@ -37,6 +37,7 @@ interface PaletteProviderProps {
   onRunCommand: (command: string) => void
   onNewChat: () => void
   onBranchChat?: () => void
+  onOpenSettings: () => void
   // For Alt+Up/Down chat navigation
   chatIds: string[]
   currentChatId: string | null
@@ -54,6 +55,7 @@ export function PaletteProvider({
   onRunCommand,
   onNewChat,
   onBranchChat,
+  onOpenSettings,
   chatIds,
   currentChatId,
   onSelectChat,
@@ -140,6 +142,7 @@ export function PaletteProvider({
         onRunCommand={onRunCommand}
         onNewChat={onNewChat}
         onBranchChat={onBranchChat}
+        onOpenSettings={onOpenSettings}
       />
     </PaletteContext.Provider>
   )

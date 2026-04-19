@@ -340,6 +340,7 @@ export default function HomePage() {
       onRunCommand={handleRunCommand}
       onNewChat={handleNewChat}
       onBranchChat={canBranch ? handleBranchChat : undefined}
+      onOpenSettings={() => handleOpenSettings()}
       chatIds={displayChats.map((c) => c.id)}
       currentChatId={displayCurrentChatId}
       onSelectChat={handleSelectChat}
