@@ -940,7 +940,9 @@ export function ChatPanel({ chat, settings, onSendMessage, onEnqueueMessage, onR
       {/* Input - fixed at bottom on mobile */}
       <div className={cn(
         "bg-background",
-        isMobile ? "px-3 py-3 pb-safe" : "px-4 pb-4 pt-2"
+        isMobile
+          ? (hasQueued ? "px-3 pt-0 pb-3 pb-safe" : "px-3 py-3 pb-safe")
+          : (hasQueued ? "px-4 pt-0 pb-4" : "px-4 pb-4 pt-2")
       )}>
         {chatInput}
       </div>
