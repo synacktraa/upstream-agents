@@ -486,6 +486,7 @@ export default function HomePage() {
         onSelect={handleRepoSelect}
         isMobile={isMobile}
         mode="select"
+        onRequestCreate={() => setRepoCreateOpen(true)}
       />
 
       <RepoPickerModal

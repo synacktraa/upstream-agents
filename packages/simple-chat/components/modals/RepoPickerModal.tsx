@@ -19,6 +19,10 @@ interface RepoPickerModalProps {
   mode: "select" | "create"
   /** Suggested name for the new repo (typically the chat's display name). */
   suggestedName?: string | null
+  /** Shown as a + button in select mode — closes this modal and signals the
+   *  caller to open the separate Create Repository modal. Not rendered in
+   *  create mode so the two flows stay independent. */
+  onRequestCreate?: () => void
 }
 
 // Slugify a chat title into a GitHub-friendly repo name: lowercase, hyphenated,
@@ -37,7 +41,7 @@ type Tab = "select" | "create"
 
 const SWIPE_THRESHOLD = 100 // Minimum swipe distance to dismiss
 
-export function RepoPickerModal({ open, onClose, onSelect, isMobile = false, mode, suggestedName = null }: RepoPickerModalProps) {
+export function RepoPickerModal({ open, onClose, onSelect, isMobile = false, mode, suggestedName = null, onRequestCreate }: RepoPickerModalProps) {
   const allowSelect = mode === "select"
   const allowCreate = mode === "create"
   const { data: session } = useSession()
@@ -323,6 +327,19 @@ export function RepoPickerModal({ open, onClose, onSelect, isMobile = false, mod
                     className="pl-8"
                   />
                 </div>
+                {onRequestCreate && (
+                  <button
+                    onClick={() => { onClose(); onRequestCreate() }}
+                    className={cn(
+                      "flex-shrink-0 flex items-center justify-center rounded-md border border-border bg-background hover:bg-accent text-muted-foreground hover:text-foreground transition-colors cursor-pointer",
+                      isMobile ? "h-11 w-11" : "h-8 w-8"
+                    )}
+                    title="Create a new repository"
+                    aria-label="Create a new repository"
+                  >
+                    <Plus className={cn(isMobile ? "h-5 w-5" : "h-4 w-4")} />
+                  </button>
+                )}
               </div>
             </div>
           )}
