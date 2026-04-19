@@ -1,6 +1,6 @@
 "use client"
 
-import { GitMerge, GitBranch, GitPullRequest, GitCommitVertical, Plus, GitBranchPlus, Settings, Github, PanelLeft, LogIn, LogOut, FolderGit2, Trash2, Code2 } from "lucide-react"
+import { GitMerge, GitBranch, GitPullRequest, GitCommitVertical, Plus, GitBranchPlus, Settings, Github, PanelLeft, LogIn, LogOut, FolderGit2, Trash2, Code2, TerminalSquare, Globe } from "lucide-react"
 import {
   CommandDialog,
   CommandInput,
@@ -40,6 +40,9 @@ interface CommandPaletteProps {
   onSignOut?: () => void
   onDeleteChat?: () => void
   onOpenInVSCode?: () => void
+  onOpenTerminal?: () => void
+  servers?: Array<{ port: number; url: string }>
+  onOpenServer?: (port: number, url: string) => void
 }
 
 export function CommandPalette({
@@ -57,6 +60,9 @@ export function CommandPalette({
   onSignOut,
   onDeleteChat,
   onOpenInVSCode,
+  onOpenTerminal,
+  servers = [],
+  onOpenServer,
 }: CommandPaletteProps) {
   const handleSelect = (command: string) => {
     onRunCommand(command)
@@ -107,6 +113,22 @@ export function CommandPalette({
               <span>Open in VS Code</span>
             </CommandItem>
           )}
+          {onOpenTerminal && (
+            <CommandItem value="open terminal" onSelect={() => run(onOpenTerminal)}>
+              <TerminalSquare className="mr-2 h-4 w-4 text-muted-foreground" />
+              <span>Open Terminal</span>
+            </CommandItem>
+          )}
+          {onOpenServer && servers.map((s) => (
+            <CommandItem
+              key={`server-${s.port}`}
+              value={`open live preview ${s.port}`}
+              onSelect={() => run(() => onOpenServer(s.port, s.url))}
+            >
+              <Globe className="mr-2 h-4 w-4 text-muted-foreground" />
+              <span>Open Live Preview · :{s.port}</span>
+            </CommandItem>
+          ))}
           {onDeleteChat && (
             <CommandItem value="delete chat" onSelect={() => run(onDeleteChat)}>
               <Trash2 className="mr-2 h-4 w-4 text-muted-foreground" />

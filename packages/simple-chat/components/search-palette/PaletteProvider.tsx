@@ -46,6 +46,9 @@ interface PaletteProviderProps {
   onSignOut?: () => void
   onDeleteChat?: () => void
   onOpenInVSCode?: () => void
+  onOpenTerminal?: () => void
+  servers?: Array<{ port: number; url: string }>
+  onOpenServer?: (port: number, url: string) => void
   // For Alt+Up/Down chat navigation
   chatIds: string[]
   currentChatId: string | null
@@ -76,6 +79,9 @@ export function PaletteProvider({
   onSignOut,
   onDeleteChat,
   onOpenInVSCode,
+  onOpenTerminal,
+  servers,
+  onOpenServer,
   chatIds,
   currentChatId,
   onSelectChat,
@@ -186,6 +192,9 @@ export function PaletteProvider({
         onSignOut={onSignOut}
         onDeleteChat={onDeleteChat}
         onOpenInVSCode={onOpenInVSCode}
+        onOpenTerminal={onOpenTerminal}
+        servers={servers}
+        onOpenServer={onOpenServer}
       />
     </PaletteContext.Provider>
   )

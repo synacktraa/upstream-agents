@@ -162,31 +162,19 @@ export function PreviewView({
 
         {/* Body */}
         <div className="flex-1 min-h-0 overflow-hidden">
-          {!item ? (
-            <EmptyState />
-          ) : item.type === "file" ? (
+          {item?.type === "file" ? (
             <FileBody
               key={`${item.filePath}-${refreshKey}`}
               filePath={item.filePath}
               sandboxId={sandboxId}
             />
-          ) : item.type === "terminal" ? (
+          ) : item?.type === "terminal" ? (
             <TerminalBody key={`${item.id}-${refreshKey}`} sandboxId={sandboxId} />
-          ) : (
+          ) : item?.type === "server" ? (
             <ServerBody key={`${item.url}-${refreshKey}`} url={item.url} />
-          )}
+          ) : null}
         </div>
       </div>
-    </div>
-  )
-}
-
-function EmptyState() {
-  return (
-    <div className="h-full flex flex-col items-center justify-center gap-2 p-6 text-sm text-muted-foreground">
-      <FileCode2 className="h-5 w-5" />
-      <div>Nothing open yet.</div>
-      <div className="text-xs">Click a file path in the chat or pick something from Open.</div>
     </div>
   )
 }

@@ -92,7 +92,13 @@ export default function HomePage() {
   const [collapsedChatIds, setCollapsedChatIds] = useState<Set<string>>(new Set())
   const [previewWidth, setPreviewWidth] = useState(520)
   const [previewItem, setPreviewItem] = useState<PreviewItem | null>(null)
+  const [previewOpen, setPreviewOpen] = useState(false)
   const [availableServers, setAvailableServers] = useState<Array<{ port: number; url: string }>>([])
+  // Helper that replaces the item AND ensures the pane is open.
+  const openPreview = useCallback((next: PreviewItem) => {
+    setPreviewItem(next)
+    setPreviewOpen(true)
+  }, [])
   const resizingPreview = useRef(false)
   const startPreviewResize = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
@@ -590,6 +596,13 @@ export default function HomePage() {
       onSignOut={session ? () => signOut() : undefined}
       onDeleteChat={displayCurrentChatId ? () => setDeleteConfirmChatId(displayCurrentChatId) : undefined}
       onOpenInVSCode={currentChat?.sandboxId ? handleOpenInVSCode : undefined}
+      onOpenTerminal={
+        currentChat?.sandboxId
+          ? () => openPreview({ type: "terminal", id: currentChat.sandboxId! })
+          : undefined
+      }
+      servers={availableServers}
+      onOpenServer={(port, url) => openPreview({ type: "server", port, url })}
       chatIds={displayChats.map((c) => c.id)}
       onNavigateChat={handleNavigateChat}
       currentChatId={displayCurrentChatId}
@@ -697,12 +710,12 @@ export default function HomePage() {
                 onOpenHelp={() => setHelpOpen(true)}
                 onOpenFile={(filePath) => {
                   const filename = filePath.split("/").pop() || filePath
-                  setPreviewItem({ type: "file", filePath, filename })
+                  openPreview({ type: "file", filePath, filename })
                 }}
                 isMobile={isMobile}
               />
             </div>
-            {!isMobile && (
+            {!isMobile && previewOpen && (
               <>
                 <div
                   onMouseDown={startPreviewResize}
@@ -721,11 +734,14 @@ export default function HomePage() {
                   terminalAvailable={!!currentChat?.sandboxId}
                   onOpenTerminal={() => {
                     if (currentChat?.sandboxId) {
-                      setPreviewItem({ type: "terminal", id: currentChat.sandboxId })
+                      openPreview({ type: "terminal", id: currentChat.sandboxId })
                     }
                   }}
-                  onOpenServer={(port, url) => setPreviewItem({ type: "server", port, url })}
-                  onClose={() => setPreviewItem(null)}
+                  onOpenServer={(port, url) => openPreview({ type: "server", port, url })}
+                  onClose={() => {
+                    setPreviewOpen(false)
+                    setPreviewItem(null)
+                  }}
                 />
               </>
             )}
