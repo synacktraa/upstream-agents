@@ -43,7 +43,6 @@ export function HelpModal({ open, onClose, isMobile = false }: HelpModalProps) {
             <section>
               <h3 className="font-medium mb-1.5">Getting started</h3>
               <ol className="list-decimal pl-5 space-y-1 text-muted-foreground">
-                <li>Pick a repository (or start one without) from the header.</li>
                 <li>Send a message to the agent. A sandbox is created on the first prompt.</li>
                 <li>The agent edits code on a new branch and pushes it when done.</li>
               </ol>
@@ -61,14 +60,7 @@ export function HelpModal({ open, onClose, isMobile = false }: HelpModalProps) {
             <section>
               <h3 className="font-medium mb-1.5">Git actions</h3>
               <p className="text-muted-foreground">
-                Type <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">/</code> in the prompt to access merge, rebase, squash, and open-PR flows.
-              </p>
-            </section>
-
-            <section>
-              <h3 className="font-medium mb-1.5">API keys</h3>
-              <p className="text-muted-foreground">
-                Open Settings to add provider keys or your Claude subscription token. Everything is stored locally in your browser.
+                Type <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">/</code> in the prompt for merge, rebase, squash, and PR.
               </p>
             </section>
           </div>
