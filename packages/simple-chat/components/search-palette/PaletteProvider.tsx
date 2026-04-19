@@ -65,15 +65,24 @@ export function PaletteProvider({
   const [searchOpen, setSearchOpenState] = useState(false)
   const [commandOpen, setCommandOpenState] = useState(false)
 
-  // Exclusive: opening one closes the other.
+  // Exclusive: opening one closes the other. Closing either returns focus to
+  // the chat prompt so the user can start typing right away.
+  const focusPrompt = useCallback(() => {
+    setTimeout(() => {
+      const el = document.querySelector<HTMLTextAreaElement>("[data-chat-prompt]")
+      el?.focus()
+    }, 0)
+  }, [])
   const setSearchOpen = useCallback((open: boolean) => {
     setSearchOpenState(open)
     if (open) setCommandOpenState(false)
-  }, [])
+    else focusPrompt()
+  }, [focusPrompt])
   const setCommandOpen = useCallback((open: boolean) => {
     setCommandOpenState(open)
     if (open) setSearchOpenState(false)
-  }, [])
+    else focusPrompt()
+  }, [focusPrompt])
 
   const openSearch = useCallback(() => setSearchOpen(true), [setSearchOpen])
   const openCommand = useCallback(() => setCommandOpen(true), [setCommandOpen])

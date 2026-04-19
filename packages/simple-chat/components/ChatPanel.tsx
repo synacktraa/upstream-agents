@@ -446,6 +446,7 @@ export function ChatPanel({ chat, settings, onSendMessage, onEnqueueMessage, onR
 
             <textarea
               ref={textareaRef}
+              data-chat-prompt
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
