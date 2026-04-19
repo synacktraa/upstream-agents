@@ -435,7 +435,7 @@ export function ChatPanel({ chat, settings, onSendMessage, onEnqueueMessage, onR
                     className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer"
                     aria-label="Remove queued message"
                   >
-                    <X className="h-3 w-3" />
+                    <X className="h-2.5 w-2.5" />
                   </button>
                 )}
               </div>
