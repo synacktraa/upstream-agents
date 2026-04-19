@@ -378,30 +378,51 @@ function ToolCallRow({ tool, isMobile = false, onOpenFile }: ToolCallRowProps) {
   const hasOutput = !!tool.output
   const hasFileLink = !!(tool.filePath && onOpenFile)
 
-  const handleClick = () => {
-    if (hasFileLink && tool.filePath) {
-      onOpenFile!(tool.filePath)
-      return
-    }
+  const handleRowClick = () => {
+    if (hasFileLink) return // filename has its own click handler
     if (hasOutput) setExpanded(!expanded)
+  }
+
+  // Summaries from the agent typically look like "Write: hello.html" — when
+  // we have a file link, only the part after the tool prefix should be the
+  // clickable link, not the entire row text.
+  const { prefix, linkText } = splitToolSummary(tool.summary)
+
+  const openFile = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (tool.filePath && onOpenFile) onOpenFile(tool.filePath)
   }
 
   return (
     <div
-      onClick={handleClick}
+      onClick={handleRowClick}
       className={cn(
         isMobile ? "py-1" : "py-0.5",
-        (hasOutput || hasFileLink) && "cursor-pointer"
+        hasOutput && !hasFileLink && "cursor-pointer"
       )}
     >
       {/* Tool call header */}
       <div className={cn(
         "flex items-center gap-1.5 text-muted-foreground transition-colors",
         isMobile ? "text-sm" : "text-xs",
-        (hasOutput || hasFileLink) && "hover:text-foreground"
+        hasOutput && !hasFileLink && "hover:text-foreground"
       )}>
         <Icon className={cn("shrink-0", isMobile ? "h-4 w-4" : "h-3 w-3")} />
-        <span className={cn("truncate", hasFileLink && "underline decoration-dotted underline-offset-2")}>{tool.summary}</span>
+        <span className="truncate">
+          {hasFileLink ? (
+            <>
+              {prefix}
+              <span
+                onClick={openFile}
+                className="underline decoration-dotted underline-offset-2 cursor-pointer hover:text-foreground"
+              >
+                {linkText}
+              </span>
+            </>
+          ) : (
+            tool.summary
+          )}
+        </span>
         {hasOutput && !hasFileLink && (
           expanded ? (
             <ChevronDown className={cn("shrink-0", isMobile ? "h-4 w-4" : "h-3 w-3")} />
@@ -422,4 +443,12 @@ function ToolCallRow({ tool, isMobile = false, onOpenFile }: ToolCallRowProps) {
       )}
     </div>
   )
+}
+
+/** Split a tool summary like "Write: hello.html" into a prefix + clickable
+ *  detail. Falls back to linking the whole summary when there's no colon. */
+function splitToolSummary(summary: string): { prefix: string; linkText: string } {
+  const idx = summary.indexOf(": ")
+  if (idx < 0) return { prefix: "", linkText: summary }
+  return { prefix: summary.slice(0, idx + 2), linkText: summary.slice(idx + 2) }
 }
