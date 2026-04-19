@@ -395,7 +395,7 @@ export function ChatPanel({ chat, settings, onSendMessage, onEnqueueMessage, onR
               key={m.id}
               className="flex items-center gap-2 px-3 py-1.5 border-b border-border/40 last:border-b-0"
             >
-              <span className="flex-1 min-w-0 truncate text-xs text-muted-foreground">{m.content}</span>
+              <span className="flex-1 min-w-0 truncate text-sm text-foreground/80">{m.content}</span>
               {onRemoveQueuedMessage && (
                 <button
                   onClick={() => onRemoveQueuedMessage(m.id)}
