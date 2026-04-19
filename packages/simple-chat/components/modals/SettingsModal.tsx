@@ -8,6 +8,15 @@ import { cn } from "@/lib/utils"
 import type { Settings, Theme, Agent, ModelOption } from "@/lib/types"
 import { agentModels, agentLabels, hasCredentialsForModel } from "@/lib/types"
 import { getCredentialFlags } from "@/lib/storage"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 /** Which API key field to highlight */
 export type HighlightKey = "anthropic" | "openai" | "opencode" | "gemini" | null
@@ -92,15 +101,15 @@ function PasswordInput({
   const [show, setShow] = useState(false)
   return (
     <div className="relative w-56">
-      <input
+      <Input
         ref={inputRef}
         type={show ? "text" : "password"}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         className={cn(
-          "w-full pr-8 bg-input border rounded-md font-mono px-3 py-1.5 text-sm focus:outline-none focus:ring-2",
-          highlight ? "border-red-500 focus:ring-red-500/50" : "border-border focus:ring-ring"
+          "pr-8 font-mono",
+          highlight && "border-red-500 focus:border-red-500 focus:ring-red-500/30"
         )}
       />
       <button
@@ -115,31 +124,6 @@ function PasswordInput({
   )
 }
 
-// Compact select for a SettingsRow control.
-function CompactSelect({
-  value,
-  onChange,
-  children,
-  width = "w-44",
-}: {
-  value: string
-  onChange: (v: string) => void
-  children: React.ReactNode
-  width?: string
-}) {
-  return (
-    <div className={cn("relative", width)}>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full appearance-none bg-input border border-border rounded-md pl-3 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-      >
-        {children}
-      </select>
-      <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-    </div>
-  )
-}
 
 // Inline clickable <code> that copies to clipboard and shows a brief check.
 function CopyCode({ text }: { text: string }) {
@@ -338,26 +322,36 @@ export function SettingsModal({ open, onClose, settings, onSave, highlightKey, i
         </h3>
       )}
       <SettingsRow label="Agent">
-        <CompactSelect value={defaultAgent} onChange={(v) => setDefaultAgent(v as Agent)}>
-          {agents.map((agent) => (
-            <option key={agent} value={agent}>
-              {agentLabels[agent]}
-            </option>
-          ))}
-        </CompactSelect>
+        <Select value={defaultAgent} onValueChange={(v) => setDefaultAgent(v as Agent)}>
+          <SelectTrigger className="w-44">
+            <SelectValue placeholder="Select agent" />
+          </SelectTrigger>
+          <SelectContent>
+            {agents.map((agent) => (
+              <SelectItem key={agent} value={agent}>
+                {agentLabels[agent]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </SettingsRow>
       <SettingsRow label="Model">
-        <CompactSelect value={defaultModel} onChange={setDefaultModel} width="w-56">
-          {availableModels.map((model: ModelOption) => {
-            const hasCredentials = hasCredentialsForModel(model, currentCredentials, defaultAgent)
-            return (
-              <option key={model.value} value={model.value}>
-                {model.label}
-                {!hasCredentials && model.requiresKey !== "none" ? " (needs API key)" : ""}
-              </option>
-            )
-          })}
-        </CompactSelect>
+        <Select value={defaultModel} onValueChange={setDefaultModel}>
+          <SelectTrigger className="w-56">
+            <SelectValue placeholder="Select model" />
+          </SelectTrigger>
+          <SelectContent>
+            {availableModels.map((model: ModelOption) => {
+              const hasCredentials = hasCredentialsForModel(model, currentCredentials, defaultAgent)
+              return (
+                <SelectItem key={model.value} value={model.value}>
+                  {model.label}
+                  {!hasCredentials && model.requiresKey !== "none" ? " (needs API key)" : ""}
+                </SelectItem>
+              )
+            })}
+          </SelectContent>
+        </Select>
       </SettingsRow>
     </div>
   )
@@ -401,12 +395,12 @@ export function SettingsModal({ open, onClose, settings, onSave, highlightKey, i
         description="Use Claude Max/Pro with the Claude Code agent. Not used by other agents."
         stacked
       >
-        <textarea
+        <Textarea
           value={anthropicAuthToken}
           onChange={(e) => setAnthropicAuthToken(e.target.value)}
           placeholder='{"claudeAiOauth":{"token_type":"bearer",...}}'
           rows={3}
-          className="w-full bg-input border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring font-mono resize-none px-3 py-1.5 text-xs"
+          className="font-mono text-xs"
         />
         <div className="mt-2 space-y-1 text-[11px] text-muted-foreground">
           <p>
@@ -466,13 +460,18 @@ export function SettingsModal({ open, onClose, settings, onSave, highlightKey, i
         </h3>
       )}
       <SettingsRow label="Theme">
-        <CompactSelect value={selectedTheme} onChange={(v) => handleThemeChange(v as Theme)}>
-          {themeOptions.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </CompactSelect>
+        <Select value={selectedTheme} onValueChange={(v) => handleThemeChange(v as Theme)}>
+          <SelectTrigger className="w-44">
+            <SelectValue placeholder="Select theme" />
+          </SelectTrigger>
+          <SelectContent>
+            {themeOptions.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </SettingsRow>
     </div>
   )
