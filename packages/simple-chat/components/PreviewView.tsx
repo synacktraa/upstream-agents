@@ -6,11 +6,12 @@ import { FileCode2 } from "lucide-react"
 interface PreviewViewProps {
   fileName?: string
   className?: string
+  style?: React.CSSProperties
 }
 
-export function PreviewView({ fileName = "hello.ts", className }: PreviewViewProps) {
+export function PreviewView({ fileName = "hello.ts", className, style }: PreviewViewProps) {
   return (
-    <div className={cn("flex flex-col p-3 pl-0 min-h-0", className)}>
+    <div className={cn("flex flex-col p-3 pl-0 min-h-0", className)} style={style}>
       <div className="flex-1 min-h-0 rounded-2xl border border-border bg-card shadow-sm flex flex-col overflow-hidden">
         {/* Titlebar */}
         <div className="flex items-center gap-2 px-3 py-2 border-b border-border/60">

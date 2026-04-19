@@ -90,6 +90,33 @@ export default function HomePage() {
   const [helpOpen, setHelpOpen] = useState(false)
   const [deleteConfirmChatId, setDeleteConfirmChatId] = useState<string | null>(null)
   const [collapsedChatIds, setCollapsedChatIds] = useState<Set<string>>(new Set())
+  const [previewWidth, setPreviewWidth] = useState(520)
+  const resizingPreview = useRef(false)
+  const startPreviewResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    resizingPreview.current = true
+    document.body.style.cursor = "col-resize"
+    document.body.style.userSelect = "none"
+  }, [])
+  useEffect(() => {
+    const move = (e: MouseEvent) => {
+      if (!resizingPreview.current) return
+      const nextWidth = window.innerWidth - e.clientX
+      setPreviewWidth(Math.max(280, Math.min(900, nextWidth)))
+    }
+    const up = () => {
+      if (!resizingPreview.current) return
+      resizingPreview.current = false
+      document.body.style.cursor = ""
+      document.body.style.userSelect = ""
+    }
+    window.addEventListener("mousemove", move)
+    window.addEventListener("mouseup", up)
+    return () => {
+      window.removeEventListener("mousemove", move)
+      window.removeEventListener("mouseup", up)
+    }
+  }, [])
   const toggleChatCollapsed = useCallback((id: string) => {
     setCollapsedChatIds((prev) => {
       const next = new Set(prev)
@@ -600,7 +627,20 @@ export default function HomePage() {
               />
             </div>
             {!isMobile && (
-              <PreviewView className="w-[44%] max-w-[640px] flex-shrink-0" />
+              <>
+                <div
+                  onMouseDown={startPreviewResize}
+                  className="group flex-shrink-0 w-1 cursor-col-resize relative"
+                  aria-label="Resize preview"
+                  role="separator"
+                >
+                  <span className="absolute inset-y-4 left-1/2 -translate-x-1/2 w-px bg-border/60 group-hover:bg-border group-active:bg-primary transition-colors" />
+                </div>
+                <PreviewView
+                  style={{ width: previewWidth }}
+                  className="flex-shrink-0"
+                />
+              </>
             )}
           </div>
         ) : (
