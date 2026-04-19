@@ -425,7 +425,7 @@ export function ChatPanel({ chat, settings, onSendMessage, onEnqueueMessage, onR
                 key={m.id}
                 className={cn(
                   "flex items-center gap-2 border-b border-border/40 last:border-b-0",
-                  isMobile ? "px-3 py-1" : "px-4 py-1"
+                  isMobile ? "mx-2 px-2 py-1" : "mx-3 px-2 py-1"
                 )}
               >
                 <span className="flex-1 min-w-0 truncate text-[11px] text-muted-foreground">{m.content}</span>
