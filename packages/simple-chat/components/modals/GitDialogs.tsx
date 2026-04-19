@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import * as Dialog from "@radix-ui/react-dialog"
-import { X, Loader2, GitMerge, GitBranch, GitPullRequest, GitCommitVertical, ChevronDown } from "lucide-react"
+import { Loader2, GitMerge, GitBranch, GitPullRequest, GitCommitVertical, ChevronDown } from "lucide-react"
+import { ModalHeader } from "@/components/ui/modal-header"
 import { cn } from "@/lib/utils"
 import type { Chat, Message } from "@/lib/types"
 import { PATHS } from "@/lib/constants"
@@ -139,24 +140,14 @@ function BaseDialog({ open, onClose, title, icon, children, isMobile = false }: 
             </div>
           )}
 
-          <div className={cn(
-            "flex items-center justify-between border-b border-border",
-            isMobile ? "px-4 py-3" : "px-4 py-3"
-          )}>
-            <Dialog.Title className={cn(
-              "flex items-center gap-2 font-semibold",
-              isMobile ? "text-lg" : "text-sm"
-            )}>
-              {icon}
-              {title}
-            </Dialog.Title>
-            <Dialog.Close className={cn(
-              "rounded-lg hover:bg-accent transition-colors",
-              isMobile ? "p-2 -mr-2" : "p-1"
-            )}>
-              <X className={cn(isMobile ? "h-5 w-5" : "h-4 w-4")} />
-            </Dialog.Close>
-          </div>
+          <ModalHeader
+            title={
+              <>
+                {icon}
+                {title}
+              </>
+            }
+          />
 
           <div ref={contentRef} className={cn(
             "flex-1 overflow-y-auto",

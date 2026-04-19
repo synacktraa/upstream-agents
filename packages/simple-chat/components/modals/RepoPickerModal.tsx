@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useSession } from "next-auth/react"
 import * as Dialog from "@radix-ui/react-dialog"
-import { X, Search, GitBranch, Loader2, Lock, Globe, ChevronDown, ChevronLeft, Plus } from "lucide-react"
+import { Search, GitBranch, Loader2, Lock, Globe, ChevronDown, ChevronLeft, Plus } from "lucide-react"
+import { ModalHeader } from "@/components/ui/modal-header"
 import { cn } from "@/lib/utils"
 import { fetchRepos, fetchBranches, createRepository } from "@/lib/github"
 import type { GitHubRepo, GitHubBranch } from "@/lib/types"
@@ -257,24 +258,9 @@ export function RepoPickerModal({ open, onClose, onSelect, isMobile = false, all
             </div>
           )}
 
-          {/* Header */}
-          <div className={cn(
-            "flex items-center justify-between border-b border-border",
-            isMobile ? "px-4 py-3" : "px-4 py-3"
-          )}>
-            <Dialog.Title className={cn(
-              "font-semibold",
-              isMobile ? "text-lg" : "text-sm"
-            )}>
-              {step === "branch" ? "Select Branch" : activeTab === "create" ? "Create Repository" : "Select Repository"}
-            </Dialog.Title>
-            <Dialog.Close className={cn(
-              "rounded-lg hover:bg-accent active:bg-accent transition-colors touch-target",
-              isMobile ? "p-2 -mr-2" : "p-1"
-            )}>
-              <X className={cn(isMobile ? "h-5 w-5" : "h-4 w-4")} />
-            </Dialog.Close>
-          </div>
+          <ModalHeader
+            title={step === "branch" ? "Select Branch" : activeTab === "create" ? "Create Repository" : "Select Repository"}
+          />
 
           {/* Tabs - only show on repo step when both select and create are allowed */}
           {step === "repo" && allowSelect && allowCreate && (

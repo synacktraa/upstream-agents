@@ -2,8 +2,9 @@
 
 import { signIn } from "next-auth/react"
 import * as Dialog from "@radix-ui/react-dialog"
-import { X, Github, MessageSquare } from "lucide-react"
+import { Github, MessageSquare } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { ModalHeader } from "@/components/ui/modal-header"
 
 interface SignInModalProps {
   open: boolean
@@ -31,25 +32,14 @@ export function SignInModal({ open, onClose, isMobile = false }: SignInModalProp
               : "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md border border-border rounded-lg shadow-xl"
           )}
         >
-          {/* Header */}
-          <div className={cn(
-            "flex items-center justify-between border-b border-border bg-popover",
-            isMobile ? "px-4 py-3" : "px-4 py-3"
-          )}>
-            <Dialog.Title className={cn(
-              "font-semibold flex items-center gap-2",
-              isMobile ? "text-lg" : "text-sm"
-            )}>
-              <MessageSquare className={cn(isMobile ? "h-5 w-5" : "h-4 w-4")} />
-              Sign in to continue
-            </Dialog.Title>
-            <Dialog.Close className={cn(
-              "rounded-lg hover:bg-accent active:bg-accent transition-colors touch-target",
-              isMobile ? "p-2 -mr-2" : "p-1"
-            )}>
-              <X className={cn(isMobile ? "h-5 w-5" : "h-4 w-4")} />
-            </Dialog.Close>
-          </div>
+          <ModalHeader
+            title={
+              <>
+                <MessageSquare className="h-4 w-4" />
+                Sign in to continue
+              </>
+            }
+          />
 
           {/* Content */}
           <div className={cn(

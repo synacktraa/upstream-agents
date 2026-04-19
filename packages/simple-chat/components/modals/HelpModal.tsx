@@ -1,8 +1,9 @@
 "use client"
 
 import * as Dialog from "@radix-ui/react-dialog"
-import { X, HelpCircle } from "lucide-react"
+import { HelpCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { ModalHeader } from "@/components/ui/modal-header"
 
 interface HelpModalProps {
   open: boolean
@@ -26,15 +27,14 @@ export function HelpModal({ open, onClose, isMobile = false }: HelpModalProps) {
               : "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md border border-border rounded-xl shadow-xl"
           )}
         >
-          <div className="flex items-center justify-between border-b border-border bg-popover px-4 py-2">
-            <Dialog.Title className="font-medium flex items-center gap-2 text-sm">
-              <HelpCircle className="h-4 w-4" />
-              Help
-            </Dialog.Title>
-            <Dialog.Close className="flex items-center justify-center rounded-lg hover:bg-accent transition-colors p-1">
-              <X className="h-3.5 w-3.5" />
-            </Dialog.Close>
-          </div>
+          <ModalHeader
+            title={
+              <>
+                <HelpCircle className="h-4 w-4" />
+                Help
+              </>
+            }
+          />
 
           <div className={cn(
             "space-y-4 text-sm",
