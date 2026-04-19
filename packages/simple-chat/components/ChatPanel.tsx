@@ -393,7 +393,7 @@ export function ChatPanel({ chat, settings, onSendMessage, onEnqueueMessage, onR
           {chat.queuedMessages.map((m) => (
             <div
               key={m.id}
-              className="flex items-center gap-2 px-3 py-1 border-b border-border/40 last:border-b-0"
+              className="flex items-center gap-2 px-3 py-1.5 border-b border-border/40 last:border-b-0"
             >
               <span className="flex-1 min-w-0 truncate text-xs text-muted-foreground">{m.content}</span>
               {onRemoveQueuedMessage && (
