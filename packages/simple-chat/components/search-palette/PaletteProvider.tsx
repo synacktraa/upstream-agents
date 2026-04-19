@@ -54,11 +54,21 @@ export function PaletteProvider({
   currentChatId,
   onSelectChat,
 }: PaletteProviderProps) {
-  const [searchOpen, setSearchOpen] = useState(false)
-  const [commandOpen, setCommandOpen] = useState(false)
+  const [searchOpen, setSearchOpenState] = useState(false)
+  const [commandOpen, setCommandOpenState] = useState(false)
 
-  const openSearch = useCallback(() => setSearchOpen(true), [])
-  const openCommand = useCallback(() => setCommandOpen(true), [])
+  // Exclusive: opening one closes the other.
+  const setSearchOpen = useCallback((open: boolean) => {
+    setSearchOpenState(open)
+    if (open) setCommandOpenState(false)
+  }, [])
+  const setCommandOpen = useCallback((open: boolean) => {
+    setCommandOpenState(open)
+    if (open) setSearchOpenState(false)
+  }, [])
+
+  const openSearch = useCallback(() => setSearchOpen(true), [setSearchOpen])
+  const openCommand = useCallback(() => setCommandOpen(true), [setCommandOpen])
 
   // Find current chat index for Alt+Up/Down navigation
   const currentChatIndex = chatIds.findIndex((id) => id === currentChatId)
@@ -72,14 +82,14 @@ export function PaletteProvider({
       // Cmd/Ctrl + P for search (works even in inputs)
       if ((e.metaKey || e.ctrlKey) && e.key === "p") {
         e.preventDefault()
-        setSearchOpen(true)
+        openSearch()
         return
       }
 
       // Cmd/Ctrl + K for commands (works even in inputs)
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault()
-        setCommandOpen(true)
+        openCommand()
         return
       }
 
@@ -104,7 +114,7 @@ export function PaletteProvider({
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [chatIds, currentChatIndex, onSelectChat])
+  }, [chatIds, currentChatIndex, onSelectChat, openSearch, openCommand])
 
   return (
     <PaletteContext.Provider value={{ openSearch, openCommand }}>
