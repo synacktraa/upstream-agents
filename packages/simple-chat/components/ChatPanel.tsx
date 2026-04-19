@@ -392,32 +392,27 @@ export function ChatPanel({ chat, settings, onSendMessage, onEnqueueMessage, onR
         />
         {/* Queued messages drawer (shown when agent is running and user has queued prompts) */}
         {chat.queuedMessages && chat.queuedMessages.length > 0 && (
-          <div className={cn(
-            "border-b border-border",
-            isMobile ? "px-3 py-2" : "px-4 py-2"
-          )}>
-            <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
-              Queued · {chat.queuedMessages.length}
-            </div>
-            <div className="divide-y divide-border">
-              {chat.queuedMessages.map((m) => (
-                <div
-                  key={m.id}
-                  className="flex items-center gap-2 py-1"
-                >
-                  <span className="flex-1 min-w-0 truncate text-xs text-foreground">{m.content}</span>
-                  {onRemoveQueuedMessage && (
-                    <button
-                      onClick={() => onRemoveQueuedMessage(m.id)}
-                      className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer"
-                      aria-label="Remove queued message"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
+          <div className="border-b border-border">
+            {chat.queuedMessages.map((m) => (
+              <div
+                key={m.id}
+                className={cn(
+                  "flex items-center gap-2 border-b border-border last:border-b-0",
+                  isMobile ? "px-3 py-1.5" : "px-4 py-1.5"
+                )}
+              >
+                <span className="flex-1 min-w-0 truncate text-xs text-muted-foreground">{m.content}</span>
+                {onRemoveQueuedMessage && (
+                  <button
+                    onClick={() => onRemoveQueuedMessage(m.id)}
+                    className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer"
+                    aria-label="Remove queued message"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+            ))}
           </div>
         )}
 
