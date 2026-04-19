@@ -19,6 +19,7 @@ import {
   loadUnseenChatIds,
   saveUnseenChatIds,
   loadAndPruneEmptyChats,
+  collectDescendantIds,
 } from "@/lib/storage"
 import { generateBranchName } from "@/lib/utils"
 import { useStreamStore } from "@/lib/stores/stream-store"
@@ -167,7 +168,7 @@ export function useChat() {
       const currentChat = state.chats.find((c) => c.id === currentId)
       if (currentChat && currentChat.messages.length === 0) {
         // Delete the empty chat first, then select the new one
-        const afterDelete = deleteStoredChat(currentId)
+        const { state: afterDelete } = deleteStoredChat(currentId)
         const newState = {
           ...afterDelete,
           currentChatId: chatId,
@@ -185,35 +186,34 @@ export function useChat() {
   const [deletingChatIds, setDeletingChatIds] = useState<Set<string>>(new Set())
 
   const removeChat = useCallback(async (chatId: string) => {
-    // Get the chat before deleting to access sandboxId
-    const chat = state.chats.find((c) => c.id === chatId)
+    // Collect the chat + all descendants so branched children cascade.
+    const allIds = collectDescendantIds(state.chats, chatId)
+    const chatsToDelete = state.chats.filter((c) => allIds.includes(c.id))
 
-    // Stop SSE stream for this chat (works even if not current chat)
-    useStreamStore.getState().stopStream(chatId)
+    // Stop SSE streams and mark each row as deleting for the fade animation.
+    for (const id of allIds) useStreamStore.getState().stopStream(id)
+    setDeletingChatIds((prev) => new Set([...prev, ...allIds]))
 
-    // Mark as deleting (grays out the item)
-    setDeletingChatIds((prev) => new Set([...prev, chatId]))
+    // Tear down sandboxes in parallel. Failures don't block chat removal.
+    await Promise.all(
+      chatsToDelete
+        .filter((c) => c.sandboxId)
+        .map((c) =>
+          fetch("/api/sandbox/delete", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sandboxId: c.sandboxId }),
+          }).catch((error) => {
+            console.error("Failed to delete sandbox:", error)
+          })
+        )
+    )
 
-    // Delete sandbox if it exists
-    if (chat?.sandboxId) {
-      try {
-        await fetch("/api/sandbox/delete", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sandboxId: chat.sandboxId }),
-        })
-      } catch (error) {
-        console.error("Failed to delete sandbox:", error)
-        // Continue with chat deletion even if sandbox deletion fails
-      }
-    }
-
-    // Delete the chat immediately after sandbox deletion completes
-    const newState = deleteStoredChat(chatId)
+    const { state: newState } = deleteStoredChat(chatId)
     setState(newState)
     setDeletingChatIds((prev) => {
       const next = new Set(prev)
-      next.delete(chatId)
+      for (const id of allIds) next.delete(id)
       return next
     })
   }, [state.chats, state.currentChatId])

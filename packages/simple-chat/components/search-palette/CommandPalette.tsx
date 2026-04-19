@@ -17,6 +17,8 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   GitBranch,
   GitPullRequest,
   GitCommitVertical,
+  GitBranchPlus,
+  FolderGit2,
 }
 
 interface CommandPaletteProps {
@@ -99,7 +101,7 @@ export function CommandPalette({
           )}
           {onDeleteChat && (
             <CommandItem value="delete chat" onSelect={() => run(onDeleteChat)}>
-              <Trash2 className="mr-2 h-4 w-4 text-destructive" />
+              <Trash2 className="mr-2 h-4 w-4 text-muted-foreground" />
               <span>Delete Chat</span>
             </CommandItem>
           )}

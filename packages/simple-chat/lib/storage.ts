@@ -149,21 +149,50 @@ export function updateChat(chatId: string, updates: Partial<Chat>): AppState {
 }
 
 /**
- * Delete a chat
+ * Delete a chat and every descendant (children, grandchildren, …) that was
+ * branched from it. Returns the full list of removed chat ids.
  */
-export function deleteChat(chatId: string): AppState {
+export function deleteChat(chatId: string): { state: AppState; removedIds: string[] } {
   const state = loadState()
-  const newChats = state.chats.filter((chat) => chat.id !== chatId)
-  const newState = {
+  // Collect ids to remove via BFS on parentChatId edges.
+  const toRemove = new Set<string>([chatId])
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const chat of state.chats) {
+      if (chat.parentChatId && toRemove.has(chat.parentChatId) && !toRemove.has(chat.id)) {
+        toRemove.add(chat.id)
+        changed = true
+      }
+    }
+  }
+  const newChats = state.chats.filter((chat) => !toRemove.has(chat.id))
+  const newState: AppState = {
     ...state,
     chats: newChats,
     currentChatId:
-      state.currentChatId === chatId
+      state.currentChatId && toRemove.has(state.currentChatId)
         ? newChats[0]?.id ?? null
         : state.currentChatId,
   }
   saveState(newState)
-  return newState
+  return { state: newState, removedIds: Array.from(toRemove) }
+}
+
+/** Collect the id of a chat plus all of its descendants. */
+export function collectDescendantIds(chats: Chat[], rootId: string): string[] {
+  const ids = new Set<string>([rootId])
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const chat of chats) {
+      if (chat.parentChatId && ids.has(chat.parentChatId) && !ids.has(chat.id)) {
+        ids.add(chat.id)
+        changed = true
+      }
+    }
+  }
+  return Array.from(ids)
 }
 
 /**
