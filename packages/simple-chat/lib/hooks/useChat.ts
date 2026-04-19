@@ -305,8 +305,8 @@ export function useChat() {
     let previewUrlPattern: string | undefined
 
     if (!sandboxId) {
-      // Generate branch name
-      branch = generateBranchName()
+      // Generate branch name, prefixed so the agent's work is easy to spot in git.
+      branch = `agent/${generateBranchName()}`
 
       // Update chat status
       newState = updateChat(chat.id, { status: "creating", branch })
