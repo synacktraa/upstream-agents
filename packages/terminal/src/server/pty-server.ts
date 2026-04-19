@@ -30,13 +30,15 @@ const PORT = process.env.PTY_PORT || 44777;
 // Custom rcfile that sources the user's bashrc and then overrides PS1.
 // Setting PS1 only via the env doesn't work because interactive bash sources
 // ~/.bashrc on startup and most distro bashrcs reset PS1 themselves.
+// We also unset PROMPT_COMMAND which some distros set to tput/echo sequences
+// that render as stray characters in xterm.js on first prompt draw.
 // PS1 is single-quoted in the rcfile so bash doesn't interpret backslashes
 // at parse time; the \\[...\\] markers tell readline these are non-printing
 // bytes so cursor math stays correct. \\\\033[32m is green, \\\\033[0m resets.
 const RCFILE = '/tmp/.pty-bashrc';
 fs.writeFileSync(
   RCFILE,
-  "[ -f ~/.bashrc ] && source ~/.bashrc\\nPS1='\\\\[\\\\033[32m\\\\]\\\\u:\\\\w\\\\$\\\\[\\\\033[0m\\\\] '\\n"
+  "[ -f ~/.bashrc ] && source ~/.bashrc\\nunset PROMPT_COMMAND\\nPS1='\\\\[\\\\033[32m\\\\]\\\\u:\\\\w\\\\$\\\\[\\\\033[0m\\\\] '\\n"
 );
 
 const server = http.createServer((req, res) => {
