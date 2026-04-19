@@ -1,6 +1,6 @@
 "use client"
 
-import { GitMerge, GitBranch, GitPullRequest, GitCommitVertical, Plus } from "lucide-react"
+import { GitMerge, GitBranch, GitPullRequest, GitCommitVertical, Plus, GitBranchPlus } from "lucide-react"
 import {
   CommandDialog,
   CommandInput,
@@ -24,6 +24,8 @@ interface CommandPaletteProps {
   onOpenChange: (open: boolean) => void
   onRunCommand: (command: string) => void
   onNewChat: () => void
+  /** Omitted when the current chat has no branch to fork from. */
+  onBranchChat?: () => void
 }
 
 export function CommandPalette({
@@ -31,14 +33,15 @@ export function CommandPalette({
   onOpenChange,
   onRunCommand,
   onNewChat,
+  onBranchChat,
 }: CommandPaletteProps) {
   const handleSelect = (command: string) => {
     onRunCommand(command)
     onOpenChange(false)
   }
 
-  const handleNewChat = () => {
-    onNewChat()
+  const run = (fn: () => void) => {
+    fn()
     onOpenChange(false)
   }
 
@@ -53,10 +56,16 @@ export function CommandPalette({
       <CommandList>
         <CommandEmpty>No commands found.</CommandEmpty>
         <CommandGroup heading="Chat">
-          <CommandItem value="new chat" onSelect={handleNewChat}>
+          <CommandItem value="new chat" onSelect={() => run(onNewChat)}>
             <Plus className="mr-2 h-4 w-4 text-muted-foreground" />
             <span>New Chat</span>
           </CommandItem>
+          {onBranchChat && (
+            <CommandItem value="branch chat" onSelect={() => run(onBranchChat)}>
+              <GitBranchPlus className="mr-2 h-4 w-4 text-muted-foreground" />
+              <span>Branch from current chat</span>
+            </CommandItem>
+          )}
         </CommandGroup>
         <CommandGroup heading="Git Commands">
           {SLASH_COMMANDS.map((cmd) => {

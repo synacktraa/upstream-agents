@@ -315,6 +315,15 @@ export default function HomePage() {
     handleSlashCommand(command as SlashCommandType)
   }, [handleSlashCommand])
 
+  // Start a new chat off the current chat's branch (only available when the
+  // current chat has a branch that can be forked from).
+  const canBranch = !!(currentChat?.branch && currentChat.repo !== NEW_REPOSITORY)
+  const handleBranchChat = useCallback(() => {
+    if (!currentChat?.branch || currentChat.repo === NEW_REPOSITORY) return
+    startNewChat(currentChat.repo, currentChat.branch)
+    if (currentPage !== "chat") handleNavigate("chat")
+  }, [currentChat, startNewChat, currentPage])
+
   // Don't render chats until hydrated to avoid SSR mismatch
   const displayChats = isHydrated ? chats : []
   const displayCurrentChatId = isHydrated ? currentChatId : null
@@ -330,6 +339,7 @@ export default function HomePage() {
       onSelectBranch={handlePaletteSelectBranch}
       onRunCommand={handleRunCommand}
       onNewChat={handleNewChat}
+      onBranchChat={canBranch ? handleBranchChat : undefined}
       chatIds={displayChats.map((c) => c.id)}
       currentChatId={displayCurrentChatId}
       onSelectChat={handleSelectChat}
