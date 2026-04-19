@@ -466,18 +466,21 @@ export function RepoPickerModal({ open, onClose, onSelect, isMobile = false, mod
                   </div>
 
                   {/* Visibility */}
-                  <label className="flex items-center gap-3 cursor-pointer">
+                  <div className="flex items-center gap-3">
                     <span className="text-sm font-medium w-28 flex-shrink-0">
-                      Private
+                      Visibility
                     </span>
-                    <input
-                      type="checkbox"
-                      checked={newRepoIsPrivate}
-                      onChange={(e) => setNewRepoIsPrivate(e.target.checked)}
-                      disabled={creating}
-                      className="h-4 w-4 rounded border-border accent-primary disabled:opacity-50"
-                    />
-                  </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={newRepoIsPrivate}
+                        onChange={(e) => setNewRepoIsPrivate(e.target.checked)}
+                        disabled={creating}
+                        className="h-4 w-4 rounded border-border accent-primary disabled:opacity-50"
+                      />
+                      <span className="text-sm">Private</span>
+                    </label>
+                  </div>
 
                   {/* Create Button */}
                   <div className="flex justify-end pt-2">
