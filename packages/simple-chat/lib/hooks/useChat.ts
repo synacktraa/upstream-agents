@@ -18,6 +18,7 @@ import {
   updateSettings as updateStoredSettings,
   loadUnseenChatIds,
   saveUnseenChatIds,
+  loadAndPruneEmptyChats,
 } from "@/lib/storage"
 import { generateBranchName } from "@/lib/utils"
 import { useStreamStore } from "@/lib/stores/stream-store"
@@ -53,7 +54,7 @@ export function useChat() {
 
   // Load from localStorage after mount (client-side only)
   useEffect(() => {
-    setState(loadState())
+    setState(loadAndPruneEmptyChats())
     setUnseenChatIds(loadUnseenChatIds())
     setIsHydrated(true)
   }, [])

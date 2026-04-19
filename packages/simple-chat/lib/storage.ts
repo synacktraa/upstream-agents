@@ -70,8 +70,6 @@ export function loadState(): AppState {
 
 /**
  * Save app state to localStorage.
- * Unstarted chats (no messages) are dropped so they don't survive reloads —
- * the app will auto-create a fresh empty chat on next load if needed.
  */
 export function saveState(state: AppState): void {
   if (typeof window === "undefined") {
@@ -79,17 +77,27 @@ export function saveState(state: AppState): void {
   }
 
   try {
-    const nonEmptyChats = state.chats.filter((c) => c.messages.length > 0)
-    const currentStillExists =
-      !!state.currentChatId && nonEmptyChats.some((c) => c.id === state.currentChatId)
-    const toSave: AppState = {
-      ...state,
-      chats: nonEmptyChats,
-      currentChatId: currentStillExists ? state.currentChatId : null,
-    }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave))
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
   } catch (error) {
     console.error("Failed to save state to localStorage:", error)
+  }
+}
+
+/**
+ * Drop unstarted chats (no messages) from the loaded state on hydration so
+ * they don't survive reloads. We do this on load rather than save so that
+ * in-memory storage helpers (which loadState → mutate → saveState) still
+ * find the active draft chat.
+ */
+export function loadAndPruneEmptyChats(): AppState {
+  const state = loadState()
+  const nonEmptyChats = state.chats.filter((c) => c.messages.length > 0)
+  const currentStillExists =
+    !!state.currentChatId && nonEmptyChats.some((c) => c.id === state.currentChatId)
+  return {
+    ...state,
+    chats: nonEmptyChats,
+    currentChatId: currentStillExists ? state.currentChatId : null,
   }
 }
 
