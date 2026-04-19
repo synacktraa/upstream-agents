@@ -231,8 +231,7 @@ export function RepoPickerModal({ open, onClose, onSelect, isMobile = false, all
     <Dialog.Root open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className={cn(
-          "fixed inset-0 z-50 transition-opacity duration-300",
-          isMobile ? "bg-black/50" : "bg-black/50",
+          "fixed inset-0 z-50 transition-opacity duration-300 bg-black/15 backdrop-blur-[1px]",
           open ? "opacity-100" : "opacity-0"
         )} />
         <Dialog.Content
@@ -240,7 +239,7 @@ export function RepoPickerModal({ open, onClose, onSelect, isMobile = false, all
             "fixed z-50 bg-popover overflow-hidden flex flex-col",
             isMobile
               ? "inset-x-0 bottom-0 top-0 rounded-none"
-              : "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md border border-border rounded-lg shadow-lg",
+              : "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md border border-border rounded-lg shadow-xl",
             !isDragging && isMobile && "transition-transform duration-300"
           )}
           style={isMobile ? {
