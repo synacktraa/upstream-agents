@@ -41,6 +41,10 @@ interface SidebarProps {
   // Repository filter (controlled from parent)
   repoFilter?: string
   onRepoFilterChange?: (filter: string) => void
+  // Collapsed chat-tree state (controlled from parent so keyboard navigation
+  // can expand branches programmatically).
+  collapsedChatIds?: Set<string>
+  onToggleChatCollapsed?: (id: string) => void
 }
 
 export function Sidebar({
@@ -65,6 +69,8 @@ export function Sidebar({
   onMobileClose,
   repoFilter: controlledRepoFilter,
   onRepoFilterChange,
+  collapsedChatIds: controlledCollapsedChatIds,
+  onToggleChatCollapsed: controlledToggleChatCollapsed,
 }: SidebarProps) {
   const { data: session } = useSession()
   const isResizing = useRef(false)
@@ -132,15 +138,18 @@ export function Sidebar({
     [filteredChats, visibleIds],
   )
 
-  // Track which parent chats are collapsed. Default: expanded.
-  const [collapsedChatIds, setCollapsedChatIds] = useState<Set<string>>(new Set())
-  const toggleChatCollapsed = useCallback((id: string) => {
-    setCollapsedChatIds((prev) => {
+  // Track which parent chats are collapsed. Default: expanded. Can be
+  // overridden by the parent to keep state in sync with keyboard navigation.
+  const [internalCollapsedChatIds, setInternalCollapsedChatIds] = useState<Set<string>>(new Set())
+  const collapsedChatIds = controlledCollapsedChatIds ?? internalCollapsedChatIds
+  const defaultToggleChatCollapsed = useCallback((id: string) => {
+    setInternalCollapsedChatIds((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id); else next.add(id)
       return next
     })
   }, [])
+  const toggleChatCollapsed = controlledToggleChatCollapsed ?? defaultToggleChatCollapsed
 
   // Count chats per repository (for dropdown display)
   const repoCounts = useMemo(() => {
@@ -1076,7 +1085,7 @@ function ChatItem({ chat, isActive, collapsed, isDeleting, isUnseen, depth = 0, 
   return (
     <div
       className={cn(
-        "group flex items-center gap-2 rounded-md transition-colors",
+        "group flex items-center gap-2 rounded-md transition-colors select-none",
         collapsed ? "justify-center p-2" : "px-2 py-1.5",
         isDeleting
           ? "opacity-50 cursor-not-allowed"
@@ -1086,6 +1095,10 @@ function ChatItem({ chat, isActive, collapsed, isDeleting, isUnseen, depth = 0, 
           : "hover:bg-accent/50 text-sidebar-foreground")
       )}
       style={indentPx ? { paddingLeft: `calc(0.5rem + ${indentPx}px)` } : undefined}
+      onMouseDown={(e) => {
+        // Prevent the browser's native select-on-double-click from highlighting the title text.
+        if (e.detail >= 2) e.preventDefault()
+      }}
       onClick={isDeleting ? undefined : onSelect}
       onDoubleClick={hasChildren && !isDeleting ? (e) => { e.stopPropagation(); onToggleExpanded?.() } : undefined}
     >

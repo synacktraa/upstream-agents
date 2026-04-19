@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useSession, signIn, signOut } from "next-auth/react"
 import { Menu } from "lucide-react"
 import { Sidebar, ALL_REPOSITORIES, NO_REPOSITORY } from "@/components/Sidebar"
@@ -15,7 +15,7 @@ import type { SlashCommandType } from "@/components/SlashCommandMenu"
 import { PaletteProvider } from "@/components/search-palette"
 import { useChat } from "@/lib/hooks/useChat"
 import { useMobile } from "@/lib/hooks/useMobile"
-import { NEW_REPOSITORY, type Message } from "@/lib/types"
+import { NEW_REPOSITORY, type Message, type Chat } from "@/lib/types"
 import { fetchRepos, fetchBranches, type GitHubRepo, type GitHubBranch } from "@/lib/github"
 
 // Storage key for pending message (persists across OAuth redirect)
@@ -86,6 +86,28 @@ export default function HomePage() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [signInModalOpen, setSignInModalOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
+  const [collapsedChatIds, setCollapsedChatIds] = useState<Set<string>>(new Set())
+  const toggleChatCollapsed = useCallback((id: string) => {
+    setCollapsedChatIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }, [])
+  const expandChatAndAncestors = useCallback((targetId: string, byId: Map<string, Chat>) => {
+    setCollapsedChatIds((prev) => {
+      let next = prev
+      let cur = byId.get(targetId)?.parentChatId
+      while (cur) {
+        if (next.has(cur)) {
+          if (next === prev) next = new Set(prev)
+          next.delete(cur)
+        }
+        cur = byId.get(cur)?.parentChatId
+      }
+      return next
+    })
+  }, [])
   const [currentPage, setCurrentPage] = useState<"chat" | "sdk">(() => {
     if (typeof window === "undefined") return "chat"
     return window.location.pathname === "/sdk" ? "sdk" : "chat"
@@ -364,6 +386,50 @@ export default function HomePage() {
     handleSlashCommand(command as SlashCommandType)
   }, [handleSlashCommand])
 
+  // Build the full tree-ordered id list matching the sidebar (ignoring
+  // collapsed state — so Alt+Up/Down can reach every chat, expanding
+  // collapsed ancestors along the way).
+  const treeOrderedChatIds = useMemo(() => {
+    const visible = chats.filter((c) => c.messages.length > 0)
+    visible.sort((a, b) => (b.lastActiveAt ?? b.createdAt) - (a.lastActiveAt ?? a.createdAt))
+    const visibleIds = new Set(visible.map((c) => c.id))
+    const kids = new Map<string, Chat[]>()
+    for (const c of visible) {
+      const parent = c.parentChatId && visibleIds.has(c.parentChatId) ? c.parentChatId : null
+      if (parent) {
+        const list = kids.get(parent) ?? []
+        list.push(c)
+        kids.set(parent, list)
+      }
+    }
+    const roots = visible.filter((c) => !(c.parentChatId && visibleIds.has(c.parentChatId)))
+    const out: string[] = []
+    const walk = (c: Chat) => {
+      out.push(c.id)
+      const children = kids.get(c.id) ?? []
+      for (const child of children) walk(child)
+    }
+    for (const r of roots) walk(r)
+    return out
+  }, [chats])
+
+  const handleNavigateChat = useCallback((direction: "up" | "down") => {
+    if (treeOrderedChatIds.length === 0) return
+    const idx = currentChatId ? treeOrderedChatIds.indexOf(currentChatId) : -1
+    let nextIdx: number
+    if (direction === "up") {
+      nextIdx = idx <= 0 ? treeOrderedChatIds.length - 1 : idx - 1
+    } else {
+      nextIdx = idx >= treeOrderedChatIds.length - 1 ? 0 : idx + 1
+    }
+    const nextId = treeOrderedChatIds[nextIdx]
+    if (!nextId) return
+    // If the target is inside a collapsed parent, expand up the chain.
+    const byId = new Map(chats.map((c) => [c.id, c]))
+    expandChatAndAncestors(nextId, byId)
+    handleSelectChat(nextId)
+  }, [treeOrderedChatIds, currentChatId, chats, expandChatAndAncestors])
+
   // Open the current chat's branch on GitHub (available once the branch is pushed).
   const githubBranchUrl =
     currentChat?.branch && currentChat.sandboxId && currentChat.repo !== NEW_REPOSITORY
@@ -397,6 +463,7 @@ export default function HomePage() {
       onSignIn={!session ? () => signIn("github") : undefined}
       onSignOut={session ? () => signOut() : undefined}
       chatIds={displayChats.map((c) => c.id)}
+      onNavigateChat={handleNavigateChat}
       currentChatId={displayCurrentChatId}
       onSelectChat={handleSelectChat}
     >
@@ -423,6 +490,8 @@ export default function HomePage() {
           isMobile={false}
           repoFilter={repoFilter}
           onRepoFilterChange={setRepoFilter}
+          collapsedChatIds={collapsedChatIds}
+          onToggleChatCollapsed={toggleChatCollapsed}
         />
       )}
 
@@ -450,6 +519,8 @@ export default function HomePage() {
           onMobileClose={() => setMobileSidebarOpen(false)}
           repoFilter={repoFilter}
           onRepoFilterChange={setRepoFilter}
+          collapsedChatIds={collapsedChatIds}
+          onToggleChatCollapsed={toggleChatCollapsed}
         />
       )}
 

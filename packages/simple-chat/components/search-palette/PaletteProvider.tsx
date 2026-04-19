@@ -48,6 +48,10 @@ interface PaletteProviderProps {
   chatIds: string[]
   currentChatId: string | null
   onSelectChat: (chatId: string) => void
+  /** Called with a direction for Alt+Up / Alt+Down. When provided it takes
+   *  precedence over the flat chatIds rotation so the parent can walk the
+   *  sidebar tree and auto-expand branches. */
+  onNavigateChat?: (direction: "up" | "down") => void
 }
 
 export function PaletteProvider({
@@ -71,6 +75,7 @@ export function PaletteProvider({
   chatIds,
   currentChatId,
   onSelectChat,
+  onNavigateChat,
 }: PaletteProviderProps) {
   const [searchOpen, setSearchOpenState] = useState(false)
   const [commandOpen, setCommandOpenState] = useState(false)
@@ -122,6 +127,11 @@ export function PaletteProvider({
 
       // Alt + Up/Down for chat navigation (works even in inputs)
       if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+        if (onNavigateChat) {
+          e.preventDefault()
+          onNavigateChat(e.key === "ArrowUp" ? "up" : "down")
+          return
+        }
         if (chatIds.length === 0) return
         e.preventDefault()
 
@@ -141,7 +151,7 @@ export function PaletteProvider({
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [chatIds, currentChatIndex, onSelectChat, openSearch, openCommand])
+  }, [chatIds, currentChatIndex, onSelectChat, openSearch, openCommand, onNavigateChat])
 
   return (
     <PaletteContext.Provider value={{ openSearch, openCommand }}>
