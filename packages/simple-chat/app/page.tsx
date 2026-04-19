@@ -354,6 +354,8 @@ export default function HomePage() {
       onRunCommand={handleRunCommand}
       onNewChat={handleNewChat}
       onBranchChat={canBranch ? handleBranchChat : undefined}
+      onCreateRepo={currentChat?.repo === NEW_REPOSITORY ? handleChangeRepo : undefined}
+      showGitCommands={!!currentChat && currentChat.repo !== NEW_REPOSITORY}
       onOpenInGitHub={githubBranchUrl ? handleOpenInGitHub : undefined}
       onOpenSettings={() => handleOpenSettings()}
       onToggleSidebar={!isMobile ? () => setSidebarCollapsed((v) => !v) : undefined}

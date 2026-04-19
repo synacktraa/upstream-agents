@@ -37,6 +37,8 @@ interface PaletteProviderProps {
   onRunCommand: (command: string) => void
   onNewChat: () => void
   onBranchChat?: () => void
+  onCreateRepo?: () => void
+  showGitCommands?: boolean
   onOpenInGitHub?: () => void
   onOpenSettings: () => void
   onToggleSidebar?: () => void
@@ -59,6 +61,8 @@ export function PaletteProvider({
   onRunCommand,
   onNewChat,
   onBranchChat,
+  onCreateRepo,
+  showGitCommands,
   onOpenInGitHub,
   onOpenSettings,
   onToggleSidebar,
@@ -159,6 +163,8 @@ export function PaletteProvider({
         onRunCommand={onRunCommand}
         onNewChat={onNewChat}
         onBranchChat={onBranchChat}
+        onCreateRepo={onCreateRepo}
+        showGitCommands={showGitCommands}
         onOpenInGitHub={onOpenInGitHub}
         onOpenSettings={onOpenSettings}
         onToggleSidebar={onToggleSidebar}

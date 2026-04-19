@@ -1,6 +1,6 @@
 "use client"
 
-import { GitMerge, GitBranch, GitPullRequest, GitCommitVertical, Plus, GitBranchPlus, Settings, Github, PanelLeft, LogIn, LogOut } from "lucide-react"
+import { GitMerge, GitBranch, GitPullRequest, GitCommitVertical, Plus, GitBranchPlus, Settings, Github, PanelLeft, LogIn, LogOut, FolderGit2 } from "lucide-react"
 import {
   CommandDialog,
   CommandInput,
@@ -26,6 +26,10 @@ interface CommandPaletteProps {
   onNewChat: () => void
   /** Omitted when the current chat has no branch to fork from. */
   onBranchChat?: () => void
+  /** Present only when the current chat has no linked repo — opens the repo picker. */
+  onCreateRepo?: () => void
+  /** When false, the Git Commands group (merge/rebase/pr/squash) is hidden. */
+  showGitCommands?: boolean
   /** Omitted when the current chat has no pushed branch on GitHub. */
   onOpenInGitHub?: () => void
   onOpenSettings: () => void
@@ -40,6 +44,8 @@ export function CommandPalette({
   onRunCommand,
   onNewChat,
   onBranchChat,
+  onCreateRepo,
+  showGitCommands = true,
   onOpenInGitHub,
   onOpenSettings,
   onToggleSidebar,
@@ -77,6 +83,12 @@ export function CommandPalette({
               <span>Branch from current chat</span>
             </CommandItem>
           )}
+          {onCreateRepo && (
+            <CommandItem value="create repository" onSelect={() => run(onCreateRepo)}>
+              <FolderGit2 className="mr-2 h-4 w-4 text-muted-foreground" />
+              <span>Create Repository</span>
+            </CommandItem>
+          )}
           {onOpenInGitHub && (
             <CommandItem value="open in github" onSelect={() => run(onOpenInGitHub)}>
               <Github className="mr-2 h-4 w-4 text-muted-foreground" />
@@ -84,22 +96,24 @@ export function CommandPalette({
             </CommandItem>
           )}
         </CommandGroup>
-        <CommandGroup heading="Git Commands">
-          {SLASH_COMMANDS.map((cmd) => {
-            const Icon = iconMap[cmd.icon]
-            return (
-              <CommandItem
-                key={cmd.name}
-                value={cmd.name}
-                onSelect={() => handleSelect(cmd.name)}
-              >
-                {Icon && <Icon className="mr-2 h-4 w-4 text-muted-foreground" />}
-                <span>{cmd.description}</span>
-                <CommandShortcut>/{cmd.name}</CommandShortcut>
-              </CommandItem>
-            )
-          })}
-        </CommandGroup>
+        {showGitCommands && (
+          <CommandGroup heading="Git Commands">
+            {SLASH_COMMANDS.map((cmd) => {
+              const Icon = iconMap[cmd.icon]
+              return (
+                <CommandItem
+                  key={cmd.name}
+                  value={cmd.name}
+                  onSelect={() => handleSelect(cmd.name)}
+                >
+                  {Icon && <Icon className="mr-2 h-4 w-4 text-muted-foreground" />}
+                  <span>{cmd.description}</span>
+                  <CommandShortcut>/{cmd.name}</CommandShortcut>
+                </CommandItem>
+              )
+            })}
+          </CommandGroup>
+        )}
         <CommandGroup heading="Application">
           {onToggleSidebar && (
             <CommandItem value="toggle sidebar" onSelect={() => run(onToggleSidebar)}>
