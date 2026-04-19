@@ -1,6 +1,6 @@
 "use client"
 
-import { GitMerge, GitBranch, GitPullRequest, GitCommitVertical, Plus, GitBranchPlus, Settings } from "lucide-react"
+import { GitMerge, GitBranch, GitPullRequest, GitCommitVertical, Plus, GitBranchPlus, Settings, Github } from "lucide-react"
 import {
   CommandDialog,
   CommandInput,
@@ -26,6 +26,8 @@ interface CommandPaletteProps {
   onNewChat: () => void
   /** Omitted when the current chat has no branch to fork from. */
   onBranchChat?: () => void
+  /** Omitted when the current chat has no pushed branch on GitHub. */
+  onOpenInGitHub?: () => void
   onOpenSettings: () => void
 }
 
@@ -35,6 +37,7 @@ export function CommandPalette({
   onRunCommand,
   onNewChat,
   onBranchChat,
+  onOpenInGitHub,
   onOpenSettings,
 }: CommandPaletteProps) {
   const handleSelect = (command: string) => {
@@ -66,6 +69,12 @@ export function CommandPalette({
             <CommandItem value="branch chat" onSelect={() => run(onBranchChat)}>
               <GitBranchPlus className="mr-2 h-4 w-4 text-muted-foreground" />
               <span>Branch from current chat</span>
+            </CommandItem>
+          )}
+          {onOpenInGitHub && (
+            <CommandItem value="open in github" onSelect={() => run(onOpenInGitHub)}>
+              <Github className="mr-2 h-4 w-4 text-muted-foreground" />
+              <span>Open in GitHub</span>
             </CommandItem>
           )}
         </CommandGroup>

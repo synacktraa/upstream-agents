@@ -328,6 +328,15 @@ export default function HomePage() {
     if (currentPage !== "chat") handleNavigate("chat")
   }, [currentChat, startNewChat, currentPage])
 
+  // Open the current chat's branch on GitHub (available once the branch is pushed).
+  const githubBranchUrl =
+    currentChat?.branch && currentChat.sandboxId && currentChat.repo !== NEW_REPOSITORY
+      ? `https://github.com/${currentChat.repo}/tree/${currentChat.branch}`
+      : null
+  const handleOpenInGitHub = useCallback(() => {
+    if (githubBranchUrl) window.open(githubBranchUrl, "_blank", "noopener,noreferrer")
+  }, [githubBranchUrl])
+
   // Don't render chats until hydrated to avoid SSR mismatch
   const displayChats = isHydrated ? chats : []
   const displayCurrentChatId = isHydrated ? currentChatId : null
@@ -344,6 +353,7 @@ export default function HomePage() {
       onRunCommand={handleRunCommand}
       onNewChat={handleNewChat}
       onBranchChat={canBranch ? handleBranchChat : undefined}
+      onOpenInGitHub={githubBranchUrl ? handleOpenInGitHub : undefined}
       onOpenSettings={() => handleOpenSettings()}
       chatIds={displayChats.map((c) => c.id)}
       currentChatId={displayCurrentChatId}
