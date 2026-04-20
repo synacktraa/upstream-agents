@@ -389,7 +389,7 @@ export function ChatPanel({ chat, settings, onSendMessage, onEnqueueMessage, onR
   const canCreateRepo = isNewRepo
   // Show the repo button if either action is available
   const showRepoButton = canSelectRepo || canCreateRepo
-  const isNewChat = chat.messages.length === 0
+  const isNewChat = chat.messages.length === 0 && !chat.parentChatId
 
   const agents: Agent[] = ["claude-code", "opencode", "codex", "gemini", "goose", "pi", "eliza"]
 
