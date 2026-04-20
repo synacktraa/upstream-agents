@@ -81,6 +81,8 @@ export default function HomePage() {
 
   const [repoSelectOpen, setRepoSelectOpen] = useState(false)
   const [repoCreateOpen, setRepoCreateOpen] = useState(false)
+  const [branchSelectOpen, setBranchSelectOpen] = useState(false)
+  const [preselectedRepoForBranch, setPreselectedRepoForBranch] = useState<GitHubRepo | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsHighlightKey, setSettingsHighlightKey] = useState<HighlightKey>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -519,10 +521,11 @@ export default function HomePage() {
 
   // Palette handlers
   const handlePaletteSelectRepo = useCallback((repo: GitHubRepo) => {
-    // Create a new chat with this repo
-    const chatId = startNewChat(`${repo.owner.login}/${repo.name}`, repo.default_branch)
+    // Open branch selection modal for this repo instead of creating chat directly
+    setPreselectedRepoForBranch(repo)
+    setBranchSelectOpen(true)
     if (currentPage !== "chat") handleNavigate("chat")
-  }, [startNewChat, currentPage])
+  }, [currentPage])
 
   const handlePaletteSelectBranch = useCallback((repo: GitHubRepo, branch: GitHubBranch) => {
     // Create a new chat with this repo and branch
@@ -840,6 +843,23 @@ export default function HomePage() {
         isMobile={isMobile}
         mode="create"
         suggestedName={currentChat?.displayName ?? null}
+      />
+
+      <RepoPickerModal
+        open={branchSelectOpen}
+        onClose={() => {
+          setBranchSelectOpen(false)
+          setPreselectedRepoForBranch(null)
+        }}
+        onSelect={(repo, branch) => {
+          // Create new chat with selected repo and branch
+          startNewChat(repo, branch)
+          setBranchSelectOpen(false)
+          setPreselectedRepoForBranch(null)
+        }}
+        isMobile={isMobile}
+        mode="branch-only"
+        preselectedRepo={preselectedRepoForBranch}
       />
 
       <SettingsModal
