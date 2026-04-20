@@ -267,8 +267,10 @@ export function useChat() {
   const sendMessage = useCallback(async (content: string, agent?: string, model?: string, files?: File[], targetChatId?: string) => {
     // Allow specifying a target chat ID (for branch-and-send scenarios)
     // Otherwise fall back to currentChat
+    // When targetChatId is provided, read from localStorage directly since
+    // React state may not have updated yet after startNewChat
     const targetChat = targetChatId
-      ? state.chats.find((c) => c.id === targetChatId)
+      ? loadState().chats.find((c) => c.id === targetChatId)
       : currentChat
     if (!targetChat) return
 
@@ -504,7 +506,7 @@ export function useChat() {
       newState = updateChat(chat.id, { status: "error" })
       setState(newState)
     }
-  }, [currentChat, session?.accessToken, state.settings, state.chats])
+  }, [currentChat, session?.accessToken, state.settings])
 
   // =============================================================================
   // SSE Streaming
