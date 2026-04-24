@@ -3,23 +3,14 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { PATHS, SANDBOX_CONFIG } from "@/lib/constants"
 import { NEW_REPOSITORY } from "@/lib/types"
-import { randomUUID } from "crypto"
-
-/**
- * Generate a unique sandbox name
- * @returns A sandbox name in format: "backgrounder-{uuid first 8 chars}"
- */
-function generateSandboxName(): string {
-  const uuid = randomUUID().split("-")[0] // First segment for brevity (8 chars)
-  return `backgrounder-${uuid}`
-}
+import { prisma } from "@/lib/db/prisma"
 
 export const maxDuration = 300 // 5 minutes
 
 export async function POST(req: Request) {
   // 1. Parse request body
   const body = await req.json()
-  const { repo, baseBranch, newBranch } = body
+  const { repo, baseBranch, newBranch, chatId } = body
 
   if (!repo) {
     return Response.json({ error: "Missing required field: repo" }, { status: 400 })
@@ -158,6 +149,24 @@ export async function POST(req: Request) {
       )
     } catch {
       // Preview URLs not available
+    }
+
+    // Update chat in database if chatId provided
+    if (chatId) {
+      try {
+        await prisma.chat.update({
+          where: { id: chatId },
+          data: {
+            sandboxId: sandbox.id,
+            branch: newBranch,
+            previewUrlPattern,
+            status: "ready",
+          },
+        })
+      } catch (error) {
+        console.error("[sandbox/create] Failed to update chat:", error)
+        // Continue anyway - client can retry
+      }
     }
 
     return Response.json({
