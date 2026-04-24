@@ -108,11 +108,13 @@ export function useChatWithSync() {
       queuePaused: localState.queuePaused[chat.id],
     }))
 
-    setState({
+    // IMPORTANT: Use mergeChats to preserve any in-flight streaming content
+    // This prevents cache loads from wiping out active streaming state
+    setState((prev) => ({
       currentChatId: localState.currentChatId,
-      chats: chatsWithLocalState,
+      chats: prev.chats.length > 0 ? mergeChats(prev.chats, chatsWithLocalState) : chatsWithLocalState,
       settings: cache.settings,
-    })
+    }))
     setIsHydrated(true)
 
     // If not authenticated, we're done
