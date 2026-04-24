@@ -68,6 +68,7 @@ export async function POST(req: Request) {
     const daytona = new Daytona({ apiKey: daytonaApiKey })
 
     const sandbox = await daytona.create({
+      name: generateSandboxName(),
       snapshot: SANDBOX_CONFIG.DEFAULT_SNAPSHOT,
       autoStopInterval: 10, // 10 minutes
       public: true,
