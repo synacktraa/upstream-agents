@@ -23,16 +23,11 @@ import { generateBranchName } from "@/lib/utils"
 import {
   // Local state (device-specific)
   loadLocalState,
-  saveLocalState,
   setCurrentChatId,
   loadUnseenChatIds,
   saveUnseenChatIds,
-  setPreviewItem,
-  getPreviewItem,
   setQueuedMessages,
-  getQueuedMessages,
   setQueuePaused,
-  getQueuePaused,
   // Server cache
   loadServerCache,
   updateCacheChats,
