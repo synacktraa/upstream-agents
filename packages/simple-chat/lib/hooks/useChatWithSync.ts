@@ -569,47 +569,31 @@ export function useChatWithSync() {
 
           const accumulated = store.getAccumulated(chatId)
           if (accumulated) {
-            const accumulatedContentLength = (accumulated.content?.length ?? 0) +
-              (accumulated.toolCalls?.length ?? 0) +
-              (accumulated.contentBlocks?.length ?? 0)
-
-            // Only update if we have accumulated content
-            // This prevents spurious re-streams from wiping out content
-            if (accumulatedContentLength > 0) {
-              // Update local state
-              setState((prev) => ({
-                ...prev,
-                chats: prev.chats.map((c) => {
-                  if (c.id !== chatId) return c
-                  const messages = [...c.messages]
-                  const lastIndex = messages.length - 1
-                  if (lastIndex >= 0) {
-                    const existingMsg = messages[lastIndex]
-                    const existingContentLength = (existingMsg.content?.length ?? 0) +
-                      (existingMsg.toolCalls?.length ?? 0) +
-                      (existingMsg.contentBlocks?.length ?? 0)
-
-                    // Only update if accumulated has more content than existing
-                    if (accumulatedContentLength > existingContentLength) {
-                      messages[lastIndex] = {
-                        ...existingMsg,
-                        content: accumulated.content,
-                        toolCalls: accumulated.toolCalls,
-                        contentBlocks: accumulated.contentBlocks,
-                      }
-                    }
+            // Update local state
+            setState((prev) => ({
+              ...prev,
+              chats: prev.chats.map((c) => {
+                if (c.id !== chatId) return c
+                const messages = [...c.messages]
+                const lastIndex = messages.length - 1
+                if (lastIndex >= 0) {
+                  messages[lastIndex] = {
+                    ...messages[lastIndex],
+                    content: accumulated.content,
+                    toolCalls: accumulated.toolCalls,
+                    contentBlocks: accumulated.contentBlocks,
                   }
-                  return { ...c, messages, lastActiveAt: Date.now() }
-                }),
-              }))
+                }
+                return { ...c, messages, lastActiveAt: Date.now() }
+              }),
+            }))
 
-              // Update cache
-              updateCacheLastMessage(chatId, {
-                content: accumulated.content,
-                toolCalls: accumulated.toolCalls,
-                contentBlocks: accumulated.contentBlocks,
-              })
-            }
+            // Update cache
+            updateCacheLastMessage(chatId, {
+              content: accumulated.content,
+              toolCalls: accumulated.toolCalls,
+              contentBlocks: accumulated.contentBlocks,
+            })
           }
         } catch (err) {
           console.error("Failed to parse SSE update:", err)
@@ -625,9 +609,7 @@ export function useChatWithSync() {
           const store = useStreamStore.getState()
           const accumulated = store.getAccumulated(chatId)
 
-          // Stop the stream - we use ID-based merging now, so no need for
-          // timing-sensitive markCompleted() calls. The mergeMessages()
-          // function ensures local content with more data always wins.
+          // Stop the stream
           store.stopStream(chatId)
 
           const updates: Partial<Chat> = {
@@ -646,25 +628,13 @@ export function useChatWithSync() {
               if (c.id !== chatId) return c
               // Update chat status AND preserve final message content
               const messages = [...c.messages]
-              if (messages.length > 0) {
+              if (messages.length > 0 && accumulated) {
                 const lastIndex = messages.length - 1
-                const existingMsg = messages[lastIndex]
-                const accumulatedContentLength = (accumulated?.content?.length ?? 0) +
-                  (accumulated?.toolCalls?.length ?? 0) +
-                  (accumulated?.contentBlocks?.length ?? 0)
-                const existingContentLength = (existingMsg.content?.length ?? 0) +
-                  (existingMsg.toolCalls?.length ?? 0) +
-                  (existingMsg.contentBlocks?.length ?? 0)
-
-                // Only update if accumulated has more content than existing
-                // This prevents spurious re-streams from wiping out content
-                if (accumulated && accumulatedContentLength > existingContentLength) {
-                  messages[lastIndex] = {
-                    ...existingMsg,
-                    content: accumulated.content,
-                    toolCalls: accumulated.toolCalls,
-                    contentBlocks: accumulated.contentBlocks,
-                  }
+                messages[lastIndex] = {
+                  ...messages[lastIndex],
+                  content: accumulated.content,
+                  toolCalls: accumulated.toolCalls,
+                  contentBlocks: accumulated.contentBlocks,
                 }
               }
               return { ...c, ...updates, messages }
@@ -673,11 +643,7 @@ export function useChatWithSync() {
 
           // Update cache with final message content
           updateCacheChat(chatId, updates)
-          // Only update cache message if accumulated has content
-          const accumulatedHasContent = (accumulated?.content?.length ?? 0) > 0 ||
-            (accumulated?.toolCalls?.length ?? 0) > 0 ||
-            (accumulated?.contentBlocks?.length ?? 0) > 0
-          if (accumulated && accumulatedHasContent) {
+          if (accumulated) {
             updateCacheLastMessage(chatId, {
               content: accumulated.content,
               toolCalls: accumulated.toolCalls,
@@ -1079,6 +1045,9 @@ export function useChatWithSync() {
       (c) => c.backgroundSessionId && c.sandboxId
     )
 
+    // Track which streams we start so we can clean them up
+    const startedStreamIds: string[] = []
+
     for (const chat of runningChats) {
       if (useStreamStore.getState().isStreaming(chat.id)) continue
 
@@ -1088,6 +1057,7 @@ export function useChatWithSync() {
         .find((m) => m.role === "assistant")
 
       if (lastAssistantMsg) {
+        startedStreamIds.push(chat.id)
         startStreaming(
           chat.id,
           chat.sandboxId!,
@@ -1096,6 +1066,14 @@ export function useChatWithSync() {
           lastAssistantMsg.id,
           chat.previewUrlPattern
         )
+      }
+    }
+
+    // Cleanup: stop any streams we started when effect re-runs (React StrictMode)
+    return () => {
+      const store = useStreamStore.getState()
+      for (const chatId of startedStreamIds) {
+        store.stopStream(chatId)
       }
     }
   }, [isHydrated, state.chats, startStreaming])
