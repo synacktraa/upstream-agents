@@ -118,16 +118,12 @@ The app uses PostgreSQL to store user data, chats, and messages. This enables:
 
 ### Migrations
 
-Prisma manages database schema changes through migrations. **Both commands below operate on whatever `DATABASE_URL` points to** - Prisma has no concept of "local" vs "production".
-
-**The two commands:**
+Prisma manages database schema changes through migrations.
 
 | Command | What it does | When to use |
 |---------|--------------|-------------|
 | `npx prisma migrate dev` | Creates new migration files + applies them + regenerates client | When you're **changing** the schema |
 | `npx prisma migrate deploy` | Only applies existing migration files (no creation) | When you're **deploying** committed migrations |
-
-Both commands run against `DATABASE_URL`. The difference is behavior, not target database.
 
 **Environment setup:**
 
