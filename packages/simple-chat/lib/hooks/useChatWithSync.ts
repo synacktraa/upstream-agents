@@ -519,7 +519,8 @@ export function useChatWithSync() {
     repoName: string,
     backgroundSessionId: string,
     assistantMessageId: string,
-    previewUrlPattern?: string
+    previewUrlPattern?: string,
+    abortSignal?: AbortSignal
   ) => {
     const streamStore = useStreamStore.getState()
 
@@ -535,6 +536,12 @@ export function useChatWithSync() {
     })
 
     const connect = (cursor: number = 0) => {
+      // Check if aborted before connecting
+      if (abortSignal?.aborted) {
+        streamStore.stopStream(chatId)
+        return
+      }
+
       const currentStore = useStreamStore.getState()
       const streamState = currentStore.getStream(chatId)
       if (!streamState) return
@@ -552,7 +559,16 @@ export function useChatWithSync() {
       const eventSource = new EventSource(`/api/agent/stream?${params}`)
       currentStore.updateStream(chatId, { eventSource })
 
+      // Close EventSource when abort signal fires
+      abortSignal?.addEventListener("abort", () => {
+        eventSource.close()
+        useStreamStore.getState().stopStream(chatId)
+      })
+
       eventSource.addEventListener("update", (event) => {
+        // Ignore events if aborted
+        if (abortSignal?.aborted) return
+
         try {
           const data: SSEUpdateEvent = JSON.parse(event.data)
           const store = useStreamStore.getState()
@@ -601,6 +617,9 @@ export function useChatWithSync() {
       })
 
       eventSource.addEventListener("complete", async (event) => {
+        // Ignore events if aborted
+        if (abortSignal?.aborted) return
+
         try {
           const data: SSECompleteEvent = JSON.parse(event.data)
 
@@ -675,6 +694,9 @@ export function useChatWithSync() {
       })
 
       eventSource.addEventListener("heartbeat", (event) => {
+        // Ignore events if aborted
+        if (abortSignal?.aborted) return
+
         try {
           const data = JSON.parse(event.data)
           const store = useStreamStore.getState()
@@ -690,6 +712,9 @@ export function useChatWithSync() {
       })
 
       eventSource.addEventListener("error", (event) => {
+        // Ignore events if aborted
+        if (abortSignal?.aborted) return
+
         try {
           const data = JSON.parse((event as MessageEvent).data)
           console.error("SSE error:", data.error)
@@ -709,6 +734,9 @@ export function useChatWithSync() {
       })
 
       eventSource.onerror = () => {
+        // Don't reconnect if aborted
+        if (abortSignal?.aborted) return
+
         eventSource.close()
         const store = useStreamStore.getState()
         const stream = store.getStream(chatId)
@@ -1041,12 +1069,11 @@ export function useChatWithSync() {
   useEffect(() => {
     if (!isHydrated) return
 
+    const abortController = new AbortController()
+
     const runningChats = state.chats.filter(
       (c) => c.backgroundSessionId && c.sandboxId
     )
-
-    // Track which streams we start so we can clean them up
-    const startedStreamIds: string[] = []
 
     for (const chat of runningChats) {
       if (useStreamStore.getState().isStreaming(chat.id)) continue
@@ -1057,24 +1084,21 @@ export function useChatWithSync() {
         .find((m) => m.role === "assistant")
 
       if (lastAssistantMsg) {
-        startedStreamIds.push(chat.id)
         startStreaming(
           chat.id,
           chat.sandboxId!,
           "project",
           chat.backgroundSessionId!,
           lastAssistantMsg.id,
-          chat.previewUrlPattern
+          chat.previewUrlPattern,
+          abortController.signal
         )
       }
     }
 
-    // Cleanup: stop any streams we started when effect re-runs (React StrictMode)
+    // Cleanup: abort streams when effect re-runs (React StrictMode)
     return () => {
-      const store = useStreamStore.getState()
-      for (const chatId of startedStreamIds) {
-        store.stopStream(chatId)
-      }
+      abortController.abort()
     }
   }, [isHydrated, state.chats, startStreaming])
 
