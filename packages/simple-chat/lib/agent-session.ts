@@ -22,6 +22,35 @@ import type { Sandbox as DaytonaSandbox } from "@daytonaio/sdk"
 // Re-export Agent type for convenience
 export type { Agent }
 
+/**
+ * Best-effort serialization of an unknown thrown value. Avoids the
+ * "Unknown error" trap when something non-Error (a plain object, an SDK
+ * rejection, a string) bubbles up — at minimum we surface *what* it was.
+ */
+export function formatAgentError(err: unknown): string {
+  if (err instanceof Error) {
+    const name = err.name && err.name !== "Error" ? `${err.name}: ` : ""
+    const cause = (err as { cause?: unknown }).cause
+    const causeMsg =
+      cause instanceof Error
+        ? ` (cause: ${cause.message})`
+        : cause != null
+        ? ` (cause: ${String(cause)})`
+        : ""
+    return `${name}${err.message || "Error"}${causeMsg}`
+  }
+  if (typeof err === "string") return err || "Empty error"
+  if (err && typeof err === "object") {
+    try {
+      const json = JSON.stringify(err)
+      if (json && json !== "{}") return json
+    } catch {
+      /* fall through */
+    }
+  }
+  return String(err)
+}
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -30,7 +59,6 @@ export interface AgentSessionOptions {
   repoPath: string
   previewUrlPattern?: string
   sessionId?: string
-  cachedEvents?: Event[]
   agent?: Agent
   model?: string
   env?: Record<string, string>
@@ -79,21 +107,129 @@ export async function createBackgroundAgentSession(
 // Polling
 // =============================================================================
 
-export interface PollResult {
+/**
+ * Cumulative snapshot of an agent session at a point in time.
+ * Source of truth: the event log file in the sandbox.
+ */
+export interface AgentSnapshot {
   status: "running" | "completed" | "error"
   content: string
   toolCalls: ToolCall[]
   contentBlocks: ContentBlock[]
   error?: string
   sessionId?: string
-  rawEvents?: Event[]
 }
 
-export async function pollBackgroundAgent(
+/**
+ * Derive {content, toolCalls, contentBlocks, status, error} from a list of
+ * events. Pass cumulative events to get a cumulative summary; pass deltas to
+ * get a delta summary.
+ */
+function summarizeEvents(
+  events: Event[],
+  running: boolean,
+  sessionId: string | null
+): AgentSnapshot {
+  const { content, toolCalls, contentBlocks } = buildContentBlocks(events)
+
+  const crashEvent = events.find(
+    (e) => (e as { type: string }).type === "agent_crashed"
+  ) as { type: "agent_crashed"; message?: string; output?: string } | undefined
+  if (crashEvent) {
+    const baseMsg = crashEvent.message ?? "Process exited without completing"
+    // The wrapper captures the agent process's last ~4KB of non-JSON
+    // stdout/stderr in `output`. That's where the actual reason (auth
+    // failure, missing binary, panic, etc.) lives — surface it.
+    const error = crashEvent.output
+      ? `${baseMsg}\n\n${crashEvent.output}`
+      : baseMsg
+    return {
+      status: "error",
+      content,
+      toolCalls,
+      contentBlocks,
+      error,
+      sessionId: sessionId || undefined,
+    }
+  }
+
+  const endEvent = events.find((e): e is EndEvent => e.type === "end") as
+    | (EndEvent & { error?: string })
+    | undefined
+
+  if (endEvent?.error) {
+    return {
+      status: "error",
+      content,
+      toolCalls,
+      contentBlocks,
+      error: endEvent.error,
+      sessionId: sessionId || undefined,
+    }
+  }
+
+  const isCompleted = !!endEvent
+
+  if (!running && !endEvent) {
+    const hasOutput = !!content?.trim() || toolCalls.length > 0
+    return {
+      status: hasOutput ? "completed" : "error",
+      content,
+      toolCalls,
+      contentBlocks,
+      error: hasOutput ? undefined : "Agent stopped without completing",
+      sessionId: sessionId || undefined,
+    }
+  }
+
+  return {
+    status: isCompleted ? "completed" : "running",
+    content,
+    toolCalls,
+    contentBlocks,
+    sessionId: sessionId || undefined,
+  }
+}
+
+/**
+ * Advance the bg session's per-turn meta after a turn has completed by
+ * triggering one getEvents() call. snapshotBackgroundAgent is read-only and
+ * doesn't perform this bookkeeping; without it, the next start() in the
+ * same session would write to the just-finished turn's outputFile.
+ *
+ * Best-effort: errors are swallowed because the snapshot has already been
+ * persisted to the DB and the wire state has settled.
+ */
+export async function finalizeTurn(
   sandbox: DaytonaSandbox,
   backgroundSessionId: string,
   options: AgentSessionOptions
-): Promise<PollResult> {
+): Promise<void> {
+  try {
+    const systemPrompt = buildSystemPrompt(
+      options.repoPath,
+      options.previewUrlPattern
+    )
+    const bgSession = await getSession(backgroundSessionId, {
+      sandbox: sandbox as any,
+      systemPrompt,
+    })
+    await bgSession.getEvents()
+  } catch {
+    /* best effort */
+  }
+}
+
+/**
+ * Read cumulative state by re-parsing the entire event log on disk in the
+ * sandbox. Use on connect, on reconnect, and for any persistence write
+ * where you need the full snapshot. Does not advance the session's cursor.
+ */
+export async function snapshotBackgroundAgent(
+  sandbox: DaytonaSandbox,
+  backgroundSessionId: string,
+  options: AgentSessionOptions
+): Promise<AgentSnapshot> {
   try {
     const systemPrompt = buildSystemPrompt(
       options.repoPath,
@@ -105,91 +241,27 @@ export async function pollBackgroundAgent(
       systemPrompt,
     })
 
-    const eventsResult = await bgSession.getEvents() as {
+    const result = (await bgSession.getSnapshot()) as {
       events: Event[]
       sessionId: string | null
       cursor: string
       running?: boolean
     }
 
-    const { events: newEvents, sessionId } = eventsResult
-    let running: boolean
-    if (typeof eventsResult.running === "boolean") {
-      running = eventsResult.running
-    } else {
-      running = await bgSession.isRunning()
-    }
+    const running =
+      typeof result.running === "boolean"
+        ? result.running
+        : await bgSession.isRunning()
 
-    // Combine cached events with new events
-    const cachedEvents = options.cachedEvents ?? []
-    const allEvents = [...cachedEvents, ...newEvents]
-
-    const { content, toolCalls, contentBlocks } = buildContentBlocks(allEvents)
-
-    // Check for crash
-    const crashEvent = allEvents.find(
-      (e) => (e as { type: string }).type === "agent_crashed"
-    ) as { type: "agent_crashed"; message?: string } | undefined
-    if (crashEvent) {
-      return {
-        status: "error",
-        content,
-        toolCalls,
-        contentBlocks,
-        error: crashEvent.message ?? "Process exited without completing",
-        sessionId: sessionId || undefined,
-        rawEvents: newEvents,
-      }
-    }
-
-    // Check for end event
-    const endEvent = allEvents.find((e): e is EndEvent => e.type === "end") as
-      | (EndEvent & { error?: string })
-      | undefined
-
-    if (endEvent?.error) {
-      return {
-        status: "error",
-        content,
-        toolCalls,
-        contentBlocks,
-        error: endEvent.error,
-        sessionId: sessionId || undefined,
-        rawEvents: newEvents,
-      }
-    }
-
-    const isCompleted = !!endEvent
-
-    if (!running && !endEvent) {
-      const hasOutput = !!(content?.trim()) || toolCalls.length > 0
-      return {
-        status: hasOutput ? "completed" : "error",
-        content,
-        toolCalls,
-        contentBlocks,
-        error: hasOutput ? undefined : "Agent stopped without completing",
-        sessionId: sessionId || undefined,
-        rawEvents: newEvents,
-      }
-    }
-
-    return {
-      status: isCompleted ? "completed" : "running",
-      content,
-      toolCalls,
-      contentBlocks,
-      sessionId: sessionId || undefined,
-      rawEvents: newEvents,
-    }
+    return summarizeEvents(result.events, running, result.sessionId)
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error"
+    console.error("[snapshotBackgroundAgent] Error:", err)
     return {
       status: "error",
       content: "",
       toolCalls: [],
       contentBlocks: [],
-      error: msg,
+      error: formatAgentError(err),
     }
   }
 }

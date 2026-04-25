@@ -5,7 +5,16 @@ import {
   isAuthError,
   badRequest,
   internalError,
+  decryptUserCredentials,
 } from "@/lib/db/api-helpers"
+import {
+  agentModels,
+  getDefaultAgent,
+  getDefaultModelForAgent,
+  hasCredentialsForModel,
+  type Agent,
+} from "@upstream/common"
+import { flagsFromCredentials } from "@/lib/credentials"
 
 // =============================================================================
 // Types
@@ -130,14 +139,49 @@ export async function POST(req: NextRequest): Promise<Response> {
       }
     }
 
+    // Pick an (agent, model) pair that's actually usable with the user's
+    // credentials. Without this the row could have e.g. agent="opencode"
+    // (the hardcoded default) but model="claude-sonnet-..." (settings'
+    // default), which is internally inconsistent and confuses the UI.
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { settings: true, credentials: true },
+    })
+    const userSettings = (user?.settings as { defaultAgent?: string; defaultModel?: string } | null) ?? {}
+    const decryptedCreds = decryptUserCredentials(
+      user?.credentials as Record<string, unknown> | null
+    )
+    const flags = flagsFromCredentials(decryptedCreds)
+
+    const requestedAgent = (body.agent ?? userSettings.defaultAgent ?? "opencode") as Agent
+    const requestedAgentUsable = (agentModels[requestedAgent] ?? []).some((m) =>
+      hasCredentialsForModel(m, flags, requestedAgent)
+    )
+    const finalAgent: Agent = requestedAgentUsable
+      ? requestedAgent
+      : getDefaultAgent(flags)
+
+    let finalModel: string | null = body.model ?? null
+    if (!finalModel) {
+      const settingsModel = userSettings.defaultModel
+      const settingsModelConfig = settingsModel
+        ? (agentModels[finalAgent] ?? []).find((m) => m.value === settingsModel)
+        : undefined
+      finalModel =
+        settingsModelConfig &&
+        hasCredentialsForModel(settingsModelConfig, flags, finalAgent)
+          ? settingsModel!
+          : getDefaultModelForAgent(finalAgent, flags)
+    }
+
     const chat = await prisma.chat.create({
       data: {
         userId,
         repo: body.repo,
         baseBranch: body.baseBranch ?? "main",
         parentChatId: body.parentChatId,
-        agent: body.agent ?? "opencode",
-        model: body.model,
+        agent: finalAgent,
+        model: finalModel,
         status: body.status ?? "pending",
       },
     })

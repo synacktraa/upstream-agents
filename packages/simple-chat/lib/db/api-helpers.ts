@@ -2,6 +2,11 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/db/prisma"
 import { decrypt } from "@/lib/db/encryption"
+import {
+  CREDENTIAL_KEYS,
+  normalizeStoredCredentials,
+  type Credentials,
+} from "@/lib/credentials"
 
 // =============================================================================
 // Types
@@ -9,14 +14,6 @@ import { decrypt } from "@/lib/db/encryption"
 
 export interface AuthResult {
   userId: string
-}
-
-export interface DecryptedCredentials {
-  anthropicApiKey?: string
-  anthropicAuthToken?: string
-  openaiApiKey?: string
-  opencodeApiKey?: string
-  geminiApiKey?: string
 }
 
 // =============================================================================
@@ -97,6 +94,35 @@ export function isAuthError(result: AuthResult | Response): result is Response {
   return result instanceof Response
 }
 
+/**
+ * Auth gate for streaming routes that take chatId/assistantMessageId from
+ * query parameters. Verifies the caller is signed in, owns the chat, and
+ * that the message lives in that chat. Returns the userId on success, or a
+ * Response the caller should return verbatim on failure.
+ */
+export async function requireChatStreamAccess(
+  chatId: string | null,
+  assistantMessageId: string | null
+): Promise<AuthResult | Response> {
+  const userId = await getAuthUserId()
+  if (!userId) return unauthorized()
+
+  if (chatId) {
+    const chat = await getChatWithAuth(chatId, userId)
+    if (!chat) return notFound("Chat not found")
+
+    if (assistantMessageId) {
+      const msg = await prisma.message.findFirst({
+        where: { id: assistantMessageId, chatId },
+        select: { id: true },
+      })
+      if (!msg) return notFound("Message not found")
+    }
+  }
+
+  return { userId }
+}
+
 // =============================================================================
 // GitHub Token Helpers
 // =============================================================================
@@ -145,60 +171,35 @@ export function isGitHubAuthError(
 // =============================================================================
 
 /**
- * Credentials stored in user.credentials JSONB
- */
-interface StoredCredentials {
-  anthropicApiKey?: string
-  anthropicAuthToken?: string
-  openaiApiKey?: string
-  opencodeApiKey?: string
-  geminiApiKey?: string
-}
-
-/**
- * Decrypts user credentials from database format
- * Returns typed credentials object with decrypted values
+ * Decrypts a stored credentials JSON blob into the env-var-keyed Credentials
+ * map. Accepts either the new env-var keys or legacy camelCase keys
+ * (auto-migrated on next write by the settings route).
  */
 export function decryptUserCredentials(
-  credentials: StoredCredentials | null
-): DecryptedCredentials {
-  if (!credentials) {
-    return {}
+  raw: Record<string, unknown> | null | undefined
+): Credentials {
+  const stored = normalizeStoredCredentials(raw)
+  const out: Credentials = {}
+  for (const { id } of CREDENTIAL_KEYS) {
+    const enc = stored[id]
+    if (enc) {
+      const dec = decrypt(enc)
+      if (dec) out[id] = dec
+    }
   }
-
-  const result: DecryptedCredentials = {}
-
-  if (credentials.anthropicApiKey) {
-    result.anthropicApiKey = decrypt(credentials.anthropicApiKey)
-  }
-  if (credentials.anthropicAuthToken) {
-    result.anthropicAuthToken = decrypt(credentials.anthropicAuthToken)
-  }
-  if (credentials.openaiApiKey) {
-    result.openaiApiKey = decrypt(credentials.openaiApiKey)
-  }
-  if (credentials.opencodeApiKey) {
-    result.opencodeApiKey = decrypt(credentials.opencodeApiKey)
-  }
-  if (credentials.geminiApiKey) {
-    result.geminiApiKey = decrypt(credentials.geminiApiKey)
-  }
-
-  return result
+  return out
 }
 
 /**
- * Gets decrypted credentials for a user
+ * Gets decrypted credentials for a user, keyed by env var name.
  */
-export async function getUserCredentials(
-  userId: string
-): Promise<DecryptedCredentials> {
+export async function getUserCredentials(userId: string): Promise<Credentials> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { credentials: true },
   })
 
-  return decryptUserCredentials(user?.credentials as StoredCredentials | null)
+  return decryptUserCredentials(user?.credentials as Record<string, unknown> | null)
 }
 
 // =============================================================================

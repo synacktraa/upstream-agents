@@ -1,12 +1,11 @@
 "use client"
 
-import { useState, useRef, useEffect, useMemo, useCallback } from "react"
-import { ArrowUp, Square, ChevronDown, Github, Key, X, Paperclip, Settings as SettingsIcon, Trash2, HelpCircle, Pencil, AlertTriangle, Loader2, GitBranchPlus } from "lucide-react"
+import { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from "react"
+import { ArrowUp, Square, ChevronDown, Github, GitBranch, Key, X, Paperclip, Settings as SettingsIcon, Trash2, HelpCircle, Pencil, AlertTriangle, Loader2, GitBranchPlus } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { Chat, Settings, Agent, ModelOption, PendingFile } from "@/lib/types"
+import type { Chat, Settings, Agent, ModelOption, PendingFile, CredentialFlags } from "@/lib/types"
 import { nanoid } from "nanoid"
 import { NEW_REPOSITORY, agentModels, agentLabels, getModelLabel, hasCredentialsForModel } from "@/lib/types"
-import { getCredentialFlags } from "@/lib/storage"
 import { filterSlashCommandsWithConflict, type RebaseConflictState } from "@upstream/common"
 import { MessageBubble } from "./MessageBubble"
 import { AgentIcon } from "./icons/agent-icons"
@@ -19,12 +18,14 @@ import type { HighlightKey } from "./modals/SettingsModal"
 interface ChatPanelProps {
   chat: Chat | null
   settings: Settings
+  credentialFlags: CredentialFlags
   onSendMessage: (message: string, agent: string, model: string, files?: File[]) => void
   onEnqueueMessage?: (message: string, agent?: string, model?: string) => void
   onRemoveQueuedMessage?: (id: string) => void
   onResumeQueue?: () => void
   onStopAgent: () => void
   onChangeRepo?: () => void
+  onChangeBranch?: () => void
   onUpdateChat?: (updates: Partial<Chat>) => void
   onOpenSettings?: (highlightKey?: HighlightKey) => void
   onSlashCommand?: (command: SlashCommandType) => void
@@ -47,7 +48,7 @@ interface ChatPanelProps {
   canBranch?: boolean
 }
 
-export function ChatPanel({ chat, settings, onSendMessage, onEnqueueMessage, onRemoveQueuedMessage, onResumeQueue, onStopAgent, onChangeRepo, onUpdateChat, onOpenSettings, onSlashCommand, onRequireSignIn, onDeleteChat, onOpenHelp, onOpenFile, isMobile = false, rebaseConflict, onAbortConflict, conflictActionLoading = false, onBranchWithMessage, onBranchQueuedMessage, canBranch = false }: ChatPanelProps) {
+export function ChatPanel({ chat, settings, credentialFlags, onSendMessage, onEnqueueMessage, onRemoveQueuedMessage, onResumeQueue, onStopAgent, onChangeRepo, onChangeBranch, onUpdateChat, onOpenSettings, onSlashCommand, onRequireSignIn, onDeleteChat, onOpenHelp, onOpenFile, isMobile = false, rebaseConflict, onAbortConflict, conflictActionLoading = false, onBranchWithMessage, onBranchQueuedMessage, canBranch = false }: ChatPanelProps) {
   const [input, setInput] = useState("")
   const [userHasScrolledUp, setUserHasScrolledUp] = useState(false)
   const [showAgentDropdown, setShowAgentDropdown] = useState(false)
@@ -78,9 +79,6 @@ export function ChatPanel({ chat, settings, onSendMessage, onEnqueueMessage, onR
   // Get current agent/model (from chat or settings)
   const currentAgent = (chat?.agent || settings.defaultAgent) as Agent
   const currentModel = chat?.model || settings.defaultModel
-
-  // Get credential flags based on current settings
-  const credentialFlags = useMemo(() => getCredentialFlags(settings), [settings])
 
   // Check if the selected model has required credentials
   const availableModels = agentModels[currentAgent] ?? []
@@ -633,6 +631,19 @@ export function ChatPanel({ chat, settings, onSendMessage, onEnqueueMessage, onR
                   <ChevronDown className={cn(isMobile ? "h-4 w-4" : "h-3 w-3")} />
                 </button>
               )}
+              {!isNewRepo && onChangeBranch && isNewChat && (
+                <button
+                  onClick={onChangeBranch}
+                  className={cn(
+                    "flex items-center gap-1 text-muted-foreground hover:text-foreground active:text-foreground transition-colors cursor-pointer",
+                    isMobile ? "text-sm py-1 px-2 rounded-md hover:bg-accent/50" : "text-xs"
+                  )}
+                >
+                  <GitBranch className={cn(isMobile ? "h-4 w-4" : "h-3 w-3")} />
+                  {chat.branch}
+                  <ChevronDown className={cn(isMobile ? "h-4 w-4" : "h-3 w-3")} />
+                </button>
+              )}
               {!isNewRepo && onUpdateChat && canSelectRepo && (
                 <button
                   onClick={() => onUpdateChat({ repo: NEW_REPOSITORY, baseBranch: "main" })}
@@ -649,17 +660,33 @@ export function ChatPanel({ chat, settings, onSendMessage, onEnqueueMessage, onR
           ) : !isNewRepo && (
             // Repo is locked — link out to the repo on GitHub instead of a
             // plain label so the user can jump to it.
-            <a
-              href={`https://github.com/${chat.repo}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={cn(
-                "text-muted-foreground hover:text-foreground transition-colors",
-                isMobile ? "text-sm" : "text-xs"
+            <div className="flex items-center gap-2">
+              <a
+                href={`https://github.com/${chat.repo}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={cn(
+                  "text-muted-foreground hover:text-foreground transition-colors",
+                  isMobile ? "text-sm" : "text-xs"
+                )}
+              >
+                {chat.repo}
+              </a>
+              {chat.branch && (
+                <a
+                  href={`https://github.com/${chat.repo}/tree/${chat.branch}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={cn(
+                    "flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors",
+                    isMobile ? "text-sm" : "text-xs"
+                  )}
+                >
+                  <GitBranch className={cn(isMobile ? "h-4 w-4" : "h-3 w-3")} />
+                  {chat.branch}
+                </a>
               )}
-            >
-              {chat.repo}
-            </a>
+            </div>
           )}
 
           {/* Spacer */}
@@ -1090,6 +1117,15 @@ export function ChatPanel({ chat, settings, onSendMessage, onEnqueueMessage, onR
               ...
             </div>
           )}
+          {/* Surface the latest agent/streaming error inline so users see why
+              their last run stopped. Cleared on the next send. */}
+          {chat.status === "error" && chat.errorMessage && (
+            <ErrorBanner
+              key={chat.id}
+              message={chat.errorMessage}
+              isMobile={isMobile}
+            />
+          )}
           {/* Queue shelf — lives at the bottom of the scroll area so it
               scrolls out of view with the conversation. */}
           {chat.queuedMessages && chat.queuedMessages.length > 0 && (
@@ -1140,6 +1176,55 @@ export function ChatPanel({ chat, settings, onSendMessage, onEnqueueMessage, onR
         {chatInput}
       </div>
 
+    </div>
+  )
+}
+
+function ErrorBanner({ message, isMobile }: { message: string; isMobile?: boolean }) {
+  const [expanded, setExpanded] = useState(false)
+  const [overflow, setOverflow] = useState(false)
+  const contentRef = useRef<HTMLDivElement>(null)
+
+  useLayoutEffect(() => {
+    const el = contentRef.current
+    if (!el) return
+    setOverflow(el.scrollHeight > el.clientHeight + 1)
+  }, [message, expanded])
+
+  return (
+    <div
+      data-testid="chat-error-banner"
+      className={cn(
+        // Negative top margin only when there's a preceding sibling, so the
+        // banner sits flush against the last message instead of inheriting
+        // the messages container's space-y gap.
+        "flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 text-destructive",
+        isMobile
+          ? "[&:not(:first-child)]:-mt-4 px-3 py-2 text-sm"
+          : "[&:not(:first-child)]:-mt-6 px-3 py-2 text-xs"
+      )}
+    >
+      <AlertTriangle className={cn("shrink-0 mt-0.5", isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
+      <div className="min-w-0 flex-1">
+        <div
+          ref={contentRef}
+          className={cn(
+            "break-words whitespace-pre-wrap",
+            !expanded && (isMobile ? "max-h-32 overflow-hidden" : "max-h-24 overflow-hidden")
+          )}
+        >
+          {message}
+        </div>
+        {(overflow || expanded) && (
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="mt-1 underline underline-offset-2 hover:no-underline cursor-pointer"
+          >
+            {expanded ? "Show less" : "Show more"}
+          </button>
+        )}
+      </div>
     </div>
   )
 }

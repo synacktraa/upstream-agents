@@ -14,8 +14,9 @@ export type {
 import type { ContentBlock } from "@upstream/common"
 
 // Re-export agent types
-export type { Agent, ModelOption, UserCredentialFlags } from "@upstream/common"
+export type { Agent, ModelOption } from "@upstream/common"
 export {
+  ALL_AGENTS,
   agentModels,
   agentLabels,
   defaultAgentModel,
@@ -106,8 +107,16 @@ export interface Chat {
   // Status
   status: ChatStatus
 
+  /** Last agent/streaming error message, surfaced when status === "error". Cleared on the next send. */
+  errorMessage?: string
+
   /** Set when a merge targets this branch but sandbox was stopped. Triggers pull on next execute. */
   needsSync?: boolean
+
+  /** Set if the last attempt to fetch this chat's messages from the server
+   *  failed. Suppresses auto-retry on subsequent selects until the user
+   *  explicitly retries. */
+  messagesLoadFailed?: boolean
 }
 
 export type ChatStatus = "pending" | "creating" | "ready" | "running" | "error"
@@ -123,26 +132,20 @@ export interface QueuedMessage {
 export type Theme = "light" | "dark" | "system"
 
 export interface Settings {
-  // API keys for various providers
-  anthropicApiKey: string
-  /** Claude subscription OAuth token (the JSON blob printed by `security find-generic-password -s "Claude Code-credentials" -w`). Takes precedence over anthropicApiKey for the claude-code agent. */
-  anthropicAuthToken: string
-  openaiApiKey: string
-  opencodeApiKey: string
-  geminiApiKey: string
-
-  // Default agent/model selection
   defaultAgent: string
   defaultModel: string
-
-  // UI preferences
   theme: Theme
 }
+
+export type { CredentialId, Credentials, CredentialFlags } from "./credentials"
+
+import type { CredentialFlags } from "./credentials"
 
 export interface AppState {
   currentChatId: string | null
   chats: Chat[]
   settings: Settings
+  credentialFlags: CredentialFlags
 }
 
 // Re-export GitHub types from common

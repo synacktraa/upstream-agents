@@ -8,7 +8,7 @@
  */
 
 import type { Chat, Settings, Message } from "./types"
-import type { UserCredentialFlags } from "@upstream/common"
+import type { CredentialFlags } from "./credentials"
 
 // =============================================================================
 // Storage Keys
@@ -35,11 +35,13 @@ export interface LocalState {
 }
 
 /**
- * Server cache - read-only mirror of server data
+ * Server cache - read-only mirror of server data.
+ * Credentials never live here — only their boolean flags do.
  */
 export interface ServerCache {
   chats: Chat[]
   settings: Settings
+  credentialFlags: CredentialFlags
   lastSyncAt: number
   // Track last message ID per chat for delta sync
   lastMessageIds: Record<string, string>
@@ -49,12 +51,7 @@ export interface ServerCache {
 // Defaults
 // =============================================================================
 
-const DEFAULT_SETTINGS: Settings = {
-  anthropicApiKey: "",
-  anthropicAuthToken: "",
-  openaiApiKey: "",
-  opencodeApiKey: "",
-  geminiApiKey: "",
+export const DEFAULT_SETTINGS: Settings = {
   defaultAgent: "opencode",
   defaultModel: "opencode/big-pickle",
   theme: "system",
@@ -70,25 +67,9 @@ const DEFAULT_LOCAL_STATE: LocalState = {
 const DEFAULT_SERVER_CACHE: ServerCache = {
   chats: [],
   settings: DEFAULT_SETTINGS,
+  credentialFlags: {},
   lastSyncAt: 0,
   lastMessageIds: {},
-}
-
-// =============================================================================
-// Credential Flags
-// =============================================================================
-
-/**
- * Get user credential flags based on settings
- */
-export function getCredentialFlags(settings: Settings): UserCredentialFlags {
-  return {
-    hasAnthropicApiKey: !!settings.anthropicApiKey,
-    hasAnthropicAuthToken: !!settings.anthropicAuthToken,
-    hasOpenaiApiKey: !!settings.openaiApiKey,
-    hasOpencodeApiKey: !!settings.opencodeApiKey,
-    hasGeminiApiKey: !!settings.geminiApiKey,
-  }
 }
 
 // =============================================================================
@@ -216,7 +197,7 @@ export function loadServerCache(): ServerCache {
     if (!stored) {
       return DEFAULT_SERVER_CACHE
     }
-    const parsed = JSON.parse(stored) as ServerCache
+    const parsed = JSON.parse(stored) as Partial<ServerCache>
     return {
       ...DEFAULT_SERVER_CACHE,
       ...parsed,
@@ -224,6 +205,7 @@ export function loadServerCache(): ServerCache {
         ...DEFAULT_SERVER_CACHE.settings,
         ...parsed.settings,
       },
+      credentialFlags: parsed.credentialFlags ?? {},
     }
   } catch (error) {
     console.error("Failed to load server cache:", error)
@@ -374,6 +356,17 @@ export function updateCacheSettings(settings: Settings): void {
 }
 
 /**
+ * Update credential flags in cache
+ */
+export function updateCacheCredentialFlags(credentialFlags: CredentialFlags): void {
+  const cache = loadServerCache()
+  saveServerCache({
+    ...cache,
+    credentialFlags,
+  })
+}
+
+/**
  * Get last message ID for a chat
  */
 export function getLastMessageId(chatId: string): string | undefined {
@@ -415,6 +408,20 @@ export function saveUnseenChatIds(ids: Set<string>): void {
 // =============================================================================
 // Utilities
 // =============================================================================
+
+/**
+ * Clear all local storage - called on sign out
+ */
+export function clearAllStorage(): void {
+  if (typeof window === "undefined") return
+  try {
+    localStorage.removeItem(LOCAL_STATE_KEY)
+    localStorage.removeItem(SERVER_CACHE_KEY)
+    localStorage.removeItem(UNSEEN_KEY)
+  } catch (error) {
+    console.error("Failed to clear storage:", error)
+  }
+}
 
 /**
  * Collect all descendant chat IDs for a root chat (for cascade delete)

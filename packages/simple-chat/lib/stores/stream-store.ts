@@ -1,18 +1,13 @@
 /**
  * Stream Store - Per-chat SSE stream state management
  *
- * This store isolates each chat's streaming state in a Map, preventing
- * race conditions from shared refs. Each chat owns its own:
- * - EventSource connection
- * - Cursor position for reconnection
- * - Accumulated content (text, tool calls, content blocks)
- *
- * Event handlers read fresh state via getState() instead of closures,
- * eliminating stale closure bugs when switching between chats.
+ * Holds the EventSource and reconnection state for each chat. Cumulative
+ * message content is NOT stored here — the server sends a fresh snapshot
+ * on every "update" frame and the client applies it directly to the
+ * message in chat state. The store owns connections, not data.
  */
 
 import { create } from "zustand"
-import type { Message } from "@/lib/types"
 
 // =============================================================================
 // Types
@@ -25,12 +20,6 @@ export interface StreamState {
   cursor: number
   /** Number of reconnection attempts */
   reconnectAttempts: number
-  /** Accumulated content for the current streaming response */
-  accumulated: {
-    content: string
-    toolCalls: Message["toolCalls"]
-    contentBlocks: Message["contentBlocks"]
-  }
   /** Connection parameters for reconnection */
   connectionParams: {
     sandboxId: string
@@ -41,16 +30,8 @@ export interface StreamState {
 }
 
 interface StreamStore {
-  // =============================================================================
-  // State
-  // =============================================================================
-
   /** Map of chatId -> stream state */
   streams: Map<string, StreamState>
-
-  // =============================================================================
-  // Actions
-  // =============================================================================
 
   /** Initialize a new stream for a chat */
   startStream: (
@@ -69,25 +50,6 @@ interface StreamStore {
 
   /** Check if a chat is currently streaming */
   isStreaming: (chatId: string) => boolean
-
-  // =============================================================================
-  // Accumulator Helpers
-  // =============================================================================
-
-  /** Append content to accumulated text */
-  appendContent: (chatId: string, content: string) => void
-
-  /** Append tool calls to accumulated list */
-  appendToolCalls: (chatId: string, toolCalls: Message["toolCalls"]) => void
-
-  /** Append content blocks to accumulated list */
-  appendContentBlocks: (
-    chatId: string,
-    blocks: Message["contentBlocks"]
-  ) => void
-
-  /** Get accumulated content for a chat */
-  getAccumulated: (chatId: string) => StreamState["accumulated"] | null
 }
 
 // =============================================================================
@@ -98,7 +60,6 @@ const createEmptyStreamState = (): StreamState => ({
   eventSource: null,
   cursor: 0,
   reconnectAttempts: 0,
-  accumulated: { content: "", toolCalls: [], contentBlocks: [] },
   connectionParams: null,
 })
 
@@ -151,60 +112,4 @@ export const useStreamStore = create<StreamStore>((set, get) => ({
   getStream: (chatId) => get().streams.get(chatId),
 
   isStreaming: (chatId) => get().streams.has(chatId),
-
-  appendContent: (chatId, content) => {
-    if (!content) return
-    set((state) => {
-      const existing = state.streams.get(chatId)
-      if (!existing) return state
-      const streams = new Map(state.streams)
-      streams.set(chatId, {
-        ...existing,
-        accumulated: {
-          ...existing.accumulated,
-          content: existing.accumulated.content + content,
-        },
-      })
-      return { streams }
-    })
-  },
-
-  appendToolCalls: (chatId, toolCalls) => {
-    if (!toolCalls?.length) return
-    set((state) => {
-      const existing = state.streams.get(chatId)
-      if (!existing) return state
-      const streams = new Map(state.streams)
-      streams.set(chatId, {
-        ...existing,
-        accumulated: {
-          ...existing.accumulated,
-          toolCalls: [...(existing.accumulated.toolCalls || []), ...toolCalls],
-        },
-      })
-      return { streams }
-    })
-  },
-
-  appendContentBlocks: (chatId, blocks) => {
-    if (!blocks?.length) return
-    set((state) => {
-      const existing = state.streams.get(chatId)
-      if (!existing) return state
-      const streams = new Map(state.streams)
-      streams.set(chatId, {
-        ...existing,
-        accumulated: {
-          ...existing.accumulated,
-          contentBlocks: [
-            ...(existing.accumulated.contentBlocks || []),
-            ...blocks,
-          ],
-        },
-      })
-      return { streams }
-    })
-  },
-
-  getAccumulated: (chatId) => get().streams.get(chatId)?.accumulated ?? null,
 }))

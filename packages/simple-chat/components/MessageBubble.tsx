@@ -152,6 +152,7 @@ function AssistantContent({ message, isStreaming, isMobile = false, repo, onOpen
   const isGitOperation = message.messageType === "git-operation"
 
   if (isEmpty) {
+    if (!isStreaming) return null
     return (
       <div className="text-2xl text-muted-foreground animate-pulse">
         ...

@@ -2,17 +2,19 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useSession, signIn, signOut } from "next-auth/react"
+import { nanoid } from "nanoid"
 import { Menu } from "lucide-react"
 import { Sidebar, ALL_REPOSITORIES, NO_REPOSITORY } from "@/components/Sidebar"
 import { ChatPanel } from "@/components/ChatPanel"
 import { PreviewView, type PreviewItem } from "@/components/PreviewView"
-import { SDKContent } from "@/components/SDKContent"
 import { RepoPickerModal } from "@/components/modals/RepoPickerModal"
 import { SettingsModal, type HighlightKey } from "@/components/modals/SettingsModal"
 import { SignInModal } from "@/components/modals/SignInModal"
 import { HelpModal } from "@/components/modals/HelpModal"
 import { ConfirmDialog } from "@/components/modals/ConfirmDialog"
+import { BranchPickerModal } from "@/components/modals/BranchPickerModal"
 import { MergeDialog, RebaseDialog, PRDialog, SquashDialog, useGitDialogs } from "@/components/modals/GitDialogs"
+import { clearAllStorage } from "@/lib/storage"
 import type { SlashCommandType } from "@/components/SlashCommandMenu"
 import { PaletteProvider } from "@/components/search-palette"
 import { useChatWithSync } from "@/lib/hooks/useChatWithSync"
@@ -61,6 +63,7 @@ export default function HomePage() {
     currentChat,
     currentChatId,
     settings,
+    credentialFlags,
     isHydrated,
     deletingChatIds,
     unseenChatIds,
@@ -83,7 +86,6 @@ export default function HomePage() {
   const [repoSelectOpen, setRepoSelectOpen] = useState(false)
   const [repoCreateOpen, setRepoCreateOpen] = useState(false)
   const [branchSelectOpen, setBranchSelectOpen] = useState(false)
-  const [preselectedRepoForBranch, setPreselectedRepoForBranch] = useState<GitHubRepo | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsHighlightKey, setSettingsHighlightKey] = useState<HighlightKey>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -171,13 +173,14 @@ export default function HomePage() {
       return next
     })
   }, [])
-  const [currentPage, setCurrentPage] = useState<"chat" | "sdk">(() => {
-    if (typeof window === "undefined") return "chat"
-    return window.location.pathname === "/sdk" ? "sdk" : "chat"
-  })
-
   // Track if we've already processed a pending message (to avoid double-sending)
   const pendingMessageProcessed = useRef(false)
+
+  // Draft chat agent/model — only used when an unauthenticated user is
+  // composing a message before any real chat exists. Stored locally because
+  // the chat row that would normally hold these doesn't exist yet.
+  const [draftAgent, setDraftAgent] = useState<string | null>(null)
+  const [draftModel, setDraftModel] = useState<string | null>(null)
 
   // Repos and branches for search palette
   const [repos, setRepos] = useState<GitHubRepo[]>([])
@@ -315,20 +318,6 @@ export default function HomePage() {
     }
   }, [isMobile])
 
-  // Navigate between pages without reload
-  const handleNavigate = (page: "chat" | "sdk") => {
-    setCurrentPage(page)
-    window.history.pushState(null, "", page === "sdk" ? "/sdk" : "/")
-  }
-
-  // Handle browser back/forward
-  useEffect(() => {
-    const handlePopState = () => {
-      setCurrentPage(window.location.pathname === "/sdk" ? "sdk" : "chat")
-    }
-    window.addEventListener("popstate", handlePopState)
-    return () => window.removeEventListener("popstate", handlePopState)
-  }, [])
 
   // Handler for opening settings (optionally with a highlighted API key field)
   const handleOpenSettings = (highlightKey?: HighlightKey) => {
@@ -346,15 +335,21 @@ export default function HomePage() {
     setSettingsHighlightKey(null)
   }
 
-  // Auto-create a new chat if none exists after hydration
+  // Auto-create a new chat if none exists after hydration. Skip when there
+  // is a pending message in sessionStorage — the replay effect below will
+  // create a chat for the message itself and we don't want to create two.
   useEffect(() => {
-    if (isHydrated && !currentChatId) {
-      startNewChat()
-    }
-  }, [isHydrated, currentChatId, startNewChat])
+    if (!isHydrated || currentChatId || !session) return
+    if (typeof window !== "undefined" && sessionStorage.getItem(PENDING_MESSAGE_KEY)) return
+    startNewChat()
+  }, [isHydrated, currentChatId, session, startNewChat])
 
   // Handler for new chat - uses selected repo filter as default, or NEW_REPOSITORY if "All" is selected
   const handleNewChat = () => {
+    if (!session) {
+      setSignInModalOpen(true)
+      return
+    }
     // If a specific repo is selected in the filter, use it for the new chat
     if (repoFilter !== ALL_REPOSITORIES && repoFilter !== NO_REPOSITORY) {
       // Find the repo to get the default branch
@@ -364,13 +359,11 @@ export default function HomePage() {
       // Default to NEW_REPOSITORY (no repo)
       startNewChat()
     }
-    if (currentPage !== "chat") handleNavigate("chat")
   }
 
   // Handler for selecting a chat - switch to chat view
   const handleSelectChat = (chatId: string) => {
     selectChat(chatId)
-    if (currentPage !== "chat") handleNavigate("chat")
   }
 
   // Handler for the repo button in the ChatPanel header. Routes to the Select
@@ -389,6 +382,19 @@ export default function HomePage() {
     } else {
       setRepoCreateOpen(true)
     }
+  }
+
+  // Handler for the branch button in the ChatPanel header.
+  // Opens branch selection modal for the currently selected repository.
+  const handleChangeBranch = () => {
+    if (!session) {
+      setSignInModalOpen(true)
+      return
+    }
+    const chat = currentChat
+    if (!chat || chat.repo === NEW_REPOSITORY) return
+    // Just open the branch picker - it will fetch branches for the current repo
+    setBranchSelectOpen(true)
   }
 
   // Handler for the Create Repository palette/slash command.
@@ -460,22 +466,54 @@ export default function HomePage() {
     sendMessage(message, agent, model, files)
   }
 
-  // Effect to send pending message after sign-in (handles OAuth redirect case)
-  useEffect(() => {
-    // Only process once per session, and only when we have a session and hydrated state
-    if (session && isHydrated && !pendingMessageProcessed.current) {
-      const pending = loadAndClearPendingMessage()
-      if (pending) {
-        pendingMessageProcessed.current = true
-        setSignInModalOpen(false)
+  // After sign-in, replay any pending message saved before the OAuth
+  // redirect. Two effects work together to avoid a stale-closure race:
+  //   (a) pending-replay: creates the chat, then stages a "pending send"
+  //       referencing the new chat ID.
+  //   (b) pending-send: fires once `chats` actually contains the new
+  //       chat (so sendMessage's state.chats is fresh enough to locate
+  //       it). Calls sendMessage and clears the staging state.
+  const [pendingSend, setPendingSend] = useState<
+    { chatId: string; message: string; agent: string; model: string } | null
+  >(null)
 
-        // Small delay to ensure state is fully updated after hydration
-        setTimeout(() => {
-          sendMessage(pending.message, pending.agent, pending.model)
-        }, 200)
+  useEffect(() => {
+    if (!session || !isHydrated || pendingMessageProcessed.current) return
+
+    const pending = loadAndClearPendingMessage()
+    if (!pending) return
+
+    pendingMessageProcessed.current = true
+    setSignInModalOpen(false)
+
+    void (async () => {
+      let chatId = currentChatId
+      if (!chatId) {
+        chatId = await startNewChat()
+        if (!chatId) return
       }
-    }
-  }, [session, isHydrated, sendMessage])
+      // Persist the agent/model picked in draft mode so subsequent
+      // messages on this chat use them too. Best-effort.
+      updateChatById(chatId, {
+        agent: pending.agent,
+        model: pending.model,
+      }).catch(() => {})
+      setPendingSend({
+        chatId,
+        message: pending.message,
+        agent: pending.agent,
+        model: pending.model,
+      })
+    })()
+  }, [session, isHydrated, startNewChat, updateChatById, currentChatId])
+
+  useEffect(() => {
+    if (!pendingSend) return
+    if (!chats.some((c) => c.id === pendingSend.chatId)) return
+    const { message, agent, model, chatId } = pendingSend
+    setPendingSend(null)
+    sendMessage(message, agent, model, undefined, chatId)
+  }, [pendingSend, chats, sendMessage])
 
   // Handler for slash commands - open the corresponding git dialog
   // Start a new chat off the current chat's branch. Defined before
@@ -485,9 +523,12 @@ export default function HomePage() {
   const canBranch = !!(branchForNewChat && currentChat?.repo !== NEW_REPOSITORY)
   const handleBranchChat = useCallback(() => {
     if (!branchForNewChat || currentChat?.repo === NEW_REPOSITORY) return
+    if (!session) {
+      setSignInModalOpen(true)
+      return
+    }
     startNewChat(currentChat.repo, branchForNewChat, currentChat.id)
-    if (currentPage !== "chat") handleNavigate("chat")
-  }, [currentChat, branchForNewChat, startNewChat, currentPage])
+  }, [currentChat, branchForNewChat, startNewChat, session])
 
   // Branch and send a message to the new chat (Option+Enter)
   // The new chat starts in the background - we stay on the current chat
@@ -547,17 +588,14 @@ export default function HomePage() {
 
   // Palette handlers
   const handlePaletteSelectRepo = useCallback((repo: GitHubRepo) => {
-    // Open branch selection modal for this repo instead of creating chat directly
-    setPreselectedRepoForBranch(repo)
-    setBranchSelectOpen(true)
-    if (currentPage !== "chat") handleNavigate("chat")
-  }, [currentPage])
+    // Create new chat with the repo - branch selection happens via the header button
+    startNewChat(`${repo.owner.login}/${repo.name}`, repo.default_branch)
+  }, [startNewChat])
 
   const handlePaletteSelectBranch = useCallback((repo: GitHubRepo, branch: GitHubBranch) => {
     // Create a new chat with this repo and branch
-    const chatId = startNewChat(`${repo.owner.login}/${repo.name}`, branch.name)
-    if (currentPage !== "chat") handleNavigate("chat")
-  }, [startNewChat, currentPage])
+    startNewChat(`${repo.owner.login}/${repo.name}`, branch.name)
+  }, [startNewChat])
 
   // Command palette handler (wraps handleSlashCommand to accept string)
   const handleRunCommand = useCallback((command: string) => {
@@ -671,7 +709,54 @@ export default function HomePage() {
   // Don't render chats until hydrated to avoid SSR mismatch
   const displayChats = isHydrated ? chats : []
   const displayCurrentChatId = isHydrated ? currentChatId : null
-  const displayCurrentChat = isHydrated ? currentChat : null
+
+  // For unauthenticated users with no real chat, render a synthetic "draft"
+  // chat so the prompt bar and dropdowns are interactive. The draft never
+  // talks to the server; on submit we save a pending-message blob to
+  // sessionStorage, prompt sign-in, and replay it once the user is signed in.
+  //
+  // The draft chat's id is a real-format nanoid generated once per page
+  // load (not a magic-string sentinel) — it's only used for ChatPanel's
+  // internal keying and is never sent to the server. "Draft mode" is
+  // detected by the existence of `draftChat`, not by id comparison.
+  const draftIdRef = useRef<string>(`draft-${nanoid()}`)
+  const draftChat: Chat | null = useMemo(() => {
+    if (!isHydrated || session || currentChatId) return null
+    return {
+      id: draftIdRef.current,
+      repo: NEW_REPOSITORY,
+      baseBranch: "main",
+      branch: null,
+      sandboxId: null,
+      sessionId: null,
+      agent: draftAgent ?? settings.defaultAgent,
+      model: draftModel ?? settings.defaultModel,
+      messages: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      status: "pending",
+      displayName: null,
+    }
+  }, [isHydrated, session, currentChatId, draftAgent, draftModel, settings.defaultAgent, settings.defaultModel])
+
+  const isDraftMode = !!draftChat
+  const displayCurrentChat = isHydrated ? (currentChat ?? draftChat) : null
+
+  // When in draft mode, agent/model dropdowns route to local draft state
+  // because no real chat row exists to PATCH yet.
+  const handleUpdateChatProp = useCallback(
+    (updates: Partial<Chat>) => {
+      if (isDraftMode) {
+        if (updates.agent !== undefined) setDraftAgent(updates.agent)
+        if (updates.model !== undefined) setDraftModel(updates.model)
+        // Other fields (repo, branch, etc.) are ignored — those pickers
+        // already prompt sign-in before they could fire onUpdateChat.
+        return
+      }
+      updateCurrentChat(updates)
+    },
+    [isDraftMode, updateCurrentChat]
+  )
 
   return (
     <PaletteProvider
@@ -690,7 +775,10 @@ export default function HomePage() {
       onOpenSettings={() => handleOpenSettings()}
       onToggleSidebar={!isMobile ? () => setSidebarCollapsed((v) => !v) : undefined}
       onSignIn={!session ? () => signIn("github") : undefined}
-      onSignOut={session ? () => signOut() : undefined}
+      onSignOut={session ? () => {
+            clearAllStorage()
+            signOut()
+          } : undefined}
       onDeleteChat={displayCurrentChatId ? () => setDeleteConfirmChatId(displayCurrentChatId) : undefined}
       onOpenInVSCode={currentChat?.sandboxId ? handleOpenInVSCode : undefined}
       onOpenTerminal={
@@ -710,7 +798,7 @@ export default function HomePage() {
       {!isMobile && (
         <Sidebar
           chats={displayChats}
-          currentChatId={currentPage === "chat" ? displayCurrentChatId : null}
+          currentChatId={displayCurrentChatId}
           deletingChatIds={deletingChatIds}
           unseenChatIds={unseenChatIds}
           onSelectChat={handleSelectChat}
@@ -722,8 +810,6 @@ export default function HomePage() {
           onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
           width={sidebarWidth}
           onWidthChange={setSidebarWidth}
-          currentPage={currentPage}
-          onNavigate={handleNavigate}
           onOpenHelp={() => setHelpOpen(true)}
           isMobile={false}
           repoFilter={repoFilter}
@@ -739,7 +825,7 @@ export default function HomePage() {
       {isMobile && (
         <Sidebar
           chats={displayChats}
-          currentChatId={currentPage === "chat" ? displayCurrentChatId : null}
+          currentChatId={displayCurrentChatId}
           deletingChatIds={deletingChatIds}
           unseenChatIds={unseenChatIds}
           onSelectChat={handleSelectChat}
@@ -751,8 +837,6 @@ export default function HomePage() {
           onToggleCollapse={() => {}}
           width={280}
           onWidthChange={() => {}}
-          currentPage={currentPage}
-          onNavigate={handleNavigate}
           onOpenHelp={() => setHelpOpen(true)}
           isMobile={true}
           mobileOpen={mobileSidebarOpen}
@@ -779,27 +863,25 @@ export default function HomePage() {
               <Menu className="h-5 w-5" />
             </button>
             <h1 className="text-base font-semibold truncate flex-1">
-              {currentPage === "sdk"
-                ? "API Reference"
-                : displayCurrentChat?.displayName || "Background Agents"
-              }
+              {displayCurrentChat?.displayName || "Background Agents"}
             </h1>
           </div>
         )}
 
-        {currentPage === "chat" ? (
-          <div className="flex-1 flex min-h-0">
+        <div className="flex-1 flex min-h-0">
             <div className="flex-1 flex flex-col min-w-0">
               <ChatPanel
                 chat={displayCurrentChat}
                 settings={settings}
+                credentialFlags={credentialFlags}
                 onSendMessage={handleSendMessage}
                 onEnqueueMessage={enqueueMessage}
                 onRemoveQueuedMessage={removeQueuedMessage}
                 onResumeQueue={resumeQueue}
                 onStopAgent={stopAgent}
                 onChangeRepo={handleChangeRepo}
-                onUpdateChat={updateCurrentChat}
+                onChangeBranch={handleChangeBranch}
+                onUpdateChat={handleUpdateChatProp}
                 onOpenSettings={handleOpenSettings}
                 onSlashCommand={handleSlashCommand}
                 onRequireSignIn={!session ? () => setSignInModalOpen(true) : undefined}
@@ -842,9 +924,6 @@ export default function HomePage() {
               </>
             )}
           </div>
-        ) : (
-          <SDKContent isMobile={isMobile} />
-        )}
       </div>
 
       {/* Transparent full-screen shield during split drag so the cursor isn't
@@ -871,31 +950,33 @@ export default function HomePage() {
         suggestedName={currentChat?.displayName ?? null}
       />
 
-      <RepoPickerModal
+      <BranchPickerModal
         open={branchSelectOpen}
-        onClose={() => {
+        onClose={() => setBranchSelectOpen(false)}
+        onSelect={async (branch) => {
+          if (currentChat && currentChat.messages.length === 0 && !currentChat.sandboxId) {
+            updateCurrentChat({ branch })
+          } else if (currentChat) {
+            const chatId = await startNewChat(currentChat.repo, branch)
+            if (chatId) selectChat(chatId)
+          }
           setBranchSelectOpen(false)
-          setPreselectedRepoForBranch(null)
         }}
-        onSelect={(repo, branch) => {
-          // Create new chat with selected repo and branch
-          startNewChat(repo, branch)
-          setBranchSelectOpen(false)
-          setPreselectedRepoForBranch(null)
-        }}
+        repo={currentChat?.repo?.split("/")[1] || ""}
+        owner={currentChat?.repo?.split("/")[0] || ""}
+        defaultBranch={currentChat?.branch ?? undefined}
         isMobile={isMobile}
-        mode="branch-only"
-        preselectedRepo={preselectedRepoForBranch}
       />
 
-      <SettingsModal
-        open={settingsOpen}
-        onClose={handleCloseSettings}
-        settings={settings}
-        onSave={updateSettings}
-        highlightKey={settingsHighlightKey}
-        isMobile={isMobile}
-      />
+        <SettingsModal
+          open={settingsOpen}
+          onClose={handleCloseSettings}
+          settings={settings}
+          credentialFlags={credentialFlags}
+          onSave={updateSettings}
+          highlightKey={settingsHighlightKey}
+          isMobile={isMobile}
+        />
 
       {/* Git Dialogs - now use API calls instead of pasting git commands */}
       <MergeDialog
