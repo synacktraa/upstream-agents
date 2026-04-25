@@ -419,7 +419,7 @@ export function useChatWithSync() {
     if (!canSelectRepo && !canAssignNewRepo) return
 
     try {
-      await apiUpdateChat(chatId, { repo, baseBranch } as unknown as Parameters<typeof apiUpdateChat>[1])
+      await apiUpdateChat(chatId, { repo, baseBranch })
 
       // Update local state
       setState((prev) => ({

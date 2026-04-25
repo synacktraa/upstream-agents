@@ -151,6 +151,8 @@ export async function updateChat(
     status: string
     agent: string
     model: string
+    repo: string
+    baseBranch: string
     branch: string
     sandboxId: string
     sessionId: string

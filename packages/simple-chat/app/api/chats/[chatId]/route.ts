@@ -135,6 +135,8 @@ interface PatchChatBody {
   status?: string
   agent?: string
   model?: string
+  repo?: string
+  baseBranch?: string
   branch?: string
   sandboxId?: string
   sessionId?: string
@@ -169,6 +171,8 @@ export async function PATCH(
     if (body.status !== undefined) updateData.status = body.status
     if (body.agent !== undefined) updateData.agent = body.agent
     if (body.model !== undefined) updateData.model = body.model
+    if (body.repo !== undefined) updateData.repo = body.repo
+    if (body.baseBranch !== undefined) updateData.baseBranch = body.baseBranch
     if (body.branch !== undefined) updateData.branch = body.branch
     if (body.sandboxId !== undefined) updateData.sandboxId = body.sandboxId
     if (body.sessionId !== undefined) updateData.sessionId = body.sessionId
