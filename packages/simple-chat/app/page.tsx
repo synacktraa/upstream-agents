@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useSession, signIn, signOut } from "next-auth/react"
+import { nanoid } from "nanoid"
 import { Menu } from "lucide-react"
 import { Sidebar, ALL_REPOSITORIES, NO_REPOSITORY } from "@/components/Sidebar"
 import { ChatPanel } from "@/components/ChatPanel"
@@ -737,10 +738,16 @@ export default function HomePage() {
   // chat so the prompt bar and dropdowns are interactive. The draft never
   // talks to the server; on submit we save a pending-message blob to
   // sessionStorage, prompt sign-in, and replay it once the user is signed in.
+  //
+  // The draft chat's id is a real-format nanoid generated once per page
+  // load (not a magic-string sentinel) — it's only used for ChatPanel's
+  // internal keying and is never sent to the server. "Draft mode" is
+  // detected by the existence of `draftChat`, not by id comparison.
+  const draftIdRef = useRef<string>(`draft-${nanoid()}`)
   const draftChat: Chat | null = useMemo(() => {
     if (!isHydrated || session || currentChatId) return null
     return {
-      id: "__draft__",
+      id: draftIdRef.current,
       repo: NEW_REPOSITORY,
       baseBranch: "main",
       branch: null,
