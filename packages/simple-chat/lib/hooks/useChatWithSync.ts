@@ -657,6 +657,7 @@ export function useChatWithSync() {
             status: data.status === "error" ? "error" : "ready",
             backgroundSessionId: undefined,
             lastActiveAt: Date.now(),
+            errorMessage: data.status === "error" ? (data.error || "Agent failed without an error message") : undefined,
           }
           if (data.sessionId) {
             updates.sessionId = data.sessionId
@@ -723,11 +724,12 @@ export function useChatWithSync() {
           console.error("SSE error:", data.error)
           useStreamStore.getState().stopStream(chatId)
 
+          const errorMessage = data.error || "Agent stream failed without an error message"
           setState((prev) => ({
             ...prev,
             chats: prev.chats.map((c) =>
               c.id === chatId
-                ? { ...c, status: "error" as const, backgroundSessionId: undefined }
+                ? { ...c, status: "error" as const, backgroundSessionId: undefined, errorMessage }
                 : c
             ),
           }))
@@ -840,6 +842,7 @@ export function useChatWithSync() {
               status: chat.sandboxId ? ("running" as const) : ("creating" as const),
               lastActiveAt: Date.now(),
               queuePaused: false,
+              errorMessage: undefined,
             }
           : c
       ),
@@ -952,6 +955,7 @@ export function useChatWithSync() {
       // Server already cleaned up its side (sandbox + chat row) on failure.
       // Mark the assistant placeholder as the visible error and roll back
       // chat status.
+      const errorMessage = error instanceof Error ? error.message : "Unknown error"
       setState((prev) => ({
         ...prev,
         chats: prev.chats.map((c) =>
@@ -959,11 +963,12 @@ export function useChatWithSync() {
             ? {
                 ...c,
                 status: "error" as const,
+                errorMessage,
                 messages: c.messages.map((m) =>
                   m.id === assistantMessage.id
                     ? {
                         ...m,
-                        content: `Error: ${error instanceof Error ? error.message : "Unknown error"}`,
+                        content: `Error: ${errorMessage}`,
                         isError: true,
                       }
                     : m

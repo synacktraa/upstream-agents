@@ -106,6 +106,9 @@ export interface Chat {
   // Status
   status: ChatStatus
 
+  /** Last agent/streaming error message, surfaced when status === "error". Cleared on the next send. */
+  errorMessage?: string
+
   /** Set when a merge targets this branch but sandbox was stopped. Triggers pull on next execute. */
   needsSync?: boolean
 

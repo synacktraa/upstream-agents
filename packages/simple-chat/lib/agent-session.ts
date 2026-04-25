@@ -22,6 +22,35 @@ import type { Sandbox as DaytonaSandbox } from "@daytonaio/sdk"
 // Re-export Agent type for convenience
 export type { Agent }
 
+/**
+ * Best-effort serialization of an unknown thrown value. Avoids the
+ * "Unknown error" trap when something non-Error (a plain object, an SDK
+ * rejection, a string) bubbles up — at minimum we surface *what* it was.
+ */
+export function formatAgentError(err: unknown): string {
+  if (err instanceof Error) {
+    const name = err.name && err.name !== "Error" ? `${err.name}: ` : ""
+    const cause = (err as { cause?: unknown }).cause
+    const causeMsg =
+      cause instanceof Error
+        ? ` (cause: ${cause.message})`
+        : cause != null
+        ? ` (cause: ${String(cause)})`
+        : ""
+    return `${name}${err.message || "Error"}${causeMsg}`
+  }
+  if (typeof err === "string") return err || "Empty error"
+  if (err && typeof err === "object") {
+    try {
+      const json = JSON.stringify(err)
+      if (json && json !== "{}") return json
+    } catch {
+      /* fall through */
+    }
+  }
+  return String(err)
+}
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -219,13 +248,13 @@ export async function snapshotBackgroundAgent(
 
     return summarizeEvents(result.events, running, result.sessionId)
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error"
+    console.error("[snapshotBackgroundAgent] Error:", err)
     return {
       status: "error",
       content: "",
       toolCalls: [],
       contentBlocks: [],
-      error: msg,
+      error: formatAgentError(err),
     }
   }
 }

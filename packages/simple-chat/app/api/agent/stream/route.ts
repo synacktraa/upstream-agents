@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client"
 import { PATHS } from "@/lib/constants"
 import {
   finalizeTurn,
+  formatAgentError,
   snapshotBackgroundAgent,
   type AgentSnapshot,
 } from "@/lib/agent-session"
@@ -204,7 +205,7 @@ export async function GET(req: Request) {
         }
       } catch (error) {
         console.error("[agent/stream] Error:", error)
-        const message = error instanceof Error ? error.message : "Unknown error"
+        const message = formatAgentError(error)
 
         if (chatId) {
           try {

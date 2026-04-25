@@ -1120,6 +1120,20 @@ export function ChatPanel({ chat, settings, onSendMessage, onEnqueueMessage, onR
               ...
             </div>
           )}
+          {/* Surface the latest agent/streaming error inline so users see why
+              their last run stopped. Cleared on the next send. */}
+          {chat.status === "error" && chat.errorMessage && (
+            <div
+              data-testid="chat-error-banner"
+              className={cn(
+                "flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 text-destructive",
+                isMobile ? "px-3 py-2 text-sm" : "px-3 py-2 text-xs"
+              )}
+            >
+              <AlertTriangle className={cn("shrink-0 mt-0.5", isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
+              <span className="break-words whitespace-pre-wrap">{chat.errorMessage}</span>
+            </div>
+          )}
           {/* Queue shelf — lives at the bottom of the scroll area so it
               scrolls out of view with the conversation. */}
           {chat.queuedMessages && chat.queuedMessages.length > 0 && (
