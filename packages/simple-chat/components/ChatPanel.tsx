@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect, useMemo, useCallback } from "react"
+import { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from "react"
 import { ArrowUp, Square, ChevronDown, Github, GitBranch, Key, X, Paperclip, Settings as SettingsIcon, Trash2, HelpCircle, Pencil, AlertTriangle, Loader2, GitBranchPlus } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Chat, Settings, Agent, ModelOption, PendingFile, CredentialFlags } from "@/lib/types"
@@ -1124,16 +1124,11 @@ export function ChatPanel({ chat, settings, credentialFlags, onSendMessage, onEn
           {/* Surface the latest agent/streaming error inline so users see why
               their last run stopped. Cleared on the next send. */}
           {chat.status === "error" && chat.errorMessage && (
-            <div
-              data-testid="chat-error-banner"
-              className={cn(
-                "flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 text-destructive",
-                isMobile ? "px-3 py-2 text-sm" : "px-3 py-2 text-xs"
-              )}
-            >
-              <AlertTriangle className={cn("shrink-0 mt-0.5", isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
-              <span className="break-words whitespace-pre-wrap">{chat.errorMessage}</span>
-            </div>
+            <ErrorBanner
+              key={chat.id}
+              message={chat.errorMessage}
+              isMobile={isMobile}
+            />
           )}
           {/* Queue shelf — lives at the bottom of the scroll area so it
               scrolls out of view with the conversation. */}
@@ -1185,6 +1180,55 @@ export function ChatPanel({ chat, settings, credentialFlags, onSendMessage, onEn
         {chatInput}
       </div>
 
+    </div>
+  )
+}
+
+function ErrorBanner({ message, isMobile }: { message: string; isMobile?: boolean }) {
+  const [expanded, setExpanded] = useState(false)
+  const [overflow, setOverflow] = useState(false)
+  const contentRef = useRef<HTMLDivElement>(null)
+
+  useLayoutEffect(() => {
+    const el = contentRef.current
+    if (!el) return
+    setOverflow(el.scrollHeight > el.clientHeight + 1)
+  }, [message, expanded])
+
+  return (
+    <div
+      data-testid="chat-error-banner"
+      className={cn(
+        // Negative top margin only when there's a preceding sibling, so the
+        // banner sits flush against the last message instead of inheriting
+        // the messages container's space-y gap.
+        "flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 text-destructive",
+        isMobile
+          ? "[&:not(:first-child)]:-mt-4 px-3 py-2 text-sm"
+          : "[&:not(:first-child)]:-mt-6 px-3 py-2 text-xs"
+      )}
+    >
+      <AlertTriangle className={cn("shrink-0 mt-0.5", isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
+      <div className="min-w-0 flex-1">
+        <div
+          ref={contentRef}
+          className={cn(
+            "break-words whitespace-pre-wrap",
+            !expanded && (isMobile ? "max-h-32 overflow-hidden" : "max-h-24 overflow-hidden")
+          )}
+        >
+          {message}
+        </div>
+        {(overflow || expanded) && (
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="mt-1 underline underline-offset-2 hover:no-underline cursor-pointer"
+          >
+            {expanded ? "Show less" : "Show more"}
+          </button>
+        )}
+      </div>
     </div>
   )
 }
