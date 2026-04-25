@@ -464,7 +464,9 @@ export function useChatWithSync() {
   // Settings (Server-First)
   // =============================================================================
 
-  const updateSettings = useCallback(async (settings: Partial<Settings>) => {
+  const updateSettings = useCallback(async (
+    settings: Partial<Settings>
+  ): Promise<{ ok: boolean; error?: string }> => {
     try {
       // Separate settings from credentials
       const { anthropicApiKey, anthropicAuthToken, openaiApiKey, opencodeApiKey, geminiApiKey, ...otherSettings } = settings
@@ -491,8 +493,14 @@ export function useChatWithSync() {
         ...prev,
         settings: newSettings,
       }))
+
+      return { ok: true }
     } catch (error) {
       console.error("Failed to update settings:", error)
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : "Failed to save settings",
+      }
     }
   }, [])
 

@@ -121,7 +121,10 @@ export async function PATCH(req: NextRequest): Promise<Response> {
 
       // Only update credentials that are provided
       // Empty string means "clear this credential"
+      // The literal "***" is the UI mask for an existing key — never a real
+      // credential value. Reject defensively in case a stale client sends it.
       for (const [key, value] of Object.entries(body.credentials)) {
+        if (value === "***") continue
         if (value === "") {
           // Clear the credential
           delete newCredentials[key as keyof StoredCredentials]

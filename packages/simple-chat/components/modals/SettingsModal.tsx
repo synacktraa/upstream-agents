@@ -26,7 +26,7 @@ interface SettingsModalProps {
   open: boolean
   onClose: () => void
   settings: Settings
-  onSave: (settings: Settings) => void
+  onSave: (settings: Partial<Settings>) => Promise<{ ok: boolean; error?: string }>
   /** Which API key field to highlight with a red outline */
   highlightKey?: HighlightKey
   isMobile?: boolean
@@ -295,18 +295,60 @@ export function SettingsModal({ open, onClose, settings, onSave, highlightKey, i
     setTheme(theme)
   }
 
-  const handleSave = () => {
-    onSave({
-      anthropicApiKey,
-      anthropicAuthToken,
-      openaiApiKey,
-      opencodeApiKey,
-      geminiApiKey,
-      defaultAgent,
-      defaultModel,
-      theme: selectedTheme,
-    })
-    onClose()
+  // Save status — drives the inline feedback above the Save button.
+  const [saveStatus, setSaveStatus] = useState<
+    | { kind: "idle" }
+    | { kind: "saving" }
+    | { kind: "saved" }
+    | { kind: "error"; message: string }
+  >({ kind: "idle" })
+
+  const handleSave = async () => {
+    if (saveStatus.kind === "saving") return
+
+    // Only send credential fields the user actually changed. The form
+    // initializes credential state to the masked placeholder ("***") for
+    // any key the server has on file; sending that back as a value would
+    // overwrite the real key with the literal string "***".
+    const changed: Partial<Settings> = {}
+    if (anthropicApiKey !== settings.anthropicApiKey) {
+      changed.anthropicApiKey = anthropicApiKey
+    }
+    if (anthropicAuthToken !== settings.anthropicAuthToken) {
+      changed.anthropicAuthToken = anthropicAuthToken
+    }
+    if (openaiApiKey !== settings.openaiApiKey) {
+      changed.openaiApiKey = openaiApiKey
+    }
+    if (opencodeApiKey !== settings.opencodeApiKey) {
+      changed.opencodeApiKey = opencodeApiKey
+    }
+    if (geminiApiKey !== settings.geminiApiKey) {
+      changed.geminiApiKey = geminiApiKey
+    }
+    if (defaultAgent !== settings.defaultAgent) changed.defaultAgent = defaultAgent
+    if (defaultModel !== settings.defaultModel) changed.defaultModel = defaultModel
+    if (selectedTheme !== settings.theme) changed.theme = selectedTheme
+
+    if (Object.keys(changed).length === 0) {
+      onClose()
+      return
+    }
+
+    setSaveStatus({ kind: "saving" })
+    const result = await onSave(changed)
+    if (result.ok) {
+      setSaveStatus({ kind: "saved" })
+      setTimeout(() => {
+        setSaveStatus({ kind: "idle" })
+        onClose()
+      }, 700)
+    } else {
+      setSaveStatus({
+        kind: "error",
+        message: result.error ?? "Failed to save settings",
+      })
+    }
   }
 
   const hasChanges =
@@ -539,19 +581,26 @@ export function SettingsModal({ open, onClose, settings, onSave, highlightKey, i
               </div>
 
               {/* Footer */}
-              <div className="sticky bottom-0 flex justify-end gap-2 border-t border-border bg-popover px-4 py-4 pb-safe">
+              <div className="sticky bottom-0 flex items-center justify-end gap-3 border-t border-border bg-popover px-4 py-4 pb-safe">
+                {saveStatus.kind === "error" && (
+                  <span className="text-sm text-destructive flex-1">{saveStatus.message}</span>
+                )}
+                {saveStatus.kind === "saved" && (
+                  <span className="text-sm text-muted-foreground flex-1">Saved</span>
+                )}
                 <button
                   onClick={onClose}
-                  className="rounded-md hover:bg-accent active:bg-accent transition-colors touch-target px-6 py-3 text-base"
+                  disabled={saveStatus.kind === "saving"}
+                  className="rounded-md hover:bg-accent active:bg-accent transition-colors touch-target px-6 py-3 text-base disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleSave}
-                  disabled={!hasChanges}
+                  disabled={!hasChanges || saveStatus.kind === "saving"}
                   className="rounded-md bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors touch-target px-6 py-3 text-base"
                 >
-                  Save
+                  {saveStatus.kind === "saving" ? "Saving…" : "Save"}
                 </button>
               </div>
             </>
@@ -601,19 +650,26 @@ export function SettingsModal({ open, onClose, settings, onSave, highlightKey, i
                   {activeSection === "appearance" && appearanceSection}
                 </div>
 
-                <div className="flex justify-end gap-2 border-t border-border px-6 py-3">
+                <div className="flex items-center justify-end gap-3 border-t border-border px-6 py-3">
+                  {saveStatus.kind === "error" && (
+                    <span className="text-sm text-destructive flex-1">{saveStatus.message}</span>
+                  )}
+                  {saveStatus.kind === "saved" && (
+                    <span className="text-sm text-muted-foreground flex-1">Saved</span>
+                  )}
                   <button
                     onClick={onClose}
-                    className="rounded-md hover:bg-accent transition-colors px-3 py-1.5 text-sm cursor-pointer"
+                    disabled={saveStatus.kind === "saving"}
+                    className="rounded-md hover:bg-accent transition-colors px-3 py-1.5 text-sm cursor-pointer disabled:opacity-50"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleSave}
-                    disabled={!hasChanges}
+                    disabled={!hasChanges || saveStatus.kind === "saving"}
                     className="rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors px-3 py-1.5 text-sm cursor-pointer"
                   >
-                    Save
+                    {saveStatus.kind === "saving" ? "Saving…" : "Save"}
                   </button>
                 </div>
               </div>
