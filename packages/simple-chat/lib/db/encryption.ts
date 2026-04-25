@@ -1,16 +1,19 @@
 import CryptoJS from "crypto-js"
 
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY
+const IS_PRODUCTION = process.env.NODE_ENV === "production"
 
-if (!ENCRYPTION_KEY && process.env.NODE_ENV === "production") {
-  console.warn(
-    "WARNING: ENCRYPTION_KEY not set. Credentials will not be encrypted properly."
+if (!ENCRYPTION_KEY && IS_PRODUCTION) {
+  // Fail loudly at module load. Storing user API keys in plaintext is not
+  // an acceptable production fallback.
+  throw new Error(
+    "ENCRYPTION_KEY environment variable is required in production"
   )
 }
 
 export function encrypt(text: string): string {
   if (!ENCRYPTION_KEY) {
-    // In development without key, return as-is (not secure, but allows testing)
+    // Development only — see module-load check above.
     return text
   }
   return CryptoJS.AES.encrypt(text, ENCRYPTION_KEY).toString()
@@ -18,7 +21,6 @@ export function encrypt(text: string): string {
 
 export function decrypt(ciphertext: string): string {
   if (!ENCRYPTION_KEY) {
-    // In development without key, return as-is
     return ciphertext
   }
   try {
