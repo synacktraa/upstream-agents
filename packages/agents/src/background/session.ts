@@ -69,6 +69,13 @@ export interface BackgroundSession {
   /** Poll for new events */
   getEvents(): Promise<PollResult>
 
+  /**
+   * Read the full event log from offset 0 without advancing the persisted
+   * cursor. Use this on (re)connect to obtain cumulative state; subsequent
+   * incremental polling continues to use getEvents().
+   */
+  getSnapshot(): Promise<PollResult>
+
   /** Check if a turn is currently running */
   isRunning(): Promise<boolean>
 
@@ -278,6 +285,113 @@ class BackgroundSessionImpl implements BackgroundSession {
 
     // Handle completion states
     return this.handlePollResult(meta, result, stillRunning, sawEnd)
+  }
+
+  async getSnapshot(): Promise<PollResult> {
+    // Same fetch path as getEvents — fetch meta, output, and running state.
+    let meta: SessionMeta | null = null
+    let outputContent: string | null = null
+    let stillRunning: boolean
+
+    if (this.sandbox.pollBackgroundState) {
+      const state = await this.sandbox.pollBackgroundState(this.sessionDir)
+      if (state?.meta) {
+        try {
+          const parsed = JSON.parse(state.meta)
+          if (
+            typeof parsed.currentTurn === "number" &&
+            typeof parsed.cursor === "number"
+          ) {
+            meta = parsed
+          }
+        } catch {
+          /* invalid JSON */
+        }
+      }
+      outputContent = state?.output ?? null
+      stillRunning = !state?.done
+    } else {
+      meta = await this.readMeta()
+      stillRunning = meta?.outputFile
+        ? await this.isOutputRunning(meta.outputFile)
+        : false
+    }
+
+    if (!meta?.outputFile) {
+      return {
+        sessionId: meta?.sessionId ?? this.parseContext.sessionId ?? null,
+        events: [],
+        cursor: "0",
+        running: false,
+        runPhase: "idle",
+      }
+    }
+
+    // Parse the entire output file from offset 0 with a fresh ParseContext so
+    // we don't mutate this.parseContext (which is owned by getEvents) and so
+    // the parser state is rebuilt purely from the events on disk.
+    if (outputContent == null) {
+      if (!this.sandbox.executeCommand) {
+        throw new Error(
+          "Sandbox background mode requires a sandbox with executeCommand support"
+        )
+      }
+      const r = await this.sandbox.executeCommand(`cat ${meta.outputFile}`, 30)
+      outputContent = r.output ?? ""
+    }
+
+    const tempContext: ParseContext = {
+      state: {},
+      sessionId: meta.sessionId ?? null,
+    }
+    const rawLines = outputContent.split("\n")
+    const isJson = (s: string) => s.startsWith("{") && s.endsWith("}")
+    const lines: string[] = []
+    for (let i = 0; i < rawLines.length; i++) {
+      const trimmed = rawLines[i].trim()
+      if (!trimmed) continue
+      if (!isJson(trimmed) && i === rawLines.length - 1) continue
+      if (isJson(trimmed)) lines.push(trimmed)
+    }
+
+    const events: Event[] = []
+    let sawEnd = false
+    for (const line of lines) {
+      const parsed = this.agent.parse(line, tempContext)
+      const evs = parsed === null ? [] : Array.isArray(parsed) ? parsed : [parsed]
+      for (const event of evs) {
+        if (event.type === "session") {
+          tempContext.sessionId = (event as { id: string }).id
+        }
+        if (event.type === "end") sawEnd = true
+        events.push(event)
+      }
+    }
+
+    // Synthesize a crash event the same way handlePollResult does, so callers
+    // can treat snapshots and incremental polls identically.
+    if (!stillRunning && !sawEnd) {
+      const trimmed = outputContent.trim()
+      const nonJsonLines = trimmed.split("\n").filter((l) => {
+        const t = l.trim()
+        return t && !(t.startsWith("{") && t.endsWith("}"))
+      })
+      const output = nonJsonLines.join("\n").trim().slice(-4096) || undefined
+      events.push({
+        type: "agent_crashed",
+        message: "Agent process exited without completing (crashed or killed)",
+        output,
+      })
+    }
+
+    const active = stillRunning && !sawEnd
+    return {
+      sessionId: tempContext.sessionId,
+      events,
+      cursor: String(lines.length),
+      running: active,
+      runPhase: active ? "running" : "stopped",
+    }
   }
 
   async isRunning(): Promise<boolean> {
