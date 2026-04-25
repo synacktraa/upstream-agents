@@ -614,38 +614,32 @@ export function useChatWithSync() {
             reconnectAttempts: 0,
           })
 
-          store.appendContent(chatId, data.content)
-          store.appendToolCalls(chatId, data.toolCalls)
-          store.appendContentBlocks(chatId, data.contentBlocks)
-
-          const accumulated = store.getAccumulated(chatId)
-          if (accumulated) {
-            // Update local state
-            setState((prev) => ({
-              ...prev,
-              chats: prev.chats.map((c) => {
-                if (c.id !== chatId) return c
-                const messages = [...c.messages]
-                const lastIndex = messages.length - 1
-                if (lastIndex >= 0) {
-                  messages[lastIndex] = {
-                    ...messages[lastIndex],
-                    content: accumulated.content,
-                    toolCalls: accumulated.toolCalls,
-                    contentBlocks: accumulated.contentBlocks,
-                  }
+          // The server sends a cumulative snapshot in every update frame.
+          // Apply it directly to the assistant message — do NOT append to
+          // a per-chat accumulator (that produces O(n²) duplication).
+          setState((prev) => ({
+            ...prev,
+            chats: prev.chats.map((c) => {
+              if (c.id !== chatId) return c
+              const messages = [...c.messages]
+              const lastIndex = messages.length - 1
+              if (lastIndex >= 0) {
+                messages[lastIndex] = {
+                  ...messages[lastIndex],
+                  content: data.content,
+                  toolCalls: data.toolCalls,
+                  contentBlocks: data.contentBlocks,
                 }
-                return { ...c, messages, lastActiveAt: Date.now() }
-              }),
-            }))
+              }
+              return { ...c, messages, lastActiveAt: Date.now() }
+            }),
+          }))
 
-            // Update cache
-            updateCacheLastMessage(chatId, {
-              content: accumulated.content,
-              toolCalls: accumulated.toolCalls,
-              contentBlocks: accumulated.contentBlocks,
-            })
-          }
+          updateCacheLastMessage(chatId, {
+            content: data.content,
+            toolCalls: data.toolCalls,
+            contentBlocks: data.contentBlocks,
+          })
         } catch (err) {
           console.error("Failed to parse SSE update:", err)
         }
@@ -658,13 +652,7 @@ export function useChatWithSync() {
         try {
           const data: SSECompleteEvent = JSON.parse(event.data)
 
-          // Get accumulated content BEFORE stopping the stream
-          // stopStream() deletes the stream state including accumulated content
-          const store = useStreamStore.getState()
-          const accumulated = store.getAccumulated(chatId)
-
-          // Stop the stream
-          store.stopStream(chatId)
+          useStreamStore.getState().stopStream(chatId)
 
           const updates: Partial<Chat> = {
             status: data.status === "error" ? "error" : "ready",
@@ -675,35 +663,16 @@ export function useChatWithSync() {
             updates.sessionId = data.sessionId
           }
 
-          // Update state with final message content
+          // The final message content was delivered in the last "update"
+          // frame; we only need to transition chat status here.
           setState((prev) => ({
             ...prev,
-            chats: prev.chats.map((c) => {
-              if (c.id !== chatId) return c
-              // Update chat status AND preserve final message content
-              const messages = [...c.messages]
-              if (messages.length > 0 && accumulated) {
-                const lastIndex = messages.length - 1
-                messages[lastIndex] = {
-                  ...messages[lastIndex],
-                  content: accumulated.content,
-                  toolCalls: accumulated.toolCalls,
-                  contentBlocks: accumulated.contentBlocks,
-                }
-              }
-              return { ...c, ...updates, messages }
-            }),
+            chats: prev.chats.map((c) =>
+              c.id === chatId ? { ...c, ...updates } : c
+            ),
           }))
 
-          // Update cache with final message content
           updateCacheChat(chatId, updates)
-          if (accumulated) {
-            updateCacheLastMessage(chatId, {
-              content: accumulated.content,
-              toolCalls: accumulated.toolCalls,
-              contentBlocks: accumulated.contentBlocks,
-            })
-          }
 
           // Auto-push for GitHub repos
           if (data.status === "completed") {
@@ -1100,7 +1069,19 @@ export function useChatWithSync() {
     }
   }, [currentChat])
 
-  // Recovery: resume streaming for running chats
+  // Recovery: resume streaming for running chats.
+  //
+  // Depend on a stable signature of which chats need streaming, NOT on
+  // state.chats itself. state.chats's reference changes on every snapshot
+  // frame during a streaming response; if the effect depended on it
+  // directly, the cleanup would abort and reconnect the EventSource on
+  // every frame.
+  const runningChatsKey = state.chats
+    .filter((c) => c.backgroundSessionId && c.sandboxId)
+    .map((c) => `${c.id}:${c.backgroundSessionId}:${c.sandboxId}`)
+    .sort()
+    .join("|")
+
   useEffect(() => {
     if (!isHydrated) return
 
@@ -1113,7 +1094,6 @@ export function useChatWithSync() {
     for (const chat of runningChats) {
       if (useStreamStore.getState().isStreaming(chat.id)) continue
 
-      // Find the last assistant message ID
       const lastAssistantMsg = [...chat.messages]
         .reverse()
         .find((m) => m.role === "assistant")
@@ -1131,11 +1111,11 @@ export function useChatWithSync() {
       }
     }
 
-    // Cleanup: abort streams when effect re-runs (React StrictMode)
     return () => {
       abortController.abort()
     }
-  }, [isHydrated, state.chats, startStreaming])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isHydrated, runningChatsKey, startStreaming])
 
   // Cleanup on unmount
   useEffect(() => {
