@@ -5,7 +5,7 @@ import { PATHS } from "@/lib/constants"
 import { createBackgroundAgentSession } from "@/lib/agent-session"
 import { getEnvForModel } from "@upstream/common"
 import { prisma } from "@/lib/db/prisma"
-import { getUserCredentials } from "@/lib/db/api-helpers"
+import { getChatWithAuth, getUserCredentials } from "@/lib/db/api-helpers"
 
 export const maxDuration = 60
 
@@ -42,6 +42,18 @@ export async function POST(req: Request) {
   const session = await getServerSession(authOptions)
   const githubToken = session?.accessToken
   const userId = session?.user?.id
+
+  // If a chatId is supplied, the caller must be authenticated and own the chat.
+  // Without this check, any user could inject messages into another user's chat.
+  if (chatId) {
+    if (!userId) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 })
+    }
+    const owned = await getChatWithAuth(chatId, userId)
+    if (!owned) {
+      return Response.json({ error: "Chat not found" }, { status: 404 })
+    }
+  }
 
   try {
     // Get user credentials if authenticated
@@ -107,6 +119,20 @@ export async function POST(req: Request) {
       const now = Date.now()
       try {
         await prisma.$transaction(async (tx) => {
+          // Reject reuse of a message ID that already exists in a different chat.
+          // Without this, the upsert below would overwrite the existing row's
+          // content (user message) or no-op (assistant placeholder), letting a
+          // caller tamper with messages outside the chat they just authorized.
+          const existing = await tx.message.findMany({
+            where: { id: { in: [userMessageId, assistantMessageId] } },
+            select: { id: true, chatId: true },
+          })
+          for (const m of existing) {
+            if (m.chatId !== chatId) {
+              throw new Error("Message ID belongs to a different chat")
+            }
+          }
+
           // Create user message
           await tx.message.upsert({
             where: { id: userMessageId },
