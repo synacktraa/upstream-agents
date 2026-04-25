@@ -356,6 +356,10 @@ export default function HomePage() {
 
   // Handler for new chat - uses selected repo filter as default, or NEW_REPOSITORY if "All" is selected
   const handleNewChat = () => {
+    if (!session) {
+      setSignInModalOpen(true)
+      return
+    }
     // If a specific repo is selected in the filter, use it for the new chat
     if (repoFilter !== ALL_REPOSITORIES && repoFilter !== NO_REPOSITORY) {
       // Find the repo to get the default branch
@@ -499,9 +503,13 @@ export default function HomePage() {
   const canBranch = !!(branchForNewChat && currentChat?.repo !== NEW_REPOSITORY)
   const handleBranchChat = useCallback(() => {
     if (!branchForNewChat || currentChat?.repo === NEW_REPOSITORY) return
+    if (!session) {
+      setSignInModalOpen(true)
+      return
+    }
     startNewChat(currentChat.repo, branchForNewChat, currentChat.id)
     if (currentPage !== "chat") handleNavigate("chat")
-  }, [currentChat, branchForNewChat, startNewChat, currentPage])
+  }, [currentChat, branchForNewChat, startNewChat, currentPage, session])
 
   // Branch and send a message to the new chat (Option+Enter)
   // The new chat starts in the background - we stay on the current chat

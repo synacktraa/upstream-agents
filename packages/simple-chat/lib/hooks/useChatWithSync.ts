@@ -104,14 +104,19 @@ export function useChatWithSync() {
     const localState = loadLocalState()
     setUnseenChatIds(loadUnseenChatIds())
 
-    // Load cached server data for immediate display
+    // Load cached server data for immediate display.
+    // Filter out any "local-*" IDs left over from the previous unauth
+    // fallback — those chats can never sync to the server and just
+    // accumulate as orphans.
     const cache = loadServerCache()
-    const chatsWithLocalState = cache.chats.map((chat) => ({
-      ...chat,
-      previewItem: localState.previewItems[chat.id],
-      queuedMessages: localState.queuedMessages[chat.id],
-      queuePaused: localState.queuePaused[chat.id],
-    }))
+    const chatsWithLocalState = cache.chats
+      .filter((chat) => !chat.id.startsWith("local-"))
+      .map((chat) => ({
+        ...chat,
+        previewItem: localState.previewItems[chat.id],
+        queuedMessages: localState.queuedMessages[chat.id],
+        queuePaused: localState.queuePaused[chat.id],
+      }))
 
     // IMPORTANT: Use mergeChats to preserve any in-flight streaming content
     // This prevents cache loads from wiping out active streaming state
@@ -297,33 +302,10 @@ export function useChatWithSync() {
 
       return chat.id
     } catch (error) {
-      // If unauthorized, create a local-only chat that can be upgraded after sign-in
-      if (error instanceof Error && error.message.includes("Unauthorized")) {
-        const localChat: Chat = {
-          id: `local-${Date.now()}`,
-          repo,
-          parentChatId,
-          name: "New Chat",
-          status: "pending",
-          messages: [],
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-          lastActiveAt: Date.now(),
-        }
-
-        setState((prev) => ({
-          ...prev,
-          chats: [localChat, ...prev.chats],
-          currentChatId: switchTo ? localChat.id : prev.currentChatId,
-        }))
-
-        if (switchTo) {
-          setCurrentChatId(localChat.id)
-        }
-
-        return localChat.id
-      }
-
+      // Auth failures (and any other error) bubble up as null. The UI
+      // gates "new chat" affordances behind a sign-in prompt for
+      // unauthenticated users; this hook does not create local-only
+      // fallback chats.
       console.error("Failed to create chat:", error)
       return null
     }
@@ -824,8 +806,9 @@ export function useChatWithSync() {
     sendInFlight.current.add(chatId)
     try {
 
-    const isNewRepo = chat.repo === NEW_REPOSITORY
-    if (!isNewRepo && !session?.accessToken) return
+    // Sending always requires a session. The UI shows a sign-in prompt
+    // before reaching this point; this is a defensive backstop.
+    if (!session?.accessToken) return
 
     const isFirstMessage = chat.messages.length === 0
     const selectedAgent = agent || chat.agent || state.settings.defaultAgent
