@@ -7,7 +7,7 @@
 
 import { randomUUID } from "node:crypto"
 import type { AgentDefinition, ParseContext, RunOptions } from "../core/agent"
-import type { Event } from "../types/events"
+import type { AgentCrashedEvent, Event } from "../types/events"
 import type { CodeAgentSandbox } from "../types/provider"
 import type {
   HistoryMessage,
@@ -224,35 +224,7 @@ class BackgroundSessionImpl implements BackgroundSession {
   }
 
   async getEvents(): Promise<PollResult> {
-    // Use optimized polling if available
-    let meta: SessionMeta | null = null
-    let outputContent: string | null = null
-    let stillRunning: boolean
-
-    if (this.sandbox.pollBackgroundState) {
-      const state = await this.sandbox.pollBackgroundState(this.sessionDir)
-      if (state?.meta) {
-        try {
-          const parsed = JSON.parse(state.meta)
-          if (
-            typeof parsed.currentTurn === "number" &&
-            typeof parsed.cursor === "number"
-          ) {
-            meta = parsed
-          }
-        } catch {
-          /* invalid JSON */
-        }
-      }
-      outputContent = state?.output ?? null
-      stillRunning = !state?.done
-    } else {
-      // Legacy path
-      meta = await this.readMeta()
-      stillRunning = meta?.outputFile
-        ? await this.isOutputRunning(meta.outputFile)
-        : false
-    }
+    const { meta, outputContent, stillRunning } = await this.readSessionState()
 
     if (!meta?.runId || !meta.outputFile) {
       debugLog(
@@ -274,7 +246,6 @@ class BackgroundSessionImpl implements BackgroundSession {
       this.parseContext.sessionId
     )
 
-    // Poll output
     const result = await this.pollOutput(
       meta.outputFile,
       cursor,
@@ -282,40 +253,11 @@ class BackgroundSessionImpl implements BackgroundSession {
       outputContent
     )
     const sawEnd = meta.sawEnd || result.events.some((e) => e.type === "end")
-
-    // Handle completion states
     return this.handlePollResult(meta, result, stillRunning, sawEnd)
   }
 
   async getSnapshot(): Promise<PollResult> {
-    // Same fetch path as getEvents — fetch meta, output, and running state.
-    let meta: SessionMeta | null = null
-    let outputContent: string | null = null
-    let stillRunning: boolean
-
-    if (this.sandbox.pollBackgroundState) {
-      const state = await this.sandbox.pollBackgroundState(this.sessionDir)
-      if (state?.meta) {
-        try {
-          const parsed = JSON.parse(state.meta)
-          if (
-            typeof parsed.currentTurn === "number" &&
-            typeof parsed.cursor === "number"
-          ) {
-            meta = parsed
-          }
-        } catch {
-          /* invalid JSON */
-        }
-      }
-      outputContent = state?.output ?? null
-      stillRunning = !state?.done
-    } else {
-      meta = await this.readMeta()
-      stillRunning = meta?.outputFile
-        ? await this.isOutputRunning(meta.outputFile)
-        : false
-    }
+    const { meta, outputContent, stillRunning } = await this.readSessionState()
 
     if (!meta?.outputFile) {
       return {
@@ -327,68 +269,29 @@ class BackgroundSessionImpl implements BackgroundSession {
       }
     }
 
-    // Parse the entire output file from offset 0 with a fresh ParseContext so
-    // we don't mutate this.parseContext (which is owned by getEvents) and so
-    // the parser state is rebuilt purely from the events on disk.
-    if (outputContent == null) {
-      if (!this.sandbox.executeCommand) {
-        throw new Error(
-          "Sandbox background mode requires a sandbox with executeCommand support"
-        )
-      }
-      const r = await this.sandbox.executeCommand(`cat ${meta.outputFile}`, 30)
-      outputContent = r.output ?? ""
-    }
-
+    // Read from offset 0 with a fresh ParseContext so we neither mutate
+    // this.parseContext (owned by getEvents) nor advance the persisted cursor.
     const tempContext: ParseContext = {
       state: {},
       sessionId: meta.sessionId ?? null,
     }
-    const rawLines = outputContent.split("\n")
-    const isJson = (s: string) => s.startsWith("{") && s.endsWith("}")
-    const lines: string[] = []
-    for (let i = 0; i < rawLines.length; i++) {
-      const trimmed = rawLines[i].trim()
-      if (!trimmed) continue
-      if (!isJson(trimmed) && i === rawLines.length - 1) continue
-      if (isJson(trimmed)) lines.push(trimmed)
-    }
-
-    const events: Event[] = []
-    let sawEnd = false
-    for (const line of lines) {
-      const parsed = this.agent.parse(line, tempContext)
-      const evs = parsed === null ? [] : Array.isArray(parsed) ? parsed : [parsed]
-      for (const event of evs) {
-        if (event.type === "session") {
-          tempContext.sessionId = (event as { id: string }).id
-        }
-        if (event.type === "end") sawEnd = true
-        events.push(event)
-      }
-    }
-
-    // Synthesize a crash event the same way handlePollResult does, so callers
-    // can treat snapshots and incremental polls identically.
-    if (!stillRunning && !sawEnd) {
-      const trimmed = outputContent.trim()
-      const nonJsonLines = trimmed.split("\n").filter((l) => {
-        const t = l.trim()
-        return t && !(t.startsWith("{") && t.endsWith("}"))
-      })
-      const output = nonJsonLines.join("\n").trim().slice(-4096) || undefined
-      events.push({
-        type: "agent_crashed",
-        message: "Agent process exited without completing (crashed or killed)",
-        output,
-      })
-    }
+    const result = await this.pollOutput(
+      meta.outputFile,
+      "0",
+      null,
+      outputContent,
+      tempContext
+    )
+    const sawEnd = result.events.some((e) => e.type === "end")
+    const events = stillRunning || sawEnd
+      ? result.events
+      : [...result.events, this.synthesizeCrashEvent(result.rawOutput ?? "")]
 
     const active = stillRunning && !sawEnd
     return {
       sessionId: tempContext.sessionId,
       events,
-      cursor: String(lines.length),
+      cursor: result.cursor,
       running: active,
       runPhase: active ? "running" : "stopped",
     }
@@ -538,9 +441,10 @@ class BackgroundSessionImpl implements BackgroundSession {
 
   private async pollOutput(
     outputFile: string,
-    cursor?: string | null,
-    rawCursor?: string | null,
-    prefetchedContent?: string | null
+    cursor: string | null | undefined,
+    rawCursor: string | null | undefined,
+    prefetchedContent: string | null | undefined,
+    parseContext: ParseContext = this.parseContext
   ): Promise<{
     status: "running" | "completed"
     sessionId: string | null
@@ -581,7 +485,7 @@ class BackgroundSessionImpl implements BackgroundSession {
     if (startIndex >= lines.length) {
       return {
         status: "running",
-        sessionId: this.parseContext.sessionId,
+        sessionId: parseContext.sessionId,
         events: [],
         cursor: String(lines.length),
         rawCursor: String(rawLines.length),
@@ -593,11 +497,11 @@ class BackgroundSessionImpl implements BackgroundSession {
     let status: "running" | "completed" = "running"
 
     for (const line of lines.slice(startIndex)) {
-      const raw = this.agent.parse(line, this.parseContext)
+      const raw = this.agent.parse(line, parseContext)
       const events = raw === null ? [] : Array.isArray(raw) ? raw : [raw]
       for (const event of events) {
         if (event.type === "session") {
-          this.parseContext.sessionId = (event as { id: string }).id
+          parseContext.sessionId = (event as { id: string }).id
         }
         if (event.type === "end") status = "completed"
         eventsOut.push(event)
@@ -606,11 +510,59 @@ class BackgroundSessionImpl implements BackgroundSession {
 
     return {
       status,
-      sessionId: this.parseContext.sessionId,
+      sessionId: parseContext.sessionId,
       events: eventsOut,
       cursor: String(lines.length),
       rawCursor: String(rawLines.length),
       rawOutput,
+    }
+  }
+
+  private async readSessionState(): Promise<{
+    meta: SessionMeta | null
+    outputContent: string | null
+    stillRunning: boolean
+  }> {
+    if (this.sandbox.pollBackgroundState) {
+      const state = await this.sandbox.pollBackgroundState(this.sessionDir)
+      let meta: SessionMeta | null = null
+      if (state?.meta) {
+        try {
+          const parsed = JSON.parse(state.meta)
+          if (
+            typeof parsed.currentTurn === "number" &&
+            typeof parsed.cursor === "number"
+          ) {
+            meta = parsed
+          }
+        } catch {
+          /* invalid JSON */
+        }
+      }
+      return {
+        meta,
+        outputContent: state?.output ?? null,
+        stillRunning: !state?.done,
+      }
+    }
+    const meta = await this.readMeta()
+    const stillRunning = meta?.outputFile
+      ? await this.isOutputRunning(meta.outputFile)
+      : false
+    return { meta, outputContent: null, stillRunning }
+  }
+
+  private synthesizeCrashEvent(rawOutput: string): AgentCrashedEvent {
+    const trimmed = rawOutput.trim()
+    const nonJsonLines = trimmed.split("\n").filter((l) => {
+      const t = l.trim()
+      return t && !(t.startsWith("{") && t.endsWith("}"))
+    })
+    const output = nonJsonLines.join("\n").trim().slice(-4096) || undefined
+    return {
+      type: "agent_crashed",
+      message: "Agent process exited without completing (crashed or killed)",
+      output,
     }
   }
 
@@ -684,17 +636,7 @@ class BackgroundSessionImpl implements BackgroundSession {
 
     // Crashed: process exited without end event
     if (!stillRunning && !sawEnd) {
-      const raw = (result.rawOutput ?? "").trim()
-      const nonJsonLines = raw.split("\n").filter((l) => {
-        const t = l.trim()
-        return t && !(t.startsWith("{") && t.endsWith("}"))
-      })
-      const output = nonJsonLines.join("\n").trim().slice(-4096) || undefined
-      const crashEvent: Event = {
-        type: "agent_crashed",
-        message: "Agent process exited without completing (crashed or killed)",
-        output,
-      }
+      const crashEvent = this.synthesizeCrashEvent(result.rawOutput ?? "")
       debugLog(
         "session end",
         this.parseContext.sessionId ?? meta.sessionId,
