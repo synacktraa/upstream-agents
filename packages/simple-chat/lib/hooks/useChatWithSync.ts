@@ -814,140 +814,13 @@ export function useChatWithSync() {
     const selectedAgent = agent || chat.agent || state.settings.defaultAgent
     const selectedModel = model || chat.model || state.settings.defaultModel
 
-    // 1. Add user message IMMEDIATELY (synchronous)
+    // Optimistic UI: add user + assistant messages immediately.
     const userMessage: Message = {
       id: nanoid(),
       role: "user",
       content,
       timestamp: Date.now(),
     }
-
-    setState((prev) => ({
-      ...prev,
-      chats: prev.chats.map((c) =>
-        c.id === chatId
-          ? {
-              ...c,
-              messages: [...c.messages, userMessage],
-              lastActiveAt: Date.now(),
-              queuePaused: false,
-            }
-          : c
-      ),
-    }))
-
-    // Add to cache so it persists
-    updateCacheMessages(chatId, [userMessage])
-
-    // 2. Create sandbox if needed. Track whether we created one in this
-    // call so we can clean it up if a later stage fails.
-    let sandboxId = chat.sandboxId
-    let branch = chat.branch
-    let previewUrlPattern = chat.previewUrlPattern
-    let createdSandboxThisCall = false
-
-    if (!sandboxId) {
-      branch = `agent/${generateBranchName()}`
-
-      // Update status to creating
-      setState((prev) => ({
-        ...prev,
-        chats: prev.chats.map((c) =>
-          c.id === chatId ? { ...c, status: "creating" as const, branch } : c
-        ),
-      }))
-
-      try {
-        const response = await fetch("/api/sandbox/create", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            repo: chat.repo,
-            baseBranch: chat.baseBranch || "main",
-            newBranch: branch,
-            chatId, // Pass chatId so server can create DB records
-          }),
-        })
-
-        if (!response.ok) {
-          const error = await response.json()
-          throw new Error(error.error || "Failed to create sandbox")
-        }
-
-        const data = await response.json()
-        sandboxId = data.sandboxId
-        previewUrlPattern = data.previewUrlPattern
-        createdSandboxThisCall = true
-
-        setState((prev) => ({
-          ...prev,
-          chats: prev.chats.map((c) =>
-            c.id === chatId
-              ? { ...c, sandboxId, branch, previewUrlPattern, status: "ready" as const }
-              : c
-          ),
-        }))
-      } catch (error) {
-        console.error("Failed to create sandbox:", error)
-        const errorMessage: Message = {
-          id: nanoid(),
-          role: "assistant",
-          content: `Failed to create sandbox: ${error instanceof Error ? error.message : "Unknown error"}`,
-          timestamp: Date.now(),
-          isError: true,
-        }
-        setState((prev) => ({
-          ...prev,
-          chats: prev.chats.map((c) =>
-            c.id === chatId
-              ? { ...c, messages: [...c.messages, errorMessage], status: "error" as const }
-              : c
-          ),
-        }))
-        return
-      }
-    }
-
-    // 3. Upload files if any
-    let uploadedFilePaths: string[] | undefined
-    if (files && files.length > 0 && sandboxId) {
-      try {
-        const formData = new FormData()
-        formData.append("sandboxId", sandboxId)
-        formData.append("repoPath", "/home/daytona/project")
-        files.forEach((file, index) => formData.append(`file-${index}`, file))
-
-        const uploadResponse = await fetch("/api/sandbox/upload", {
-          method: "POST",
-          body: formData,
-        })
-
-        if (uploadResponse.ok) {
-          const result = await uploadResponse.json()
-          uploadedFilePaths = result.uploadedFiles.map((f: { path: string }) => f.path)
-
-          // Update user message with uploaded files
-          setState((prev) => ({
-            ...prev,
-            chats: prev.chats.map((c) =>
-              c.id === chatId
-                ? {
-                    ...c,
-                    messages: c.messages.map((m) =>
-                      m.id === userMessage.id ? { ...m, uploadedFiles: uploadedFilePaths } : m
-                    ),
-                  }
-                : c
-            ),
-          }))
-        }
-      } catch (error) {
-        console.error("Failed to upload files:", error)
-        // Continue without files
-      }
-    }
-
-    // 4. Add assistant placeholder and start agent
     const assistantMessage: Message = {
       id: nanoid(),
       role: "assistant",
@@ -961,66 +834,98 @@ export function useChatWithSync() {
       ...prev,
       chats: prev.chats.map((c) =>
         c.id === chatId
-          ? { ...c, messages: [...c.messages, assistantMessage], status: "running" as const }
+          ? {
+              ...c,
+              messages: [...c.messages, userMessage, assistantMessage],
+              status: chat.sandboxId ? ("running" as const) : ("creating" as const),
+              lastActiveAt: Date.now(),
+              queuePaused: false,
+            }
           : c
       ),
     }))
+    updateCacheMessages(chatId, [userMessage, assistantMessage])
 
-    // Add to cache so streaming updates work
-    updateCacheMessages(chatId, [assistantMessage])
-
-    // 5. Start agent
     try {
-      // Build prompt with uploaded files if any
-      let agentPrompt = content
-      if (uploadedFilePaths && uploadedFilePaths.length > 0) {
-        agentPrompt += "\n\n---\nUploaded files:\n" + uploadedFilePaths.map((p) => `- ${p}`).join("\n")
+      // One server round-trip: orchestrate sandbox-create + file-upload +
+      // message-persist + agent-start atomically. If anything fails the
+      // server cleans up (deletes a just-created sandbox, marks chat as
+      // error) before responding.
+      const payload = {
+        message: content,
+        agent: selectedAgent,
+        model: selectedModel,
+        userMessageId: userMessage.id,
+        assistantMessageId: assistantMessage.id,
+        newBranch: chat.sandboxId ? undefined : `agent/${generateBranchName()}`,
       }
 
-      const response = await fetch("/api/agent/start", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sandboxId,
-          repoName: "project",
-          prompt: agentPrompt,
-          agent: selectedAgent,
-          model: selectedModel,
-          sessionId: chat.sessionId,
-          previewUrlPattern,
-          chatId,
-          userMessageId: userMessage.id,
-          assistantMessageId: assistantMessage.id,
-        }),
-      })
+      let response: Response
+      if (files && files.length > 0) {
+        const formData = new FormData()
+        formData.append("payload", JSON.stringify(payload))
+        files.forEach((file, i) => formData.append(`file-${i}`, file))
+        response = await fetch(`/api/chats/${chatId}/messages`, {
+          method: "POST",
+          body: formData,
+        })
+      } else {
+        response = await fetch(`/api/chats/${chatId}/messages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+      }
 
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || "Failed to start agent")
+        const err = await response.json().catch(() => ({}))
+        throw new Error(err.error || "Failed to send message")
       }
 
-      const data = await response.json()
+      const data = (await response.json()) as {
+        sandboxId: string
+        branch: string | null
+        previewUrlPattern: string | null
+        backgroundSessionId: string
+        uploadedFiles: string[]
+      }
 
+      // Reflect server-assigned sandbox + agent/model + uploadedFiles back
+      // into local state.
       setState((prev) => ({
         ...prev,
         chats: prev.chats.map((c) =>
-          c.id === chatId
-            ? { ...c, backgroundSessionId: data.backgroundSessionId }
-            : c
+          c.id !== chatId
+            ? c
+            : {
+                ...c,
+                sandboxId: data.sandboxId,
+                branch: data.branch,
+                previewUrlPattern: data.previewUrlPattern ?? undefined,
+                backgroundSessionId: data.backgroundSessionId,
+                agent: selectedAgent,
+                model: selectedModel,
+                status: "running" as const,
+                messages: c.messages.map((m) =>
+                  m.id === userMessage.id && data.uploadedFiles.length > 0
+                    ? { ...m, uploadedFiles: data.uploadedFiles }
+                    : m
+                ),
+              }
         ),
       }))
 
-      // Start SSE streaming
+      // Start SSE streaming with the server-confirmed identifiers.
       startStreaming(
         chatId,
-        sandboxId!,
+        data.sandboxId,
         "project",
         data.backgroundSessionId,
         assistantMessage.id,
-        previewUrlPattern
+        data.previewUrlPattern ?? undefined
       )
 
-      // Generate chat name for first message
+      // Generate chat name for first message (fire-and-forget).
       if (isFirstMessage) {
         fetch("/api/chat/suggest-name", {
           method: "POST",
@@ -1028,14 +933,14 @@ export function useChatWithSync() {
           body: JSON.stringify({ prompt: content }),
         })
           .then((res) => res.json())
-          .then((data) => {
-            if (data.name) {
-              apiUpdateChat(chatId, { displayName: data.name }).catch(() => {})
-              updateCacheChat(chatId, { displayName: data.name })
+          .then((nameData) => {
+            if (nameData.name) {
+              apiUpdateChat(chatId, { displayName: nameData.name }).catch(() => {})
+              updateCacheChat(chatId, { displayName: nameData.name })
               setState((prev) => ({
                 ...prev,
                 chats: prev.chats.map((c) =>
-                  c.id === chatId ? { ...c, displayName: data.name } : c
+                  c.id === chatId ? { ...c, displayName: nameData.name } : c
                 ),
               }))
             }
@@ -1043,19 +948,10 @@ export function useChatWithSync() {
           .catch((err) => console.error("Failed to generate name:", err))
       }
     } catch (error) {
-      console.error("Failed to start agent:", error)
-
-      // If this call created the sandbox, agent/start failed leaves it
-      // orphaned (no chat references it for streaming). Clean it up.
-      if (createdSandboxThisCall && sandboxId) {
-        const orphanSandboxId = sandboxId
-        fetch("/api/sandbox/delete", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sandboxId: orphanSandboxId }),
-        }).catch((err) => console.error("Failed to delete orphan sandbox:", err))
-      }
-
+      console.error("Failed to send message:", error)
+      // Server already cleaned up its side (sandbox + chat row) on failure.
+      // Mark the assistant placeholder as the visible error and roll back
+      // chat status.
       setState((prev) => ({
         ...prev,
         chats: prev.chats.map((c) =>
@@ -1063,13 +959,13 @@ export function useChatWithSync() {
             ? {
                 ...c,
                 status: "error" as const,
-                // Drop stale sandbox refs if we created one we just deleted.
-                ...(createdSandboxThisCall
-                  ? { sandboxId: undefined, branch: undefined, previewUrlPattern: undefined }
-                  : {}),
                 messages: c.messages.map((m) =>
                   m.id === assistantMessage.id
-                    ? { ...m, content: `Error: ${error instanceof Error ? error.message : "Unknown error"}`, isError: true }
+                    ? {
+                        ...m,
+                        content: `Error: ${error instanceof Error ? error.message : "Unknown error"}`,
+                        isError: true,
+                      }
                     : m
                 ),
               }
