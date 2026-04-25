@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect, useMemo } from "react"
 import { useSession, signIn, signOut } from "next-auth/react"
-import { Plus, Trash2, Settings, LogOut, PanelLeft, MoreHorizontal, Pin, Pencil, Code2, X, ChevronDown, ChevronRight, FolderGit2, Check, Loader2, HelpCircle, GitMerge, GitBranch } from "lucide-react"
+import { Plus, Trash2, Settings, LogOut, PanelLeft, MoreHorizontal, Pin, Pencil, X, ChevronDown, ChevronRight, FolderGit2, Check, Loader2, HelpCircle, GitMerge, GitBranch } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Chat } from "@/lib/types"
 import { NEW_REPOSITORY } from "@/lib/types"
@@ -31,8 +31,6 @@ interface SidebarProps {
   onToggleCollapse: () => void
   width: number
   onWidthChange: (width: number) => void
-  currentPage?: "chat" | "sdk"
-  onNavigate?: (page: "chat" | "sdk") => void
   onOpenHelp?: () => void
   // Mobile drawer props
   isMobile?: boolean
@@ -66,8 +64,6 @@ export function Sidebar({
   onToggleCollapse,
   width,
   onWidthChange,
-  currentPage = "chat",
-  onNavigate,
   onOpenHelp,
   isMobile = false,
   mobileOpen = false,
@@ -702,7 +698,6 @@ export function Sidebar({
           <UserMenu
             user={session.user}
             onOpenSettings={onOpenSettings}
-            onOpenApiReference={() => onNavigate?.("sdk")}
             onOpenHelp={onOpenHelp}
             collapsed={collapsed}
           />
@@ -890,12 +885,11 @@ interface UserMenuProps {
     image?: string | null
   }
   onOpenSettings: () => void
-  onOpenApiReference?: () => void
   onOpenHelp?: () => void
   collapsed: boolean
 }
 
-function UserMenu({ user, onOpenSettings, onOpenApiReference, onOpenHelp, collapsed }: UserMenuProps) {
+function UserMenu({ user, onOpenSettings, onOpenHelp, collapsed }: UserMenuProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -963,18 +957,6 @@ function UserMenu({ user, onOpenSettings, onOpenApiReference, onOpenHelp, collap
             <Settings className="h-4 w-4" />
             Settings
           </button>
-          {onOpenApiReference && (
-            <button
-              onClick={() => {
-                onOpenApiReference()
-                setMenuOpen(false)
-              }}
-              className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-accent cursor-pointer"
-            >
-              <Code2 className="h-4 w-4" />
-              API Reference
-            </button>
-          )}
           {onOpenHelp && (
             <button
               onClick={() => {

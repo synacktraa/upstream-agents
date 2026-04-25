@@ -7,7 +7,6 @@ import { Menu } from "lucide-react"
 import { Sidebar, ALL_REPOSITORIES, NO_REPOSITORY } from "@/components/Sidebar"
 import { ChatPanel } from "@/components/ChatPanel"
 import { PreviewView, type PreviewItem } from "@/components/PreviewView"
-import { SDKContent } from "@/components/SDKContent"
 import { RepoPickerModal } from "@/components/modals/RepoPickerModal"
 import { SettingsModal, type HighlightKey } from "@/components/modals/SettingsModal"
 import { SignInModal } from "@/components/modals/SignInModal"
@@ -173,11 +172,6 @@ export default function HomePage() {
       return next
     })
   }, [])
-  const [currentPage, setCurrentPage] = useState<"chat" | "sdk">(() => {
-    if (typeof window === "undefined") return "chat"
-    return window.location.pathname === "/sdk" ? "sdk" : "chat"
-  })
-
   // Track if we've already processed a pending message (to avoid double-sending)
   const pendingMessageProcessed = useRef(false)
 
@@ -323,20 +317,6 @@ export default function HomePage() {
     }
   }, [isMobile])
 
-  // Navigate between pages without reload
-  const handleNavigate = (page: "chat" | "sdk") => {
-    setCurrentPage(page)
-    window.history.pushState(null, "", page === "sdk" ? "/sdk" : "/")
-  }
-
-  // Handle browser back/forward
-  useEffect(() => {
-    const handlePopState = () => {
-      setCurrentPage(window.location.pathname === "/sdk" ? "sdk" : "chat")
-    }
-    window.addEventListener("popstate", handlePopState)
-    return () => window.removeEventListener("popstate", handlePopState)
-  }, [])
 
   // Handler for opening settings (optionally with a highlighted API key field)
   const handleOpenSettings = (highlightKey?: HighlightKey) => {
@@ -378,13 +358,11 @@ export default function HomePage() {
       // Default to NEW_REPOSITORY (no repo)
       startNewChat()
     }
-    if (currentPage !== "chat") handleNavigate("chat")
   }
 
   // Handler for selecting a chat - switch to chat view
   const handleSelectChat = (chatId: string) => {
     selectChat(chatId)
-    if (currentPage !== "chat") handleNavigate("chat")
   }
 
   // Handler for the repo button in the ChatPanel header. Routes to the Select
@@ -549,8 +527,7 @@ export default function HomePage() {
       return
     }
     startNewChat(currentChat.repo, branchForNewChat, currentChat.id)
-    if (currentPage !== "chat") handleNavigate("chat")
-  }, [currentChat, branchForNewChat, startNewChat, currentPage, session])
+  }, [currentChat, branchForNewChat, startNewChat, session])
 
   // Branch and send a message to the new chat (Option+Enter)
   // The new chat starts in the background - we stay on the current chat
@@ -612,14 +589,12 @@ export default function HomePage() {
   const handlePaletteSelectRepo = useCallback((repo: GitHubRepo) => {
     // Create new chat with the repo - branch selection happens via the header button
     startNewChat(`${repo.owner.login}/${repo.name}`, repo.default_branch)
-    if (currentPage !== "chat") handleNavigate("chat")
-  }, [currentPage, startNewChat])
+  }, [startNewChat])
 
   const handlePaletteSelectBranch = useCallback((repo: GitHubRepo, branch: GitHubBranch) => {
     // Create a new chat with this repo and branch
-    const chatId = startNewChat(`${repo.owner.login}/${repo.name}`, branch.name)
-    if (currentPage !== "chat") handleNavigate("chat")
-  }, [startNewChat, currentPage])
+    startNewChat(`${repo.owner.login}/${repo.name}`, branch.name)
+  }, [startNewChat])
 
   // Command palette handler (wraps handleSlashCommand to accept string)
   const handleRunCommand = useCallback((command: string) => {
@@ -822,7 +797,7 @@ export default function HomePage() {
       {!isMobile && (
         <Sidebar
           chats={displayChats}
-          currentChatId={currentPage === "chat" ? displayCurrentChatId : null}
+          currentChatId={displayCurrentChatId}
           deletingChatIds={deletingChatIds}
           unseenChatIds={unseenChatIds}
           onSelectChat={handleSelectChat}
@@ -834,8 +809,6 @@ export default function HomePage() {
           onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
           width={sidebarWidth}
           onWidthChange={setSidebarWidth}
-          currentPage={currentPage}
-          onNavigate={handleNavigate}
           onOpenHelp={() => setHelpOpen(true)}
           isMobile={false}
           repoFilter={repoFilter}
@@ -851,7 +824,7 @@ export default function HomePage() {
       {isMobile && (
         <Sidebar
           chats={displayChats}
-          currentChatId={currentPage === "chat" ? displayCurrentChatId : null}
+          currentChatId={displayCurrentChatId}
           deletingChatIds={deletingChatIds}
           unseenChatIds={unseenChatIds}
           onSelectChat={handleSelectChat}
@@ -863,8 +836,6 @@ export default function HomePage() {
           onToggleCollapse={() => {}}
           width={280}
           onWidthChange={() => {}}
-          currentPage={currentPage}
-          onNavigate={handleNavigate}
           onOpenHelp={() => setHelpOpen(true)}
           isMobile={true}
           mobileOpen={mobileSidebarOpen}
@@ -891,16 +862,12 @@ export default function HomePage() {
               <Menu className="h-5 w-5" />
             </button>
             <h1 className="text-base font-semibold truncate flex-1">
-              {currentPage === "sdk"
-                ? "API Reference"
-                : displayCurrentChat?.displayName || "Background Agents"
-              }
+              {displayCurrentChat?.displayName || "Background Agents"}
             </h1>
           </div>
         )}
 
-        {currentPage === "chat" ? (
-          <div className="flex-1 flex min-h-0">
+        <div className="flex-1 flex min-h-0">
             <div className="flex-1 flex flex-col min-w-0">
               <ChatPanel
                 chat={displayCurrentChat}
@@ -955,9 +922,6 @@ export default function HomePage() {
               </>
             )}
           </div>
-        ) : (
-          <SDKContent isMobile={isMobile} />
-        )}
       </div>
 
       {/* Transparent full-screen shield during split drag so the cursor isn't
