@@ -30,7 +30,6 @@ export interface AgentSessionOptions {
   repoPath: string
   previewUrlPattern?: string
   sessionId?: string
-  cachedEvents?: Event[]
   agent?: Agent
   model?: string
   env?: Record<string, string>
@@ -79,21 +78,104 @@ export async function createBackgroundAgentSession(
 // Polling
 // =============================================================================
 
-export interface PollResult {
+/**
+ * Cumulative snapshot of an agent session at a point in time.
+ * Source of truth: the event log file in the sandbox.
+ */
+export interface AgentSnapshot {
   status: "running" | "completed" | "error"
   content: string
   toolCalls: ToolCall[]
   contentBlocks: ContentBlock[]
   error?: string
   sessionId?: string
-  rawEvents?: Event[]
 }
 
+/**
+ * Incremental result of a single poll. Returns only events that have arrived
+ * since the previous poll on this session — callers should NOT treat
+ * `events` as cumulative. For cumulative state use snapshotBackgroundAgent().
+ */
+export interface AgentPollResult {
+  status: "running" | "completed" | "error"
+  events: Event[]
+  error?: string
+  sessionId?: string
+}
+
+/**
+ * Derive {content, toolCalls, contentBlocks, status, error} from a list of
+ * events. Pass cumulative events to get a cumulative summary; pass deltas to
+ * get a delta summary.
+ */
+function summarizeEvents(
+  events: Event[],
+  running: boolean,
+  sessionId: string | null
+): AgentSnapshot {
+  const { content, toolCalls, contentBlocks } = buildContentBlocks(events)
+
+  const crashEvent = events.find(
+    (e) => (e as { type: string }).type === "agent_crashed"
+  ) as { type: "agent_crashed"; message?: string } | undefined
+  if (crashEvent) {
+    return {
+      status: "error",
+      content,
+      toolCalls,
+      contentBlocks,
+      error: crashEvent.message ?? "Process exited without completing",
+      sessionId: sessionId || undefined,
+    }
+  }
+
+  const endEvent = events.find((e): e is EndEvent => e.type === "end") as
+    | (EndEvent & { error?: string })
+    | undefined
+
+  if (endEvent?.error) {
+    return {
+      status: "error",
+      content,
+      toolCalls,
+      contentBlocks,
+      error: endEvent.error,
+      sessionId: sessionId || undefined,
+    }
+  }
+
+  const isCompleted = !!endEvent
+
+  if (!running && !endEvent) {
+    const hasOutput = !!content?.trim() || toolCalls.length > 0
+    return {
+      status: hasOutput ? "completed" : "error",
+      content,
+      toolCalls,
+      contentBlocks,
+      error: hasOutput ? undefined : "Agent stopped without completing",
+      sessionId: sessionId || undefined,
+    }
+  }
+
+  return {
+    status: isCompleted ? "completed" : "running",
+    content,
+    toolCalls,
+    contentBlocks,
+    sessionId: sessionId || undefined,
+  }
+}
+
+/**
+ * Poll for new events since the last call on this session. Use for
+ * low-latency wire updates. Does NOT return cumulative state.
+ */
 export async function pollBackgroundAgent(
   sandbox: DaytonaSandbox,
   backgroundSessionId: string,
   options: AgentSessionOptions
-): Promise<PollResult> {
+): Promise<AgentPollResult> {
   try {
     const systemPrompt = buildSystemPrompt(
       options.repoPath,
@@ -105,83 +187,73 @@ export async function pollBackgroundAgent(
       systemPrompt,
     })
 
-    const eventsResult = await bgSession.getEvents() as {
+    const result = (await bgSession.getEvents()) as {
       events: Event[]
       sessionId: string | null
       cursor: string
       running?: boolean
     }
 
-    const { events: newEvents, sessionId } = eventsResult
-    let running: boolean
-    if (typeof eventsResult.running === "boolean") {
-      running = eventsResult.running
-    } else {
-      running = await bgSession.isRunning()
-    }
+    const running =
+      typeof result.running === "boolean"
+        ? result.running
+        : await bgSession.isRunning()
 
-    // Combine cached events with new events
-    const cachedEvents = options.cachedEvents ?? []
-    const allEvents = [...cachedEvents, ...newEvents]
-
-    const { content, toolCalls, contentBlocks } = buildContentBlocks(allEvents)
-
-    // Check for crash
-    const crashEvent = allEvents.find(
-      (e) => (e as { type: string }).type === "agent_crashed"
-    ) as { type: "agent_crashed"; message?: string } | undefined
-    if (crashEvent) {
-      return {
-        status: "error",
-        content,
-        toolCalls,
-        contentBlocks,
-        error: crashEvent.message ?? "Process exited without completing",
-        sessionId: sessionId || undefined,
-        rawEvents: newEvents,
-      }
-    }
-
-    // Check for end event
-    const endEvent = allEvents.find((e): e is EndEvent => e.type === "end") as
-      | (EndEvent & { error?: string })
-      | undefined
-
-    if (endEvent?.error) {
-      return {
-        status: "error",
-        content,
-        toolCalls,
-        contentBlocks,
-        error: endEvent.error,
-        sessionId: sessionId || undefined,
-        rawEvents: newEvents,
-      }
-    }
-
-    const isCompleted = !!endEvent
-
-    if (!running && !endEvent) {
-      const hasOutput = !!(content?.trim()) || toolCalls.length > 0
-      return {
-        status: hasOutput ? "completed" : "error",
-        content,
-        toolCalls,
-        contentBlocks,
-        error: hasOutput ? undefined : "Agent stopped without completing",
-        sessionId: sessionId || undefined,
-        rawEvents: newEvents,
-      }
-    }
+    // Reuse summarizeEvents to derive status + error from this batch.
+    // content/toolCalls/contentBlocks aren't returned because they'd be
+    // misleading deltas; callers should use snapshotBackgroundAgent for those.
+    const summary = summarizeEvents(result.events, running, result.sessionId)
 
     return {
-      status: isCompleted ? "completed" : "running",
-      content,
-      toolCalls,
-      contentBlocks,
-      sessionId: sessionId || undefined,
-      rawEvents: newEvents,
+      status: summary.status,
+      events: result.events,
+      error: summary.error,
+      sessionId: summary.sessionId,
     }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Unknown error"
+    return {
+      status: "error",
+      events: [],
+      error: msg,
+    }
+  }
+}
+
+/**
+ * Read cumulative state by re-parsing the entire event log on disk in the
+ * sandbox. Use on connect, on reconnect, and for any persistence write
+ * where you need the full snapshot. Does not advance the session's cursor.
+ */
+export async function snapshotBackgroundAgent(
+  sandbox: DaytonaSandbox,
+  backgroundSessionId: string,
+  options: AgentSessionOptions
+): Promise<AgentSnapshot> {
+  try {
+    const systemPrompt = buildSystemPrompt(
+      options.repoPath,
+      options.previewUrlPattern
+    )
+
+    const bgSession = await getSession(backgroundSessionId, {
+      sandbox: sandbox as any,
+      systemPrompt,
+    })
+
+    const result = (await bgSession.getSnapshot()) as {
+      events: Event[]
+      sessionId: string | null
+      cursor: string
+      running?: boolean
+    }
+
+    const running =
+      typeof result.running === "boolean"
+        ? result.running
+        : await bgSession.isRunning()
+
+    return summarizeEvents(result.events, running, result.sessionId)
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error"
     return {
