@@ -69,20 +69,24 @@ export async function GET(
       return notFound("Chat not found")
     }
 
-    // Fetch messages, optionally after a specific message ID
+    // Fetch messages, optionally after a specific message ID.
+    // The afterMessageId lookup must be scoped to this chat: a message ID
+    // from another chat would otherwise pull a foreign createdAt and
+    // produce wrong pagination boundaries.
+    const afterCreatedAt = afterMessageId
+      ? (
+          await prisma.message.findFirst({
+            where: { id: afterMessageId, chatId },
+            select: { createdAt: true },
+          })
+        )?.createdAt
+      : undefined
+
     const messages = await prisma.message.findMany({
       where: {
         chatId,
-        ...(afterMessageId && {
-          // Get messages created after the specified message
-          createdAt: {
-            gt: (
-              await prisma.message.findUnique({
-                where: { id: afterMessageId },
-                select: { createdAt: true },
-              })
-            )?.createdAt,
-          },
+        ...(afterCreatedAt && {
+          createdAt: { gt: afterCreatedAt },
         }),
       },
       orderBy: { timestamp: "asc" },
