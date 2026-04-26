@@ -55,7 +55,13 @@ export type CredentialId =
   | "OPENCODE_API_KEY"
   | "GEMINI_API_KEY"
 
-export type CredentialFlags = Partial<Record<CredentialId, boolean>>
+export type CredentialFlags = Partial<Record<CredentialId, boolean>> & {
+  // Server has a shared Claude credential pool (e.g. the rotating row written
+  // by simple-chat's /api/cron/refresh-claude-creds). Treated as a Claude Code
+  // credential at the UI gate so the user can pick claude-code without pasting
+  // their own token. Not a CredentialId — it's a server capability, not an env var.
+  CLAUDE_SHARED_POOL_AVAILABLE?: boolean
+}
 export type Credentials = Partial<Record<CredentialId, string>>
 
 /** Env vars to inject for a given provider. */
@@ -228,7 +234,7 @@ export const defaultAgentModel: Record<Agent, string> = {
  * Otherwise, default to OpenCode (which has free models).
  */
 export function getDefaultAgent(flags: CredentialFlags | null | undefined): Agent {
-  if (flags?.ANTHROPIC_API_KEY || flags?.CLAUDE_CODE_CREDENTIALS) {
+  if (flags?.ANTHROPIC_API_KEY || flags?.CLAUDE_CODE_CREDENTIALS || flags?.CLAUDE_SHARED_POOL_AVAILABLE) {
     return "claude-code"
   }
   return "opencode"
@@ -236,7 +242,7 @@ export function getDefaultAgent(flags: CredentialFlags | null | undefined): Agen
 
 /** Check if user has credentials for Claude Code agent */
 export function hasClaudeCodeCredentials(flags: CredentialFlags | null | undefined): boolean {
-  return !!(flags?.ANTHROPIC_API_KEY || flags?.CLAUDE_CODE_CREDENTIALS)
+  return !!(flags?.ANTHROPIC_API_KEY || flags?.CLAUDE_CODE_CREDENTIALS || flags?.CLAUDE_SHARED_POOL_AVAILABLE)
 }
 
 /** Check if user has credentials for Codex agent */
@@ -276,8 +282,8 @@ export function hasCredentialsForModel(
   if (model.requiresKey === "anthropic") {
     // OpenCode and Pi require an API key — they can't drive a subscription session.
     if (agent === "opencode" || agent === "pi") return !!flags?.ANTHROPIC_API_KEY
-    // Claude Code can use either API key or subscription.
-    return !!(flags?.ANTHROPIC_API_KEY || flags?.CLAUDE_CODE_CREDENTIALS)
+    // Claude Code can use either API key, the user's pasted subscription, or the shared pool.
+    return !!(flags?.ANTHROPIC_API_KEY || flags?.CLAUDE_CODE_CREDENTIALS || flags?.CLAUDE_SHARED_POOL_AVAILABLE)
   }
   return PROVIDER_ENV[model.requiresKey].some((id) => flags?.[id])
 }

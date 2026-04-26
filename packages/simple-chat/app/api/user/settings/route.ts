@@ -16,6 +16,7 @@ import {
   type CredentialFlags,
   type Credentials,
 } from "@/lib/credentials"
+import { isSharedPoolAvailable } from "@/lib/claude-credentials"
 import type { Settings } from "@/lib/types"
 import { DEFAULT_SETTINGS } from "@/lib/storage"
 
@@ -33,11 +34,14 @@ function readSettings(raw: unknown): Settings {
   }
 }
 
-function buildFlags(stored: Record<CredentialId, string>): CredentialFlags {
+async function buildFlags(stored: Record<CredentialId, string>): Promise<CredentialFlags> {
   const flags: CredentialFlags = {}
   for (const { id } of CREDENTIAL_KEYS) {
     const enc = stored[id]
     flags[id] = !!(enc && decrypt(enc))
+  }
+  if (await isSharedPoolAvailable()) {
+    flags.CLAUDE_SHARED_POOL_AVAILABLE = true
   }
   return flags
 }
@@ -63,7 +67,7 @@ export async function GET(): Promise<Response> {
 
     const response: SettingsResponse = {
       settings: readSettings(user?.settings),
-      credentialFlags: buildFlags(stored),
+      credentialFlags: await buildFlags(stored),
     }
     return Response.json(response)
   } catch (error) {
@@ -131,7 +135,7 @@ export async function PATCH(req: NextRequest): Promise<Response> {
 
     const response: SettingsResponse = {
       settings: newSettings,
-      credentialFlags: buildFlags(newCredentials),
+      credentialFlags: await buildFlags(newCredentials),
     }
     return Response.json(response)
   } catch (error) {

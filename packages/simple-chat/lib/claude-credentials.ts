@@ -101,6 +101,24 @@ export async function getClaudeCredentials(): Promise<string> {
 }
 
 /**
+ * Returns true when the shared Claude credential pool has been seeded
+ * (the cron has written at least one credentials row). Used to advertise
+ * the fallback in client-side credential flags so the UI lets users pick
+ * Claude Code without pasting their own token.
+ *
+ * Note: existence check only — doesn't validate expiry. If the row is
+ * stale, /api/agent/execute still returns 503 SHARED_CREDS_UNAVAILABLE,
+ * which is the correct surface.
+ */
+export async function isSharedPoolAvailable(): Promise<boolean> {
+  const row = await prisma.ccAuthInfo.findUnique({
+    where: { id: CLAUDE_CREDS_KEY },
+    select: { id: true },
+  })
+  return !!row
+}
+
+/**
  * Provisions an ephemeral Daytona sandbox, runs `ccauth --cookies <path>` against
  * the supplied claude.ai cookies, and returns the parsed credential JSON.
  *

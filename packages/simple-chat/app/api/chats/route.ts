@@ -15,6 +15,7 @@ import {
   type Agent,
 } from "@upstream/common"
 import { flagsFromCredentials } from "@/lib/credentials"
+import { isSharedPoolAvailable } from "@/lib/claude-credentials"
 
 // =============================================================================
 // Types
@@ -152,6 +153,9 @@ export async function POST(req: NextRequest): Promise<Response> {
       user?.credentials as Record<string, unknown> | null
     )
     const flags = flagsFromCredentials(decryptedCreds)
+    if (await isSharedPoolAvailable()) {
+      flags.CLAUDE_SHARED_POOL_AVAILABLE = true
+    }
 
     const requestedAgent = (body.agent ?? userSettings.defaultAgent ?? "opencode") as Agent
     const requestedAgentUsable = (agentModels[requestedAgent] ?? []).some((m) =>
