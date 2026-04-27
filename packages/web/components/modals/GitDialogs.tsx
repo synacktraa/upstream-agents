@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import * as Dialog from "@radix-ui/react-dialog"
-import { Loader2, GitMerge, GitBranch, GitPullRequest, GitCommitVertical, ChevronDown } from "lucide-react"
+import { Loader2, GitMerge, GitBranch, GitPullRequest, GitCommitVertical, ChevronDown, AlertTriangle } from "lucide-react"
 import { ModalHeader, focusChatPrompt } from "@/components/ui/modal-header"
 import { cn } from "@/lib/utils"
 import type { Chat, Message } from "@/lib/types"
@@ -45,6 +45,8 @@ export interface UseGitDialogsResult {
   setPROpen: (open: boolean) => void
   squashOpen: boolean
   setSquashOpen: (open: boolean) => void
+  forcePushOpen: boolean
+  setForcePushOpen: (open: boolean) => void
 
   // Branch picker state
   remoteBranches: string[]
@@ -72,6 +74,7 @@ export interface UseGitDialogsResult {
   handleRebase: () => Promise<void>
   handleCreatePR: (descriptionType?: PRDescriptionTypeForHook) => Promise<void>
   handleSquash: () => Promise<void>
+  handleForcePush: () => Promise<void>
   handleAbortConflict: () => Promise<void>
 
   // Conflict state
@@ -724,6 +727,91 @@ export function SquashDialog({ open, onClose, gitDialogs, chat, isMobile = false
 }
 
 // ============================================================================
+// Force Push Dialog
+// ============================================================================
+
+interface ForcePushDialogProps {
+  open: boolean
+  onClose: () => void
+  gitDialogs: UseGitDialogsResult
+  chat: Chat | null
+  isMobile?: boolean
+}
+
+export function ForcePushDialog({ open, onClose, gitDialogs, chat, isMobile = false }: ForcePushDialogProps) {
+  const agentRunning = chat?.status === "running"
+  const branchLabel = gitDialogs.branchName ? gitDialogs.branchLabel(gitDialogs.branchName) : ""
+
+  return (
+    <BaseDialog
+      open={open}
+      onClose={onClose}
+      title="Force push"
+      icon={<AlertTriangle className={cn(isMobile ? "h-5 w-5" : "h-4 w-4", "text-amber-500")} />}
+      isMobile={isMobile}
+    >
+      <div className={cn("space-y-5")}>
+        <div>
+          <label className={cn(
+            "block text-muted-foreground mb-1",
+            isMobile ? "text-sm" : "text-xs"
+          )}>Branch</label>
+          <div className={cn(
+            "bg-muted/50 rounded-md px-3 font-medium truncate",
+            isMobile ? "py-3 text-base" : "py-2 text-sm"
+          )}>
+            {branchLabel || "No chat"}
+          </div>
+        </div>
+
+        <p className={cn(
+          "text-muted-foreground",
+          isMobile ? "text-base" : "text-sm"
+        )}>
+          This will overwrite the remote history of{" "}
+          <span className="font-semibold text-foreground">{branchLabel}</span>{" "}
+          with your local commits. Anyone with the old history will need to re-sync.
+        </p>
+
+        {agentRunning && (
+          <p className={cn(
+            "text-amber-500",
+            isMobile ? "text-sm" : "text-xs"
+          )}>
+            The agent is running on this branch. Wait for it to finish before force pushing.
+          </p>
+        )}
+
+        <div className="flex justify-end gap-2 pt-2">
+          <button
+            onClick={onClose}
+            className={cn(
+              "rounded-md hover:bg-accent transition-colors",
+              isMobile ? "px-4 py-2.5 text-base" : "px-3 py-1.5 text-sm"
+            )}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={async () => {
+              await gitDialogs.handleForcePush()
+            }}
+            disabled={agentRunning || gitDialogs.actionLoading || !gitDialogs.branchName}
+            className={cn(
+              "rounded-md bg-destructive text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50 flex items-center gap-2",
+              isMobile ? "px-4 py-2.5 text-base" : "px-3 py-1.5 text-sm"
+            )}
+          >
+            {gitDialogs.actionLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+            Force push
+          </button>
+        </div>
+      </div>
+    </BaseDialog>
+  )
+}
+
+// ============================================================================
 // useGitDialogs Hook
 // ============================================================================
 
@@ -741,6 +829,7 @@ export function useGitDialogs({ chat, onAddMessage, onAddMessageToBranch, resolv
   const [rebaseOpen, setRebaseOpen] = useState(false)
   const [prOpen, setPROpen] = useState(false)
   const [squashOpen, setSquashOpen] = useState(false)
+  const [forcePushOpen, setForcePushOpen] = useState(false)
 
   // Shared state for branch picker
   const [remoteBranches, setRemoteBranches] = useState<string[]>([])
@@ -984,6 +1073,41 @@ export function useGitDialogs({ chat, onAddMessage, onAddMessageToBranch, resolv
     }
   }, [selectedBranch, branchName, repoOwner, repoApiName, addSystemMessage])
 
+  // Handle force push (temp-branch dance: push commits to a throwaway remote
+  // branch so GitHub has the objects, then PATCH the real branch ref to that SHA).
+  const handleForcePush = useCallback(async () => {
+    if (!branchName || !sandboxId || !repoOwner || !repoApiName) return
+    setActionLoading(true)
+
+    try {
+      const res = await fetch("/api/sandbox/git", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sandboxId,
+          repoPath: `${PATHS.SANDBOX_HOME}/${repoName}`,
+          action: "force-push",
+          currentBranch: branchName,
+          repoOwner,
+          repoApiName,
+        }),
+      })
+
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(typeof data.error === "string" ? data.error : "Force push failed")
+      }
+
+      addSystemMessage(`Force pushed ${branchName}. Remote history overwritten.`)
+      setForcePushOpen(false)
+    } catch (err: unknown) {
+      addSystemMessage(`Force push failed: ${err instanceof Error ? err.message : "Unknown error"}`, true)
+      setForcePushOpen(false)
+    } finally {
+      setActionLoading(false)
+    }
+  }, [branchName, sandboxId, repoName, repoOwner, repoApiName, addSystemMessage])
+
   // Handle abort conflict
   const handleAbortConflict = useCallback(async () => {
     if (!sandboxId) return
@@ -1132,6 +1256,8 @@ export function useGitDialogs({ chat, onAddMessage, onAddMessageToBranch, resolv
     setPROpen,
     squashOpen,
     setSquashOpen,
+    forcePushOpen,
+    setForcePushOpen,
     remoteBranches,
     selectedBranch,
     setSelectedBranch,
@@ -1148,6 +1274,7 @@ export function useGitDialogs({ chat, onAddMessage, onAddMessageToBranch, resolv
     handleRebase,
     handleCreatePR,
     handleSquash,
+    handleForcePush,
     handleAbortConflict,
     rebaseConflict,
     checkRebaseStatus,

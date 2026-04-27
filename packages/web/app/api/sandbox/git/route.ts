@@ -293,6 +293,81 @@ export async function POST(req: Request) {
         return Response.json({ inRebase, inMerge, conflictedFiles })
       }
 
+      case "force-push": {
+        // Force-push to sync diverged history while preserving PRs.
+        // GitHub's update-ref API requires the SHA to already exist on GitHub,
+        // so we push to a temp branch first to ship the objects, then PATCH the
+        // real branch ref to that SHA, then delete the temp remote branch.
+        if (!currentBranch || !repoOwner || !repoApiName) {
+          return Response.json({ error: "Missing required fields for force-push" }, { status: 400 })
+        }
+
+        const shaResult = await sandbox.process.executeCommand(
+          `cd ${repoPath} && git rev-parse HEAD 2>&1`
+        )
+        if (shaResult.exitCode !== 0) {
+          return Response.json({ error: "Failed to get HEAD: " + shaResult.result }, { status: 500 })
+        }
+        const sha = shaResult.result.trim()
+
+        const tempBranch = `_cleanup/force-push-${Date.now()}`
+        const createBranchResult = await sandbox.process.executeCommand(
+          `cd ${repoPath} && git checkout -b ${tempBranch} 2>&1`
+        )
+        if (createBranchResult.exitCode !== 0) {
+          return Response.json({ error: "Failed to create temp branch: " + createBranchResult.result }, { status: 500 })
+        }
+
+        try {
+          await sandbox.git.push(repoPath, "x-access-token", githubToken)
+        } catch (pushErr) {
+          await sandbox.process.executeCommand(`cd ${repoPath} && git checkout ${currentBranch} 2>&1`)
+          await sandbox.process.executeCommand(`cd ${repoPath} && git branch -D ${tempBranch} 2>&1`)
+          return Response.json({
+            error: "Failed to push temp branch: " + (pushErr instanceof Error ? pushErr.message : String(pushErr))
+          }, { status: 500 })
+        }
+
+        await sandbox.process.executeCommand(`cd ${repoPath} && git checkout ${currentBranch} 2>&1`)
+        await sandbox.process.executeCommand(`cd ${repoPath} && git branch -D ${tempBranch} 2>&1`)
+
+        const refRes = await fetch(
+          `https://api.github.com/repos/${repoOwner}/${repoApiName}/git/refs/heads/${currentBranch}`,
+          {
+            method: "PATCH",
+            headers: {
+              Authorization: `Bearer ${githubToken}`,
+              Accept: "application/vnd.github.v3+json",
+            },
+            body: JSON.stringify({ sha, force: true }),
+          }
+        )
+
+        for (let i = 0; i < 3; i++) {
+          const deleteRes = await fetch(
+            `https://api.github.com/repos/${repoOwner}/${repoApiName}/git/refs/heads/${tempBranch}`,
+            {
+              method: "DELETE",
+              headers: {
+                Authorization: `Bearer ${githubToken}`,
+                Accept: "application/vnd.github.v3+json",
+              },
+            }
+          )
+          if (deleteRes.ok || deleteRes.status === 404) break
+          if (i < 2) await new Promise(r => setTimeout(r, 500 * (i + 1)))
+        }
+
+        if (!refRes.ok) {
+          const refData = await refRes.json().catch(() => ({}))
+          return Response.json({
+            error: "Force push failed: " + ((refData as { message?: string }).message || refRes.status)
+          }, { status: 500 })
+        }
+
+        return Response.json({ success: true })
+      }
+
       case "delete-remote-branch": {
         if (!currentBranch || !repoOwner || !repoApiName) {
           return Response.json({ error: "Missing required fields for delete-remote-branch" }, { status: 400 })

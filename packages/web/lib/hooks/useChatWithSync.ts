@@ -433,7 +433,7 @@ export function useChatWithSync() {
             if (chat?.branch && chat.repo !== NEW_REPOSITORY) {
               gitPushMutation.mutate({ sandboxId, repoName, branch: chat.branch }, {
                 onError: (err) => {
-                  const errorMsg: Message = { id: nanoid(), role: "assistant", content: `Push failed: ${err.message}`, messageType: "git-operation", isError: true, timestamp: Date.now() }
+                  const errorMsg: Message = { id: nanoid(), role: "assistant", content: `Push failed: ${err.message}. You can **force push** to overwrite the remote history.`, messageType: "git-operation", isError: true, timestamp: Date.now() }
                   updateChatsCache((old) => old.map((c) => c.id === chatId ? { ...c, messages: [...c.messages, errorMsg] } : c))
                 },
               })

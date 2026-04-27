@@ -121,6 +121,37 @@ export function useGitRebaseMutation() {
 }
 
 // ============================================================================
+// Force Push
+// ============================================================================
+
+interface GitForcePushParams {
+  sandboxId: string
+  repoPath: string
+  currentBranch: string
+  repoOwner: string
+  repoApiName: string
+}
+
+export function useGitForcePushMutation() {
+  return useMutation({
+    mutationFn: async (params: GitForcePushParams) => {
+      const res = await fetch("/api/sandbox/git", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...params, action: "force-push" }),
+      })
+
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}))
+        throw new Error(error.error || "Force push failed")
+      }
+
+      return res.json()
+    },
+  })
+}
+
+// ============================================================================
 // Abort Rebase
 // ============================================================================
 

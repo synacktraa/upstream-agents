@@ -33,6 +33,8 @@ interface ChatPanelProps {
   onDeleteChat?: () => void
   onOpenHelp?: () => void
   onOpenFile?: (filePath: string) => void
+  /** Callback to open the force-push modal (from push-failure system messages). */
+  onForcePush?: () => void
   isMobile?: boolean
   /** Conflict state for merge/rebase */
   rebaseConflict?: RebaseConflictState
@@ -50,7 +52,7 @@ interface ChatPanelProps {
   isLoadingMessages?: boolean
 }
 
-export function ChatPanel({ chat, settings, credentialFlags, onSendMessage, onEnqueueMessage, onRemoveQueuedMessage, onResumeQueue, onStopAgent, onChangeRepo, onChangeBranch, onUpdateChat, onOpenSettings, onSlashCommand, onRequireSignIn, onDeleteChat, onOpenHelp, onOpenFile, isMobile = false, rebaseConflict, onAbortConflict, conflictActionLoading = false, onBranchWithMessage, onBranchQueuedMessage, canBranch = false, isLoadingMessages = false }: ChatPanelProps) {
+export function ChatPanel({ chat, settings, credentialFlags, onSendMessage, onEnqueueMessage, onRemoveQueuedMessage, onResumeQueue, onStopAgent, onChangeRepo, onChangeBranch, onUpdateChat, onOpenSettings, onSlashCommand, onRequireSignIn, onDeleteChat, onOpenHelp, onOpenFile, onForcePush, isMobile = false, rebaseConflict, onAbortConflict, conflictActionLoading = false, onBranchWithMessage, onBranchQueuedMessage, canBranch = false, isLoadingMessages = false }: ChatPanelProps) {
   const [input, setInput] = useState("")
   const [userHasScrolledUp, setUserHasScrolledUp] = useState(false)
   const [showAgentDropdown, setShowAgentDropdown] = useState(false)
@@ -1167,6 +1169,7 @@ export function ChatPanel({ chat, settings, credentialFlags, onSendMessage, onEn
                 isMobile={isMobile}
                 repo={isNewRepo ? undefined : chat.repo}
                 onOpenFile={onOpenFile}
+                onForcePush={onForcePush}
               />
             )
           })}

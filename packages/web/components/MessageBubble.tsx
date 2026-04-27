@@ -14,9 +14,11 @@ interface MessageBubbleProps {
   repo?: string
   /** Called when the user clicks a tool-call row that references a file. */
   onOpenFile?: (filePath: string) => void
+  /** Called when the user clicks the "force push" link in a push-failure message. */
+  onForcePush?: () => void
 }
 
-export function MessageBubble({ message, isStreaming, isMobile = false, repo, onOpenFile }: MessageBubbleProps) {
+export function MessageBubble({ message, isStreaming, isMobile = false, repo, onOpenFile, onForcePush }: MessageBubbleProps) {
   const isUser = message.role === "user"
   const hasUploadedFiles = isUser && message.uploadedFiles && message.uploadedFiles.length > 0
 
@@ -59,7 +61,7 @@ export function MessageBubble({ message, isStreaming, isMobile = false, repo, on
             )}
           </div>
         ) : (
-          <AssistantContent message={message} isStreaming={isStreaming} isMobile={isMobile} repo={repo} onOpenFile={onOpenFile} />
+          <AssistantContent message={message} isStreaming={isStreaming} isMobile={isMobile} repo={repo} onOpenFile={onOpenFile} onForcePush={onForcePush} />
         )}
       </div>
     </div>
@@ -144,7 +146,7 @@ function MarkdownContent({ text, isMobile = false }: { text: string; isMobile?: 
   )
 }
 
-function AssistantContent({ message, isStreaming, isMobile = false, repo, onOpenFile }: { message: Message; isStreaming?: boolean; isMobile?: boolean; repo?: string; onOpenFile?: (filePath: string) => void }) {
+function AssistantContent({ message, isStreaming, isMobile = false, repo, onOpenFile, onForcePush }: { message: Message; isStreaming?: boolean; isMobile?: boolean; repo?: string; onOpenFile?: (filePath: string) => void; onForcePush?: () => void }) {
   const hasContent = message.content && message.content.trim().length > 0
   const hasToolCalls = message.toolCalls && message.toolCalls.length > 0
   const hasBlocks = message.contentBlocks && message.contentBlocks.length > 0
@@ -170,6 +172,7 @@ function AssistantContent({ message, isStreaming, isMobile = false, repo, onOpen
         isMobile={isMobile}
         repo={repo}
         linkBranch={message.linkBranch}
+        onForcePush={onForcePush}
       />
     )
   }
@@ -237,9 +240,10 @@ interface SystemMessageProps {
   isMobile?: boolean
   repo?: string
   linkBranch?: string
+  onForcePush?: () => void
 }
 
-function SystemMessage({ icon: Icon, content, variant = "success", isMobile = false, repo, linkBranch }: SystemMessageProps) {
+function SystemMessage({ icon: Icon, content, variant = "success", isMobile = false, repo, linkBranch, onForcePush }: SystemMessageProps) {
   const iconClasses = cn(
     "shrink-0",
     variant === "error" && "text-red-500 dark:text-red-400",
@@ -261,9 +265,32 @@ function SystemMessage({ icon: Icon, content, variant = "success", isMobile = fa
     return null
   }
 
+  // Push-failure messages embed the literal "**force push**" marker so we can
+  // render that span as a clickable trigger for the ForcePushDialog.
+  const FORCE_PUSH_MARKER = "**force push**"
+  const forcePushIdx = onForcePush ? content.indexOf(FORCE_PUSH_MARKER) : -1
+  const hasForcePushLink = forcePushIdx !== -1
+
   const parsed = parseMergeMessage(content)
 
   const renderContent = () => {
+    if (hasForcePushLink && onForcePush) {
+      const before = content.slice(0, forcePushIdx)
+      const after = content.slice(forcePushIdx + FORCE_PUSH_MARKER.length)
+      return (
+        <>
+          {before}
+          <button
+            type="button"
+            onClick={onForcePush}
+            className="font-semibold underline underline-offset-2 hover:text-foreground transition-colors cursor-pointer"
+          >
+            force push
+          </button>
+          {after}
+        </>
+      )
+    }
     if (!parsed) return content
     return (
       <>
@@ -282,7 +309,7 @@ function SystemMessage({ icon: Icon, content, variant = "success", isMobile = fa
       isMobile ? "text-base" : "text-sm"
     )}>
       <Icon className={cn(iconClasses, "mt-0.5")} />
-      {branchUrl ? (
+      {branchUrl && !hasForcePushLink ? (
         <a
           href={branchUrl}
           target="_blank"

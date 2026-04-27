@@ -13,7 +13,7 @@ import { SignInModal } from "@/components/modals/SignInModal"
 import { HelpModal } from "@/components/modals/HelpModal"
 import { ConfirmDialog } from "@/components/modals/ConfirmDialog"
 import { BranchPickerModal } from "@/components/modals/BranchPickerModal"
-import { MergeDialog, RebaseDialog, PRDialog, SquashDialog, useGitDialogs } from "@/components/modals/GitDialogs"
+import { MergeDialog, RebaseDialog, PRDialog, SquashDialog, ForcePushDialog, useGitDialogs } from "@/components/modals/GitDialogs"
 import { clearAllStorage } from "@/lib/storage"
 import type { SlashCommandType } from "@/components/SlashCommandMenu"
 import { PaletteProvider } from "@/components/search-palette"
@@ -864,6 +864,7 @@ export default function HomePage() {
                   const filename = filePath.split("/").pop() || filePath
                   openPreview({ type: "file", filePath, filename })
                 }}
+                onForcePush={() => gitDialogs.setForcePushOpen(true)}
                 isMobile={isMobile}
                 rebaseConflict={gitDialogs.rebaseConflict}
                 onAbortConflict={gitDialogs.handleAbortConflict}
@@ -978,6 +979,13 @@ export default function HomePage() {
       <SquashDialog
         open={gitDialogs.squashOpen}
         onClose={() => gitDialogs.setSquashOpen(false)}
+        gitDialogs={gitDialogs}
+        chat={displayCurrentChat}
+        isMobile={isMobile}
+      />
+      <ForcePushDialog
+        open={gitDialogs.forcePushOpen}
+        onClose={() => gitDialogs.setForcePushOpen(false)}
         gitDialogs={gitDialogs}
         chat={displayCurrentChat}
         isMobile={isMobile}
