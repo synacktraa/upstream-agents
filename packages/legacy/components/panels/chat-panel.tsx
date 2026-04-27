@@ -141,7 +141,9 @@ export function ChatPanel({
     globalActiveBranchIdRef.current = branch.id
     // Reset interaction tracking when branch changes so we don't auto-scroll on load
     hasUserInteractedRef.current = false
-  }, [branch.id])
+    // Reset near-bottom tracking so stale scroll state from previous branch doesn't affect new branch
+    isNearBottomRef.current = true
+  }, [branch.id, isNearBottomRef])
 
   // Scroll to bottom when branch switch causes messages to be replaced
   const prevBranchIdForMessagesRef = useRef(branch.id)
