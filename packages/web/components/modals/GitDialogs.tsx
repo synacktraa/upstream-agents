@@ -199,9 +199,11 @@ interface BranchSelectorProps {
   getLabel?: (branch: string) => string
   /** Called when dropdown open state changes */
   onOpenChange?: (open: boolean) => void
+  /** Whether to auto-focus the dropdown button */
+  autoFocus?: boolean
 }
 
-function BranchSelector({ value, onChange, branches, loading, placeholder = "Select chat", isMobile = false, getLabel, onOpenChange }: BranchSelectorProps) {
+function BranchSelector({ value, onChange, branches, loading, placeholder = "Select chat", isMobile = false, getLabel, onOpenChange, autoFocus }: BranchSelectorProps) {
   const label = (b: string) => (getLabel ? getLabel(b) : b)
   const [open, setOpenState] = useState(false)
 
@@ -226,6 +228,7 @@ function BranchSelector({ value, onChange, branches, loading, placeholder = "Sel
     <div className="relative">
       <button
         type="button"
+        autoFocus={autoFocus}
         onClick={() => setOpen(!open)}
         className={cn(
           "w-full flex items-center justify-between bg-input border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring",
@@ -312,6 +315,7 @@ export function MergeDialog({ open, onClose, gitDialogs, chat, isMobile = false 
             isMobile ? "text-sm" : "text-xs"
           )}>Into chat</label>
           <BranchSelector
+            autoFocus
             value={gitDialogs.selectedBranch}
             onChange={gitDialogs.setSelectedBranch}
             branches={gitDialogs.remoteBranches}
@@ -346,7 +350,6 @@ export function MergeDialog({ open, onClose, gitDialogs, chat, isMobile = false 
             Cancel
           </button>
           <button
-            autoFocus
             onClick={handleMergeAndClose}
             disabled={!gitDialogs.selectedBranch || gitDialogs.actionLoading}
             className={cn(
@@ -412,6 +415,7 @@ export function RebaseDialog({ open, onClose, gitDialogs, chat, isMobile = false
             isMobile ? "text-sm" : "text-xs"
           )}>Onto branch</label>
           <BranchSelector
+            autoFocus
             value={gitDialogs.selectedBranch}
             onChange={gitDialogs.setSelectedBranch}
             branches={gitDialogs.remoteBranches}
@@ -433,7 +437,6 @@ export function RebaseDialog({ open, onClose, gitDialogs, chat, isMobile = false
             Cancel
           </button>
           <button
-            autoFocus
             onClick={handleRebaseAndClose}
             disabled={!gitDialogs.selectedBranch || gitDialogs.actionLoading}
             className={cn(
@@ -522,6 +525,7 @@ export function PRDialog({ open, onClose, gitDialogs, chat, isMobile = false }: 
                 isMobile ? "text-sm" : "text-xs"
               )}>Into chat</label>
               <BranchSelector
+                autoFocus
                 value={gitDialogs.selectedBranch}
                 onChange={gitDialogs.setSelectedBranch}
                 branches={gitDialogs.remoteBranches}
@@ -596,7 +600,6 @@ export function PRDialog({ open, onClose, gitDialogs, chat, isMobile = false }: 
           </button>
           {isGitHubRepo && (
             <button
-              autoFocus
               onClick={handleCreatePRAndClose}
               disabled={!gitDialogs.selectedBranch || gitDialogs.actionLoading}
               className={cn(
