@@ -1,8 +1,8 @@
-import { prisma } from "@/lib/db/prisma"
-import { requireGitHubAuth, isGitHubAuthError, badRequest, internalError, getDaytonaApiKey, isDaytonaKeyError } from "@/lib/shared/api-helpers"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
 import { compareBranches, githubFetch, isGitHubApiError } from "@upstream/common"
-import { ensureSandboxStarted } from "@/lib/sandbox/sandbox-resume"
-import { PATHS } from "@/lib/shared/constants"
+import { Daytona } from "@daytonaio/sdk"
+import { PATHS } from "@/lib/constants"
 
 // Squash operation timeout - 60 seconds
 export const maxDuration = 60
@@ -23,51 +23,42 @@ interface SquashRequestBody {
  *
  * Steps:
  * 1. Create a temp branch from base on GitHub
- * 2. Squash merge head into temp branch via GitHub API
+ * 2. Squash merge head into temp branch via GitHub API (using PR merge)
  * 3. Update head branch ref to point to the squashed commit
  * 4. Delete temp branch
  * 5. Sync sandbox with git fetch + reset
  */
 export async function POST(req: Request) {
-  const auth = await requireGitHubAuth()
-  if (isGitHubAuthError(auth)) return auth
+  const session = await getServerSession(authOptions)
+  if (!session?.accessToken) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 })
+  }
 
   const body: SquashRequestBody = await req.json()
   const { owner, repo, head, base, sandboxId } = body
 
   if (!owner || !repo || !head || !base || !sandboxId) {
-    return badRequest("Missing required fields: owner, repo, head, base, sandboxId")
+    return Response.json({ error: "Missing required fields: owner, repo, head, base, sandboxId" }, { status: 400 })
   }
 
-  // Verify sandbox ownership
-  const sandboxRecord = await prisma.sandbox.findUnique({
-    where: { sandboxId },
-  })
-  if (!sandboxRecord || sandboxRecord.userId !== auth.userId) {
-    return badRequest("Sandbox not found or access denied")
+  const daytonaApiKey = process.env.DAYTONA_API_KEY
+  if (!daytonaApiKey) {
+    return Response.json({ error: "Daytona API key not configured" }, { status: 500 })
   }
-
-  const daytonaApiKey = getDaytonaApiKey()
-  if (isDaytonaKeyError(daytonaApiKey)) return daytonaApiKey
 
   try {
     // First, verify there are commits to squash
-    const compareData = await compareBranches(auth.token, owner, repo, base, head)
+    const compareData = await compareBranches(session.accessToken, owner, repo, base, head)
     if (compareData.ahead_by < 2) {
-      return badRequest(`Need at least 2 commits to squash. Branch "${head}" is only ${compareData.ahead_by} commit(s) ahead of "${base}".`)
+      return Response.json({
+        error: `Need at least 2 commits to squash. Branch "${head}" is only ${compareData.ahead_by} commit(s) ahead of "${base}".`
+      }, { status: 400 })
     }
-
-    // Get the current head branch SHA (we'll need this for the commit message)
-    const headRef = await githubFetch<{ object: { sha: string } }>(
-      `/repos/${owner}/${repo}/git/refs/heads/${head}`,
-      auth.token
-    )
-    const headSha = headRef.object.sha
 
     // Get the base branch SHA
     const baseRef = await githubFetch<{ object: { sha: string } }>(
       `/repos/${owner}/${repo}/git/refs/heads/${base}`,
-      auth.token
+      session.accessToken
     )
     const baseSha = baseRef.object.sha
 
@@ -75,7 +66,7 @@ export async function POST(req: Request) {
     const tempBranchName = `_squash-temp-${Date.now()}`
     await githubFetch(
       `/repos/${owner}/${repo}/git/refs`,
-      auth.token,
+      session.accessToken,
       {
         method: "POST",
         body: JSON.stringify({
@@ -86,14 +77,10 @@ export async function POST(req: Request) {
     )
 
     try {
-      // Step 2: Squash merge head into temp branch using GitHub's merge API
-      // Note: GitHub's /repos/{owner}/{repo}/merges endpoint doesn't support squash directly
-      // We need to use the pulls API to create a PR and then merge it with squash
-
-      // Create a temporary PR
+      // Step 2: Create a temporary PR and squash merge it
       const pr = await githubFetch<{ number: number; head: { sha: string } }>(
         `/repos/${owner}/${repo}/pulls`,
-        auth.token,
+        session.accessToken,
         {
           method: "POST",
           body: JSON.stringify({
@@ -119,7 +106,7 @@ export async function POST(req: Request) {
 
           mergeResult = await githubFetch<{ sha: string; merged: boolean }>(
             `/repos/${owner}/${repo}/pulls/${pr.number}/merge`,
-            auth.token,
+            session.accessToken,
             {
               method: "PUT",
               body: JSON.stringify({
@@ -150,14 +137,14 @@ export async function POST(req: Request) {
       // Get the new squashed commit SHA from the temp branch
       const tempRef = await githubFetch<{ object: { sha: string } }>(
         `/repos/${owner}/${repo}/git/refs/heads/${tempBranchName}`,
-        auth.token
+        session.accessToken
       )
       const squashedSha = tempRef.object.sha
 
       // Step 3: Update head branch to point to the squashed commit
       await githubFetch(
         `/repos/${owner}/${repo}/git/refs/heads/${head}`,
-        auth.token,
+        session.accessToken,
         {
           method: "PATCH",
           body: JSON.stringify({
@@ -171,7 +158,7 @@ export async function POST(req: Request) {
       try {
         await githubFetch(
           `/repos/${owner}/${repo}/git/refs/heads/${tempBranchName}`,
-          auth.token,
+          session.accessToken,
           { method: "DELETE" }
         )
       } catch {
@@ -181,7 +168,8 @@ export async function POST(req: Request) {
 
       // Step 5: Sync sandbox with the new squashed state
       try {
-        const sandbox = await ensureSandboxStarted(daytonaApiKey, sandboxId)
+        const daytona = new Daytona({ apiKey: daytonaApiKey })
+        const sandbox = await daytona.get(sandboxId)
         const repoPath = `${PATHS.SANDBOX_HOME}/project`
 
         // Fetch the latest from origin
@@ -221,7 +209,7 @@ export async function POST(req: Request) {
       try {
         await githubFetch(
           `/repos/${owner}/${repo}/git/refs/heads/${tempBranchName}`,
-          auth.token,
+          session.accessToken,
           { method: "DELETE" }
         )
       } catch {
@@ -231,9 +219,11 @@ export async function POST(req: Request) {
     }
 
   } catch (error: unknown) {
+    console.error("[github/squash] Error:", error)
     if (isGitHubApiError(error)) {
       return Response.json({ error: error.message }, { status: error.status })
     }
-    return internalError(error)
+    const message = error instanceof Error ? error.message : "Unknown error"
+    return Response.json({ error: message }, { status: 500 })
   }
 }

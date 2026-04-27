@@ -3,7 +3,13 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react"
 import { SearchPalette } from "./SearchPalette"
 import { CommandPalette } from "./CommandPalette"
-import type { Repo } from "@/lib/shared/types"
+import type { GitHubRepo, GitHubBranch } from "@/lib/github"
+
+interface Chat {
+  id: string
+  displayName: string | null
+  repo: string
+}
 
 interface PaletteContextValue {
   openSearch: () => void
@@ -22,33 +28,92 @@ export function usePalette() {
 
 interface PaletteProviderProps {
   children: ReactNode
-  repos: Repo[]
-  activeRepoId: string | null
-  activeBranchId: string | null
-  onSelectRepo: (repoId: string) => void
-  onSelectBranch: (repoId: string, branchId: string) => void
+  repos: GitHubRepo[]
+  currentRepo: string | null
+  branches: GitHubBranch[]
+  chats: Chat[]
+  onSelectRepo: (repo: GitHubRepo) => void
+  onSelectBranch: (repo: GitHubRepo, branch: GitHubBranch) => void
   onRunCommand: (command: string) => void
+  onNewChat: () => void
+  onBranchChat?: () => void
+  onCreateRepo?: () => void
+  showGitCommands?: boolean
+  onOpenInGitHub?: () => void
+  onOpenSettings: () => void
+  onToggleSidebar?: () => void
+  onSignIn?: () => void
+  onSignOut?: () => void
+  onDeleteChat?: () => void
+  onOpenInVSCode?: () => void
+  onOpenTerminal?: () => void
+  servers?: Array<{ port: number; url: string }>
+  onOpenServer?: (port: number, url: string) => void
+  // For Alt+Up/Down chat navigation
+  chatIds: string[]
+  currentChatId: string | null
+  onSelectChat: (chatId: string) => void
+  /** Called with a direction for Alt+Up / Alt+Down. When provided it takes
+   *  precedence over the flat chatIds rotation so the parent can walk the
+   *  sidebar tree and auto-expand branches. */
+  onNavigateChat?: (direction: "up" | "down") => void
 }
 
 export function PaletteProvider({
   children,
   repos,
-  activeRepoId,
-  activeBranchId,
+  currentRepo,
+  branches,
+  chats,
   onSelectRepo,
   onSelectBranch,
   onRunCommand,
+  onNewChat,
+  onBranchChat,
+  onCreateRepo,
+  showGitCommands,
+  onOpenInGitHub,
+  onOpenSettings,
+  onToggleSidebar,
+  onSignIn,
+  onSignOut,
+  onDeleteChat,
+  onOpenInVSCode,
+  onOpenTerminal,
+  servers,
+  onOpenServer,
+  chatIds,
+  currentChatId,
+  onSelectChat,
+  onNavigateChat,
 }: PaletteProviderProps) {
-  const [searchOpen, setSearchOpen] = useState(false)
-  const [commandOpen, setCommandOpen] = useState(false)
+  const [searchOpen, setSearchOpenState] = useState(false)
+  const [commandOpen, setCommandOpenState] = useState(false)
 
-  const openSearch = useCallback(() => setSearchOpen(true), [])
-  const openCommand = useCallback(() => setCommandOpen(true), [])
+  // Exclusive: opening one closes the other. Closing either returns focus to
+  // the chat prompt so the user can start typing right away.
+  const focusPrompt = useCallback(() => {
+    setTimeout(() => {
+      const el = document.querySelector<HTMLTextAreaElement>("[data-chat-prompt]")
+      el?.focus()
+    }, 0)
+  }, [])
+  const setSearchOpen = useCallback((open: boolean) => {
+    setSearchOpenState(open)
+    if (open) setCommandOpenState(false)
+    else focusPrompt()
+  }, [focusPrompt])
+  const setCommandOpen = useCallback((open: boolean) => {
+    setCommandOpenState(open)
+    if (open) setSearchOpenState(false)
+    else focusPrompt()
+  }, [focusPrompt])
 
-  // Get current repo's branches for Alt+Up/Down navigation
-  const activeRepo = repos.find((r) => r.id === activeRepoId)
-  const branches = activeRepo?.branches ?? []
-  const currentBranchIndex = branches.findIndex((b) => b.id === activeBranchId)
+  const openSearch = useCallback(() => setSearchOpen(true), [setSearchOpen])
+  const openCommand = useCallback(() => setCommandOpen(true), [setCommandOpen])
+
+  // Find current chat index for Alt+Up/Down navigation
+  const currentChatIndex = chatIds.findIndex((id) => id === currentChatId)
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -59,39 +124,44 @@ export function PaletteProvider({
       // Cmd/Ctrl + P for search (works even in inputs)
       if ((e.metaKey || e.ctrlKey) && e.key === "p") {
         e.preventDefault()
-        setSearchOpen(true)
+        openSearch()
         return
       }
 
       // Cmd/Ctrl + K for commands (works even in inputs)
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault()
-        setCommandOpen(true)
+        openCommand()
         return
       }
 
-      // Alt + Up/Down for branch navigation (works even in inputs)
+      // Alt + Up/Down for chat navigation (works even in inputs)
       if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
-        if (!activeRepoId || branches.length === 0) return
+        if (onNavigateChat) {
+          e.preventDefault()
+          onNavigateChat(e.key === "ArrowUp" ? "up" : "down")
+          return
+        }
+        if (chatIds.length === 0) return
         e.preventDefault()
 
         let newIndex: number
         if (e.key === "ArrowUp") {
-          newIndex = currentBranchIndex <= 0 ? branches.length - 1 : currentBranchIndex - 1
+          newIndex = currentChatIndex <= 0 ? chatIds.length - 1 : currentChatIndex - 1
         } else {
-          newIndex = currentBranchIndex >= branches.length - 1 ? 0 : currentBranchIndex + 1
+          newIndex = currentChatIndex >= chatIds.length - 1 ? 0 : currentChatIndex + 1
         }
 
-        const newBranch = branches[newIndex]
-        if (newBranch) {
-          onSelectBranch(activeRepoId, newBranch.id)
+        const newChatId = chatIds[newIndex]
+        if (newChatId) {
+          onSelectChat(newChatId)
         }
       }
     }
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [activeRepoId, branches, currentBranchIndex, onSelectBranch])
+  }, [chatIds, currentChatIndex, onSelectChat, openSearch, openCommand, onNavigateChat])
 
   return (
     <PaletteContext.Provider value={{ openSearch, openCommand }}>
@@ -100,14 +170,31 @@ export function PaletteProvider({
         open={searchOpen}
         onOpenChange={setSearchOpen}
         repos={repos}
-        activeRepoId={activeRepoId}
+        currentRepo={currentRepo}
+        branches={branches}
+        chats={chats}
         onSelectRepo={onSelectRepo}
         onSelectBranch={onSelectBranch}
+        onSelectChat={onSelectChat}
       />
       <CommandPalette
         open={commandOpen}
         onOpenChange={setCommandOpen}
         onRunCommand={onRunCommand}
+        onNewChat={onNewChat}
+        onBranchChat={onBranchChat}
+        onCreateRepo={onCreateRepo}
+        showGitCommands={showGitCommands}
+        onOpenInGitHub={onOpenInGitHub}
+        onOpenSettings={onOpenSettings}
+        onToggleSidebar={onToggleSidebar}
+        onSignIn={onSignIn}
+        onSignOut={onSignOut}
+        onDeleteChat={onDeleteChat}
+        onOpenInVSCode={onOpenInVSCode}
+        onOpenTerminal={onOpenTerminal}
+        servers={servers}
+        onOpenServer={onOpenServer}
       />
     </PaletteContext.Provider>
   )

@@ -1,732 +1,1049 @@
 "use client"
 
-import { useEffect, useState, useRef, useCallback } from "react"
-import { useSession, signOut } from "next-auth/react"
-import { useRouter } from "next/navigation"
-import { RepoSidebar } from "@/components/sidebar/repo-sidebar"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
+import { useSession, signIn, signOut } from "next-auth/react"
+import { nanoid } from "nanoid"
+import { Menu } from "lucide-react"
+import { Sidebar, ALL_REPOSITORIES, NO_REPOSITORY } from "@/components/Sidebar"
+import { ChatPanel } from "@/components/ChatPanel"
+import { PreviewView, type PreviewItem } from "@/components/PreviewView"
+import { RepoPickerModal } from "@/components/modals/RepoPickerModal"
+import { SettingsModal, type HighlightKey } from "@/components/modals/SettingsModal"
+import { SignInModal } from "@/components/modals/SignInModal"
+import { HelpModal } from "@/components/modals/HelpModal"
+import { ConfirmDialog } from "@/components/modals/ConfirmDialog"
+import { BranchPickerModal } from "@/components/modals/BranchPickerModal"
+import { MergeDialog, RebaseDialog, PRDialog, SquashDialog, useGitDialogs } from "@/components/modals/GitDialogs"
+import { clearAllStorage } from "@/lib/storage"
+import type { SlashCommandType } from "@/components/SlashCommandMenu"
 import { PaletteProvider } from "@/components/search-palette"
-import { BranchList } from "@/components/sidebar/branch-list"
-import { ContentPanel } from "@/components/panels/content-panel"
-import { ChatPanel, EmptyChatPanel } from "@/components/panels/chat-panel"
-import { GitHistoryPanel } from "@/components/panels/git-history-panel"
-import { GitHistorySheet } from "@/components/panels/git-history-sheet"
-import { SettingsModal } from "@/components/modals/settings-modal"
-import { RepoSettingsModal } from "@/components/modals/repo-settings-modal"
-import { AddRepoModal } from "@/components/modals/add-repo-modal"
-import { MobileHeader } from "@/components/layout/mobile-header"
-import { MobileSidebarDrawer } from "@/components/sidebar/mobile-sidebar-drawer"
-import { DiffModal } from "@/components/modals/diff-modal"
-import { GitDialogs, useGitDialogs } from "@/components/git"
-import { BRANCH_STATUS } from "@/lib/shared/constants"
-import { cn } from "@/lib/shared/utils"
-import { Loader2 } from "lucide-react"
+import { useChatWithSync } from "@/lib/hooks/useChatWithSync"
+import { useMobile } from "@/lib/hooks/useMobile"
+import { NEW_REPOSITORY, getDefaultAgent, getDefaultModelForAgent, type Agent, type Message, type Chat } from "@/lib/types"
+import { fetchRepos, fetchBranches, type GitHubRepo, type GitHubBranch } from "@/lib/github"
 
-// Import hooks
-import {
-  useRepoData,
-  useBranchSelection,
-  useRepoOperations,
-  useBranchOperations,
-  useMobileHandlers,
-  useSyncData,
-  useCrossDeviceSync,
-  useIsMobile,
-  useRepoNavigation,
-  useExecutionManager,
-} from "@/hooks"
+// Storage key for pending message (persists across OAuth redirect)
+const PENDING_MESSAGE_KEY = "simple-chat-pending-message"
 
-// Import Zustand stores
-import { useUIStore, useRepoStore } from "@/lib/stores"
-import { useExecutionStore, recoverActiveExecutions } from "@/lib/stores/execution-store"
-import type { Branch } from "@/lib/shared/types"
+// Type for pending message data stored before sign-in
+interface PendingMessage {
+  message: string
+  agent: string
+  model: string
+}
 
-export default function Home() {
-  const { data: session, status } = useSession()
-  const router = useRouter()
-  const isMobile = useIsMobile()
-  const { repoFromUrl, branchFromUrl, updateUrlToRepo, updateUrlToRepoBranch } = useRepoNavigation()
+// Helper to save pending message to sessionStorage
+function savePendingMessage(data: PendingMessage): void {
+  if (typeof window !== "undefined") {
+    sessionStorage.setItem(PENDING_MESSAGE_KEY, JSON.stringify(data))
+  }
+}
 
-  // Rehydrate persisted UI state after mount to avoid SSR hydration mismatches
-  useEffect(() => {
-    useUIStore.persist.rehydrate()
-  }, [])
-
-  // Zustand UI state
-  const {
-    settingsOpen,
-    settingsHighlightField,
-    openSettings,
-    closeSettings,
-    clearSettingsHighlight,
-    addRepoOpen,
-    openAddRepo,
-    closeAddRepo,
-    repoSettingsOpen,
-    openRepoSettings,
-    closeRepoSettings,
-    repoEnvVars,
-    setRepoEnvVars,
-    gitHistoryOpen,
-    toggleGitHistory,
-    closeGitHistory,
-    gitHistoryRefreshTrigger,
-    triggerGitHistoryRefresh,
-    pendingStartCommit,
-    setPendingStartCommit,
-    clearPendingStartCommit,
-    desktopRebaseConflict,
-    setDesktopRebaseConflict,
-    pendingRepoFromUrl,
-    setPendingRepoFromUrl,
-    clearPendingRepoFromUrl,
-    setPendingCommand,
-  } = useUIStore()
-
-  // Get resetRepoState for logout
-  const resetRepoState = useRepoStore((state) => state.resetRepoState)
-
-  // Core data state
-  const {
-    repos,
-    setRepos,
-    quota,
-    credentials,
-    isAdmin,
-    userId,
-    loaded,
-    messagesLoadingBranchIds,
-    refresh,
-    refreshQuotaOnly,
-    loadBranchMessages,
-  } = useRepoData({ isAuthenticated: status === "authenticated" })
-
-  // Callback when branch from URL is not found - update URL to remove branch
-  const handleBranchNotFound = useCallback(() => {
-    if (repoFromUrl) {
-      updateUrlToRepo(repoFromUrl.owner, repoFromUrl.name)
-    }
-  }, [repoFromUrl, updateUrlToRepo])
-
-  // Selection state
-  const {
-    activeRepoId,
-    activeBranchId,
-    activeBranchIdRef,
-    activeRepo,
-    activeBranch,
-    selectRepo: selectRepoInternal,
-    selectBranch: selectBranchInternal,
-    setActiveBranchId,
-  } = useBranchSelection({ repos, loaded, repoFromUrl, branchFromUrl, onBranchNotFound: handleBranchNotFound })
-
-  // Wrap selectRepo to also update URL (without triggering page reload)
-  const selectRepo = useCallback(
-    (repoId: string) => {
-      const repo = repos.find((r) => r.id === repoId)
-      if (repo) {
-        // When selecting a repo, update URL with first branch if available
-        const firstBranch = repo.branches[0]
-        if (firstBranch) {
-          updateUrlToRepoBranch(repo.owner, repo.name, firstBranch.name)
-        } else {
-          updateUrlToRepo(repo.owner, repo.name)
-        }
-      }
-      selectRepoInternal(repoId)
-    },
-    [repos, updateUrlToRepo, updateUrlToRepoBranch, selectRepoInternal]
-  )
-
-  // Wrap selectBranch to also update URL with branch name
-  const selectBranch = useCallback(
-    (branchId: string) => {
-      const branch = activeRepo?.branches.find((b) => b.id === branchId)
-      if (activeRepo && branch) {
-        updateUrlToRepoBranch(activeRepo.owner, activeRepo.name, branch.name)
-      }
-      selectBranchInternal(branchId)
-    },
-    [activeRepo, updateUrlToRepoBranch, selectBranchInternal]
-  )
-
-  // Repo operations
-  const {
-    handleAddRepo,
-    handleRemoveRepo,
-    handleReorderRepos,
-    handleAddBranch,
-    handleRemoveBranch,
-  } = useRepoOperations({
-    repos,
-    setRepos,
-    activeRepoId,
-    activeRepo,
-    selectRepo,
-    setActiveBranchId,
-  })
-
-  // Branch operations
-  const {
-    handleUpdateBranch,
-    handleSaveDraftForBranch,
-    handleAddMessage,
-    handleUpdateMessage,
-  } = useBranchOperations({
-    repos,
-    setRepos,
-    activeRepo,
-    activeBranchIdRef,
-    setActiveBranchId,
-  })
-
-  const getBranchById = useCallback(
-    (branchId: string): Branch | undefined =>
-      repos.flatMap((r) => r.branches).find((b) => b.id === branchId),
-    [repos]
-  )
-
-  const executionRefreshGitRef = useRef<(() => void) | null>(null)
-
-  useExecutionManager({
-    onUpdateMessage: handleUpdateMessage,
-    onUpdateBranch: handleUpdateBranch,
-    onAddMessage: handleAddMessage,
-    onForceSave: () => {},
-    onCommitsDetected: triggerGitHistoryRefresh,
-    onRefreshGitConflictState: () => executionRefreshGitRef.current?.(),
-  })
-
-  useEffect(() => {
-    useExecutionStore.getState().setActiveBranchId(activeBranchId)
-  }, [activeBranchId])
-
-  useEffect(() => {
-    if (!loaded || status !== "authenticated") return
-    void recoverActiveExecutions()
-  }, [loaded, status])
-
-  const switchAwayFromBranchBeforeDelete = useCallback(
-    (branchId: string) => {
-      if (activeBranchId !== branchId) return
-      const remaining = activeRepo?.branches.filter((b) => b.id !== branchId) ?? []
-      const next = remaining[0]?.id
-      if (next) {
-        handleUpdateBranch(next, { unread: false })
-        selectBranch(next)
-      } else {
-        setActiveBranchId(null)
-      }
-    },
-    [activeBranchId, activeRepo, handleUpdateBranch, selectBranch, setActiveBranchId]
-  )
-
-  // Streaming state ref - signals when a message is actively being streamed
-  // This is used to prevent sync from overwriting streaming content
-  const streamingMessageIdRef = useRef<string | null>(null)
-
-  // Mobile UI state from Zustand
-  const {
-    mobileSidebarOpen,
-    setMobileSidebarOpen,
-    mobileSandboxToggleLoading,
-    setMobileSandboxToggleLoading,
-    mobilePrLoading,
-    setMobilePrLoading,
-    mobileDiffOpen,
-    closeMobileDiff,
-    openMobileDiff,
-  } = useUIStore()
-
-  // Mobile handlers
-  const { handleMobileSandboxToggle, handleMobileCreatePR } = useMobileHandlers({
-    activeBranch,
-    activeRepo,
-    handleUpdateBranch,
-    mobileSandboxToggleLoading,
-    setMobileSandboxToggleLoading,
-    mobilePrLoading,
-    setMobilePrLoading,
-  })
-
-  // Mobile git dialogs (merge, rebase, tag) - uses shared hook
-  const mobileGitDialogs = useGitDialogs({
-    branch: activeBranch!,
-    repoName: activeRepo?.name || "",
-    repoOwner: activeRepo?.owner || "",
-    repoFullName: activeRepo ? `${activeRepo.owner}/${activeRepo.name}` : "",
-    onAddMessage: handleAddMessage,
-    onUpdateMessage: handleUpdateMessage,
-    onUpdateBranch: handleUpdateBranch,
-    defaultSquashOnMerge: credentials?.squashOnMerge ?? false,
-  })
-
-  // Cross-device sync
-  const { handleSyncData } = useSyncData({ setRepos, activeBranchIdRef, streamingMessageIdRef })
-  useCrossDeviceSync({
-    enabled: loaded,
-    interval: 5000,
-    onSyncData: handleSyncData,
-  })
-
-  // Local UI state (kept local as it's not needed elsewhere)
-  const [branchListWidth, setBranchListWidth] = useState(260)
-  const [branchListCollapsed, setBranchListCollapsed] = useState(false)
-  const [branchListWidthBeforeCollapse, setBranchListWidthBeforeCollapse] = useState(260)
-
-  // Handler to toggle branch list collapse/expand
-  const handleToggleBranchListCollapse = useCallback(() => {
-    if (branchListCollapsed) {
-      // Expand: restore previous width
-      setBranchListWidth(branchListWidthBeforeCollapse)
-      setBranchListCollapsed(false)
-    } else {
-      // Collapse: save current width and set to minimum
-      setBranchListWidthBeforeCollapse(branchListWidth)
-      setBranchListWidth(0)
-      setBranchListCollapsed(true)
-    }
-  }, [branchListCollapsed, branchListWidth, branchListWidthBeforeCollapse])
-
-  // Handler to open settings with a specific field highlighted
-  const handleOpenSettingsWithHighlight = useCallback((field: string) => {
-    openSettings(field)
-  }, [openSettings])
-
-  // Handler to close settings and clear highlight
-  const handleSettingsClose = useCallback(() => {
-    closeSettings()
-  }, [closeSettings])
-
-  // Handler to open repo settings
-  const handleOpenRepoSettings = useCallback(async () => {
-    if (!activeRepoId) return
-    // Fetch env var keys for the repo
+// Helper to load and clear pending message from sessionStorage
+function loadAndClearPendingMessage(): PendingMessage | null {
+  if (typeof window === "undefined") return null
+  const stored = sessionStorage.getItem(PENDING_MESSAGE_KEY)
+  if (stored) {
+    sessionStorage.removeItem(PENDING_MESSAGE_KEY)
     try {
-      const res = await fetch(`/api/repo/${activeRepoId}/env-vars`)
-      if (res.ok) {
-        const data = await res.json()
-        setRepoEnvVars(data.envVars || {})
-      } else {
-        setRepoEnvVars({})
-      }
+      return JSON.parse(stored) as PendingMessage
     } catch {
-      setRepoEnvVars({})
+      return null
     }
-    openRepoSettings()
-  }, [activeRepoId, setRepoEnvVars, openRepoSettings])
+  }
+  return null
+}
 
-  // Handler to close repo settings
-  const handleRepoSettingsClose = useCallback(() => {
-    closeRepoSettings()
-  }, [closeRepoSettings])
+export default function HomePage() {
+  const { data: session } = useSession()
+  const isMobile = useMobile()
 
-  // Redirect to login if not authenticated
+  const {
+    chats,
+    currentChat,
+    currentChatId,
+    settings,
+    credentialFlags,
+    isHydrated,
+    deletingChatIds,
+    unseenChatIds,
+    startNewChat,
+    selectChat,
+    removeChat,
+    renameChat,
+    updateChatRepo,
+    updateCurrentChat,
+    sendMessage,
+    stopAgent,
+    updateSettings,
+    addMessage,
+    enqueueMessage,
+    removeQueuedMessage,
+    resumeQueue,
+    updateChatById,
+  } = useChatWithSync()
+
+  const [repoSelectOpen, setRepoSelectOpen] = useState(false)
+  const [repoCreateOpen, setRepoCreateOpen] = useState(false)
+  const [branchSelectOpen, setBranchSelectOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsHighlightKey, setSettingsHighlightKey] = useState<HighlightKey>(null)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [sidebarWidth, setSidebarWidth] = useState(260)
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
+  const [signInModalOpen, setSignInModalOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
+  const [deleteConfirmChatId, setDeleteConfirmChatId] = useState<string | null>(null)
+  const [collapsedChatIds, setCollapsedChatIds] = useState<Set<string>>(new Set())
+  const [previewWidth, setPreviewWidth] = useState(() => {
+    if (typeof window === "undefined") return 520
+    const stored = Number(window.localStorage.getItem("simple-chat-preview-width"))
+    return Number.isFinite(stored) && stored >= 320 ? stored : 520
+  })
   useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/login")
+    if (typeof window === "undefined") return
+    window.localStorage.setItem("simple-chat-preview-width", String(Math.round(previewWidth)))
+  }, [previewWidth])
+  const [isResizingPreview, setIsResizingPreview] = useState(false)
+  const [availableServers, setAvailableServers] = useState<Array<{ port: number; url: string }>>([])
+  // Track ports we've already auto-opened in each sandbox so the preview pane
+  // only pops open the *first* time a new server appears — not every poll.
+  const autoOpenedServersRef = useRef<Map<string, Set<number>>>(new Map())
+  // Preview state lives on each Chat, not globally — switching chats shows
+  // whatever that chat last had open (or hides the pane if none).
+  const previewItem = (currentChat?.previewItem ?? null) as PreviewItem | null
+  const previewOpen = previewItem !== null
+  const openPreview = useCallback((next: PreviewItem) => {
+    updateCurrentChat({ previewItem: next })
+  }, [updateCurrentChat])
+  const closePreview = useCallback(() => {
+    updateCurrentChat({ previewItem: undefined })
+  }, [updateCurrentChat])
+  const resizingPreview = useRef(false)
+  const startPreviewResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    resizingPreview.current = true
+    setIsResizingPreview(true)
+    document.body.style.cursor = "col-resize"
+    document.body.style.userSelect = "none"
+  }, [])
+  useEffect(() => {
+    const move = (e: MouseEvent) => {
+      if (!resizingPreview.current) return
+      const nextWidth = window.innerWidth - e.clientX
+      // Clamp: keep the preview at least 320px wide, but also leave enough
+      // room for the chat column on the left.
+      const MIN_PREVIEW = 320
+      const MIN_CHAT = 600
+      const maxPreview = Math.max(MIN_PREVIEW, window.innerWidth - MIN_CHAT)
+      setPreviewWidth(Math.max(MIN_PREVIEW, Math.min(maxPreview, nextWidth)))
     }
-  }, [status, router])
+    const up = () => {
+      if (!resizingPreview.current) return
+      resizingPreview.current = false
+      setIsResizingPreview(false)
+      document.body.style.cursor = ""
+      document.body.style.userSelect = ""
+    }
+    window.addEventListener("mousemove", move)
+    window.addEventListener("mouseup", up)
+    return () => {
+      window.removeEventListener("mousemove", move)
+      window.removeEventListener("mouseup", up)
+    }
+  }, [])
+  const toggleChatCollapsed = useCallback((id: string) => {
+    setCollapsedChatIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }, [])
+  const expandChatAndAncestors = useCallback((targetId: string, byId: Map<string, Chat>) => {
+    setCollapsedChatIds((prev) => {
+      let next = prev
+      let cur = byId.get(targetId)?.parentChatId
+      while (cur) {
+        if (next.has(cur)) {
+          if (next === prev) next = new Set(prev)
+          next.delete(cur)
+        }
+        cur = byId.get(cur)?.parentChatId
+      }
+      return next
+    })
+  }, [])
+  // Track if we've already processed a pending message (to avoid double-sending)
+  const pendingMessageProcessed = useRef(false)
 
-  // Update URL when landing on root page with no repo in URL
+  // Draft chat agent/model — only used when an unauthenticated user is
+  // composing a message before any real chat exists. Stored locally because
+  // the chat row that would normally hold these doesn't exist yet.
+  const [draftAgent, setDraftAgent] = useState<string | null>(null)
+  const [draftModel, setDraftModel] = useState<string | null>(null)
+
+  // Repos and branches for search palette
+  const [repos, setRepos] = useState<GitHubRepo[]>([])
+  const [branches, setBranches] = useState<GitHubBranch[]>([])
+
+  // Repository filter state (shared with Sidebar)
+  const [repoFilter, setRepoFilter] = useState<string>(ALL_REPOSITORIES)
+
+  // Load repos when authenticated
   useEffect(() => {
-    if (!loaded || !activeRepo) return
-    if (!repoFromUrl) {
-      if (activeBranch) {
-        updateUrlToRepoBranch(activeRepo.owner, activeRepo.name, activeBranch.name)
-      } else {
-        updateUrlToRepo(activeRepo.owner, activeRepo.name)
+    if (session?.accessToken) {
+      fetchRepos(session.accessToken).then(setRepos).catch(console.error)
+    }
+  }, [session?.accessToken])
+
+  // Poll for listening dev servers in the current sandbox every 5s so the
+  // preview pane's Open menu stays fresh when the agent starts a server.
+  useEffect(() => {
+    const sandboxId = currentChat?.sandboxId
+    const pattern = currentChat?.previewUrlPattern
+    const chatId = currentChat?.id
+    if (!sandboxId) {
+      setAvailableServers([])
+      return
+    }
+    let cancelled = false
+    const poll = async () => {
+      try {
+        const res = await fetch("/api/sandbox/files", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sandboxId, action: "list-servers" }),
+        })
+        if (!res.ok) return
+        const data = await res.json()
+        if (cancelled) return
+        const ports: number[] = Array.isArray(data.ports) ? data.ports : []
+        const urlFor = (port: number) =>
+          pattern ? pattern.replace("{port}", String(port)) : `http://localhost:${port}`
+        setAvailableServers(ports.map((port) => ({ port, url: urlFor(port) })))
+
+        // Auto-open the first *new* server we see in this sandbox. Subsequent
+        // polls that see the same port are no-ops, and closing the preview
+        // won't cause it to pop back open.
+        let seen = autoOpenedServersRef.current.get(sandboxId)
+        if (!seen) {
+          seen = new Set()
+          autoOpenedServersRef.current.set(sandboxId, seen)
+        }
+        const newPort = ports.find((p) => !seen!.has(p))
+        if (newPort !== undefined) {
+          ports.forEach((p) => seen!.add(p))
+          if (chatId === currentChat?.id) {
+            updateCurrentChat({ previewItem: { type: "server", port: newPort, url: urlFor(newPort) } })
+          }
+        }
+      } catch {
+        // Swallow — polling errors are non-fatal.
       }
     }
-  }, [loaded, activeRepo, activeBranch, repoFromUrl, updateUrlToRepo, updateUrlToRepoBranch])
-
-  // Handle URL repo that is not found in user's repos - open AddRepoModal with pre-filled URL
-  useEffect(() => {
-    if (!loaded || !repoFromUrl) return
-
-    const matchingRepo = repos.find(
-      (r) =>
-        r.owner.toLowerCase() === repoFromUrl.owner.toLowerCase() &&
-        r.name.toLowerCase() === repoFromUrl.name.toLowerCase()
-    )
-
-    if (!matchingRepo) {
-      // URL repo not found in user's repos - set pending and open modal to add/fork
-      setPendingRepoFromUrl({ owner: repoFromUrl.owner, name: repoFromUrl.name })
-      openAddRepo()
-    } else {
-      // Repo found, clear any pending
-      clearPendingRepoFromUrl()
+    poll()
+    const id = window.setInterval(poll, 5000)
+    return () => {
+      cancelled = true
+      window.clearInterval(id)
     }
-  }, [loaded, repos, repoFromUrl, setPendingRepoFromUrl, clearPendingRepoFromUrl, openAddRepo])
+  }, [currentChat?.sandboxId, currentChat?.previewUrlPattern, currentChat?.id, updateCurrentChat])
 
-  // Load messages when active branch changes
+  // Load branches when current chat has a repo
   useEffect(() => {
-    if (activeBranchId && activeRepoId) {
-      loadBranchMessages(activeBranchId, activeRepoId)
-    }
-  }, [activeBranchId, activeRepoId, loadBranchMessages])
-
-  useEffect(() => {
-    if (!activeBranch) setDesktopRebaseConflict(false)
-  }, [activeBranch, setDesktopRebaseConflict])
-
-  // Dynamic page title with org/repo and notification counts
-  useEffect(() => {
-    const allBranches = repos.flatMap((r) => r.branches)
-    const running = allBranches.filter((b) => b.status === BRANCH_STATUS.RUNNING).length
-    const unread = allBranches.filter((b) => b.unread).length
-    const totalNotifications = running + unread
-
-    const repoPrefix = activeRepo ? `${activeRepo.owner}/${activeRepo.name}` : null
-
-    if (repoPrefix) {
-      if (totalNotifications > 0) {
-        document.title = `${repoPrefix} (${totalNotifications}) – Upstream Agents`
-      } else {
-        document.title = `${repoPrefix} – Upstream Agents`
+    if (session?.accessToken && currentChat?.repo && currentChat.repo !== NEW_REPOSITORY) {
+      const [owner, name] = currentChat.repo.split("/")
+      if (owner && name) {
+        fetchBranches(session.accessToken, owner, name).then(setBranches).catch(console.error)
       }
     } else {
-      document.title = "Upstream Agents"
+      setBranches([])
     }
-  }, [repos, activeRepo])
+  }, [session?.accessToken, currentChat?.repo])
 
-  // Handle palette repo/branch selection
-  const handlePaletteSelectRepo = useCallback((repoId: string) => {
-    selectRepo(repoId)
-  }, [selectRepo])
-
-  const handlePaletteSelectBranch = useCallback((repoId: string, branchId: string) => {
-    // If different repo, select it first
-    if (repoId !== activeRepoId) {
-      selectRepo(repoId)
+  // Handler for adding messages to current chat
+  const handleAddMessage = useCallback((message: Message) => {
+    if (currentChatId) {
+      addMessage(currentChatId, message)
     }
-    selectBranch(branchId)
-  }, [activeRepoId, selectRepo, selectBranch])
+  }, [currentChatId, addMessage])
 
-  // Handle command palette commands
+  // Git dialogs state - now uses API calls
+  const gitDialogs = useGitDialogs({
+    chat: currentChat ?? null,
+    onAddMessage: handleAddMessage,
+    onAddMessageToBranch: (branch, message) => {
+      if (!currentChat) return
+      const target = chats.find(
+        (c) => c.id !== currentChat.id && c.repo === currentChat.repo && c.branch === branch
+      )
+      if (target) addMessage(target.id, message)
+    },
+    resolveChatName: (branch) => {
+      if (!currentChat) return null
+      const target = chats.find(
+        (c) => c.repo === currentChat.repo && c.branch === branch
+      )
+      return target?.displayName ?? null
+    },
+    getTargetSandboxId: (branch) => {
+      if (!currentChat) return null
+      const target = chats.find(
+        (c) => c.id !== currentChat.id && c.repo === currentChat.repo && c.branch === branch
+      )
+      return target?.sandboxId ?? null
+    },
+    getTargetChatStatus: (branch) => {
+      if (!currentChat) return null
+      const target = chats.find(
+        (c) => c.id !== currentChat.id && c.repo === currentChat.repo && c.branch === branch
+      )
+      return target?.status ?? null
+    },
+    onMarkBranchNeedsSync: (branch) => {
+      if (!currentChat) return
+      const target = chats.find(
+        (c) => c.id !== currentChat.id && c.repo === currentChat.repo && c.branch === branch
+      )
+      if (target) {
+        updateChatById(target.id, { needsSync: true })
+      }
+    },
+  })
+
+  // Close mobile sidebar when switching to desktop
+  useEffect(() => {
+    if (!isMobile) {
+      setMobileSidebarOpen(false)
+    }
+  }, [isMobile])
+
+
+  // Handler for opening settings (optionally with a highlighted API key field)
+  const handleOpenSettings = (highlightKey?: HighlightKey) => {
+    setSettingsHighlightKey(highlightKey ?? null)
+    setSettingsOpen(true)
+    // Close mobile sidebar when opening settings
+    if (isMobile) {
+      setMobileSidebarOpen(false)
+    }
+  }
+
+  // Handler for closing settings
+  const handleCloseSettings = () => {
+    setSettingsOpen(false)
+    setSettingsHighlightKey(null)
+  }
+
+  // Auto-create a new chat if none exists after hydration. Skip when there
+  // is a pending message in sessionStorage — the replay effect below will
+  // create a chat for the message itself and we don't want to create two.
+  useEffect(() => {
+    if (!isHydrated || currentChatId || !session) return
+    if (typeof window !== "undefined" && sessionStorage.getItem(PENDING_MESSAGE_KEY)) return
+    startNewChat()
+  }, [isHydrated, currentChatId, session, startNewChat])
+
+  // Handler for new chat - uses selected repo filter as default, or NEW_REPOSITORY if "All" is selected
+  const handleNewChat = () => {
+    if (!session) {
+      setSignInModalOpen(true)
+      return
+    }
+    // If a specific repo is selected in the filter, use it for the new chat
+    if (repoFilter !== ALL_REPOSITORIES && repoFilter !== NO_REPOSITORY) {
+      // Find the repo to get the default branch
+      const repo = repos.find(r => `${r.owner.login}/${r.name}` === repoFilter)
+      startNewChat(repoFilter, repo?.default_branch ?? "main")
+    } else {
+      // Default to NEW_REPOSITORY (no repo)
+      startNewChat()
+    }
+  }
+
+  // Handler for selecting a chat - switch to chat view
+  const handleSelectChat = (chatId: string) => {
+    selectChat(chatId)
+  }
+
+  // Handler for the repo button in the ChatPanel header. Routes to the Select
+  // modal when the chat can still choose an existing repo, otherwise to Create
+  // (the only other option for a locked NEW_REPOSITORY chat). The two modals
+  // are independent — neither links to the other.
+  const handleChangeRepo = () => {
+    if (!session) {
+      setSignInModalOpen(true)
+      return
+    }
+    const chat = currentChat
+    const canSelect = !!chat && chat.messages.length === 0 && !chat.sandboxId
+    if (canSelect) {
+      setRepoSelectOpen(true)
+    } else {
+      setRepoCreateOpen(true)
+    }
+  }
+
+  // Handler for the branch button in the ChatPanel header.
+  // Opens branch selection modal for the currently selected repository.
+  const handleChangeBranch = () => {
+    if (!session) {
+      setSignInModalOpen(true)
+      return
+    }
+    const chat = currentChat
+    if (!chat || chat.repo === NEW_REPOSITORY) return
+    // Just open the branch picker - it will fetch branches for the current repo
+    setBranchSelectOpen(true)
+  }
+
+  // Handler for the Create Repository palette/slash command.
+  const handleCreateRepo = () => {
+    if (!session) {
+      setSignInModalOpen(true)
+      return
+    }
+    setRepoCreateOpen(true)
+  }
+
+  // Handler for repo selection - updates the current chat's repo
+  // If sandbox already exists (chat started without repo), also set up remote and push
+  const handleRepoSelect = async (repo: string, branch: string) => {
+    if (!currentChatId || !currentChat) return
+
+    // If sandbox exists, we need to set up the remote and push
+    if (currentChat.sandboxId && currentChat.repo === NEW_REPOSITORY) {
+      try {
+        const response = await fetch("/api/git/setup-remote", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sandboxId: currentChat.sandboxId,
+            repoFullName: repo,
+            branch: currentChat.branch,
+          }),
+        })
+
+        if (!response.ok) {
+          const error = await response.json()
+          console.error("Failed to set up remote:", error)
+          // TODO: Show error to user
+          return
+        }
+      } catch (error) {
+        console.error("Failed to set up remote:", error)
+        return
+      }
+    }
+
+    updateChatRepo(currentChatId, repo, branch)
+  }
+
+  // Handler for sending message
+  const handleSendMessage = (message: string, agent: string, model: string, files?: File[]) => {
+    // Always require sign-in to send messages
+    if (!session) {
+      // Store the pending message in sessionStorage (persists across OAuth redirect)
+      // Note: files cannot be persisted, so we warn the user if they have attachments
+      savePendingMessage({ message, agent, model })
+      setSignInModalOpen(true)
+      return
+    }
+
+    // Update filter to match the chat's repo if this is the first message and repo differs from filter
+    // This ensures the filter follows the user's choice when starting a chat
+    if (currentChat && currentChat.messages.length === 0 &&
+        repoFilter !== ALL_REPOSITORIES && repoFilter !== currentChat.repo) {
+      // If chat has no repo, switch to "No repository" filter
+      // Otherwise, switch to the chat's repo
+      if (currentChat.repo === NEW_REPOSITORY) {
+        setRepoFilter(NO_REPOSITORY)
+      } else {
+        setRepoFilter(currentChat.repo)
+      }
+    }
+
+    sendMessage(message, agent, model, files)
+  }
+
+  // After sign-in, replay any pending message saved before the OAuth
+  // redirect. Two effects work together to avoid a stale-closure race:
+  //   (a) pending-replay: creates the chat, then stages a "pending send"
+  //       referencing the new chat ID.
+  //   (b) pending-send: fires once `chats` actually contains the new
+  //       chat (so sendMessage's state.chats is fresh enough to locate
+  //       it). Calls sendMessage and clears the staging state.
+  const [pendingSend, setPendingSend] = useState<
+    { chatId: string; message: string; agent: string; model: string } | null
+  >(null)
+
+  useEffect(() => {
+    if (!session || !isHydrated || pendingMessageProcessed.current) return
+
+    const pending = loadAndClearPendingMessage()
+    if (!pending) return
+
+    pendingMessageProcessed.current = true
+    setSignInModalOpen(false)
+
+    void (async () => {
+      let chatId = currentChatId
+      if (!chatId) {
+        chatId = await startNewChat()
+        if (!chatId) return
+      }
+      // Persist the agent/model picked in draft mode so subsequent
+      // messages on this chat use them too. Best-effort.
+      updateChatById(chatId, {
+        agent: pending.agent,
+        model: pending.model,
+      }).catch(() => {})
+      setPendingSend({
+        chatId,
+        message: pending.message,
+        agent: pending.agent,
+        model: pending.model,
+      })
+    })()
+  }, [session, isHydrated, startNewChat, updateChatById, currentChatId])
+
+  useEffect(() => {
+    if (!pendingSend) return
+    if (!chats.some((c) => c.id === pendingSend.chatId)) return
+    const { message, agent, model, chatId } = pendingSend
+    setPendingSend(null)
+    sendMessage(message, agent, model, undefined, chatId)
+  }, [pendingSend, chats, sendMessage])
+
+  // Handler for slash commands - open the corresponding git dialog
+  // Start a new chat off the current chat's branch. Defined before
+  // handleSlashCommand so "/branch" can call it.
+  // Use branch if available (sandbox created), otherwise baseBranch (before first message)
+  const branchForNewChat = currentChat?.branch || currentChat?.baseBranch
+  const canBranch = !!(branchForNewChat && currentChat?.repo !== NEW_REPOSITORY)
+  const handleBranchChat = useCallback(() => {
+    if (!branchForNewChat || currentChat?.repo === NEW_REPOSITORY) return
+    if (!session) {
+      setSignInModalOpen(true)
+      return
+    }
+    startNewChat(currentChat.repo, branchForNewChat, currentChat.id)
+  }, [currentChat, branchForNewChat, startNewChat, session])
+
+  // Branch and send a message to the new chat (Option+Enter)
+  // The new chat starts in the background - we stay on the current chat
+  const handleBranchWithMessage = useCallback(async (message: string, agent: string, model: string) => {
+    if (!branchForNewChat || currentChat?.repo === NEW_REPOSITORY) return
+    if (!session) {
+      savePendingMessage({ message, agent, model })
+      setSignInModalOpen(true)
+      return
+    }
+    // Create new chat in "creating" state without switching to it (spinner shows immediately)
+    const chatId = await startNewChat(currentChat.repo, branchForNewChat, currentChat.id, false, "creating")
+    if (!chatId) return
+    // Send message to the new chat (it runs in background)
+    sendMessage(message, agent, model, undefined, chatId)
+  }, [currentChat, branchForNewChat, startNewChat, sendMessage, session])
+
+  // Branch a queued message to a new chat (removes from queue)
+  // The new chat starts in the background - we stay on the current chat
+  const handleBranchQueuedMessage = useCallback(async (id: string, message: string, agent?: string, model?: string) => {
+    if (!branchForNewChat || currentChat?.repo === NEW_REPOSITORY) return
+    if (!session) {
+      setSignInModalOpen(true)
+      return
+    }
+    // Remove from queue first
+    removeQueuedMessage(id)
+    // Create new chat in "creating" state without switching to it (spinner shows immediately)
+    const chatId = await startNewChat(currentChat.repo, branchForNewChat, currentChat.id, false, "creating")
+    if (!chatId) return
+    // Send message to the new chat (it runs in background)
+    sendMessage(message, agent, model, undefined, chatId)
+  }, [currentChat, branchForNewChat, startNewChat, sendMessage, removeQueuedMessage, session])
+
+  const handleSlashCommand = useCallback((command: SlashCommandType) => {
+    switch (command) {
+      case "merge":
+        gitDialogs.setMergeOpen(true)
+        break
+      case "rebase":
+        gitDialogs.setRebaseOpen(true)
+        break
+      case "pr":
+        gitDialogs.setPROpen(true)
+        break
+      case "squash":
+        gitDialogs.setSquashOpen(true)
+        break
+      case "branch":
+        handleBranchChat()
+        break
+      case "abort":
+        gitDialogs.handleAbortConflict()
+        break
+    }
+  }, [gitDialogs, handleBranchChat])
+
+  // Palette handlers
+  const handlePaletteSelectRepo = useCallback((repo: GitHubRepo) => {
+    // Create new chat with the repo - branch selection happens via the header button
+    startNewChat(`${repo.owner.login}/${repo.name}`, repo.default_branch)
+  }, [startNewChat])
+
+  const handlePaletteSelectBranch = useCallback((repo: GitHubRepo, branch: GitHubBranch) => {
+    // Create a new chat with this repo and branch
+    startNewChat(`${repo.owner.login}/${repo.name}`, branch.name)
+  }, [startNewChat])
+
+  // Command palette handler (wraps handleSlashCommand to accept string)
   const handleRunCommand = useCallback((command: string) => {
-    // Set pending command - ChatPanel will pick it up
-    setPendingCommand(command)
-  }, [setPendingCommand])
+    handleSlashCommand(command as SlashCommandType)
+  }, [handleSlashCommand])
 
-  // Loading state
-  if (status === "loading" || !loaded) {
-    return (
-      <main className="flex h-dvh items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </main>
-    )
-  }
+  // Build the full tree-ordered id list matching the sidebar (ignoring
+  // collapsed state — so Alt+Up/Down can reach every chat, expanding
+  // collapsed ancestors along the way).
+  const treeOrderedChatIds = useMemo(() => {
+    // Show empty chats if they have a parentChatId (were branched)
+    const visible = chats.filter((c) => c.messages.length > 0 || c.parentChatId)
+    visible.sort((a, b) => (b.lastActiveAt ?? b.createdAt) - (a.lastActiveAt ?? a.createdAt))
+    const visibleIds = new Set(visible.map((c) => c.id))
+    const kids = new Map<string, Chat[]>()
+    for (const c of visible) {
+      const parent = c.parentChatId && visibleIds.has(c.parentChatId) ? c.parentChatId : null
+      if (parent) {
+        const list = kids.get(parent) ?? []
+        list.push(c)
+        kids.set(parent, list)
+      }
+    }
+    const roots = visible.filter((c) => !(c.parentChatId && visibleIds.has(c.parentChatId)))
+    const out: string[] = []
+    const walk = (c: Chat) => {
+      out.push(c.id)
+      const children = kids.get(c.id) ?? []
+      for (const child of children) walk(child)
+    }
+    for (const r of roots) walk(r)
+    return out
+  }, [chats])
 
-  // Not authenticated - will redirect
-  if (status === "unauthenticated") {
-    return (
-      <main className="flex h-dvh items-center justify-center bg-background">
-        <div className="text-sm text-muted-foreground">Redirecting to login...</div>
-      </main>
-    )
-  }
+  const handleRequestMergeChats = useCallback((sourceId: string, targetId?: string) => {
+    const source = chats.find((c) => c.id === sourceId)
+    const target = targetId ? chats.find((c) => c.id === targetId) : null
+    if (!source) return
+    selectChat(source.id)
+    setTimeout(() => {
+      if (target?.branch) {
+        gitDialogs.setSelectedBranch(target.branch)
+      } else {
+        gitDialogs.setSelectedBranch("")
+      }
+      gitDialogs.setMergeOpen(true)
+    }, 0)
+  }, [chats, selectChat, gitDialogs])
+
+  const handleRequestRebaseChat = useCallback((sourceId: string) => {
+    const source = chats.find((c) => c.id === sourceId)
+    if (!source) return
+    selectChat(source.id)
+    setTimeout(() => {
+      gitDialogs.setSelectedBranch("")
+      gitDialogs.setRebaseOpen(true)
+    }, 0)
+  }, [chats, selectChat, gitDialogs])
+
+  const handleNavigateChat = useCallback((direction: "up" | "down") => {
+    if (treeOrderedChatIds.length === 0) return
+    const idx = currentChatId ? treeOrderedChatIds.indexOf(currentChatId) : -1
+    let nextIdx: number
+    if (direction === "up") {
+      nextIdx = idx <= 0 ? treeOrderedChatIds.length - 1 : idx - 1
+    } else {
+      nextIdx = idx >= treeOrderedChatIds.length - 1 ? 0 : idx + 1
+    }
+    const nextId = treeOrderedChatIds[nextIdx]
+    if (!nextId) return
+    // If the target is inside a collapsed parent, expand up the chain.
+    const byId = new Map(chats.map((c) => [c.id, c]))
+    expandChatAndAncestors(nextId, byId)
+    handleSelectChat(nextId)
+  }, [treeOrderedChatIds, currentChatId, chats, expandChatAndAncestors])
+
+  // Open the current chat's branch on GitHub (available once the branch is pushed).
+  const githubBranchUrl =
+    currentChat?.branch && currentChat.sandboxId && currentChat.repo !== NEW_REPOSITORY
+      ? `https://github.com/${currentChat.repo}/tree/${currentChat.branch}`
+      : null
+  const handleOpenInGitHub = useCallback(() => {
+    if (githubBranchUrl) window.open(githubBranchUrl, "_blank", "noopener,noreferrer")
+  }, [githubBranchUrl])
+
+  // Open the current chat's sandbox in VS Code via an SSH remote link.
+  const handleOpenInVSCode = useCallback(async () => {
+    const sandboxId = currentChat?.sandboxId
+    if (!sandboxId) return
+    try {
+      const res = await fetch("/api/sandbox/ssh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sandboxId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to open SSH")
+      const cmd: string = data.sshCommand
+      const userHost = cmd.match(/(\S+@\S+)/)?.[1]
+      const port = cmd.match(/-p\s+(\d+)/)?.[1] ?? "22"
+      if (!userHost) return
+      const host = port !== "22" ? `${userHost}:${port}` : userHost
+      // sandbox/create clones into /home/daytona/project — hardcoded there too.
+      const remotePath = "/home/daytona/project"
+      window.open(`vscode://vscode-remote/ssh-remote+${host}${remotePath}`, "_blank")
+    } catch (err) {
+      console.error("Failed to open in VS Code:", err)
+    }
+  }, [currentChat?.sandboxId])
+
+  // Don't render chats until hydrated to avoid SSR mismatch
+  const displayChats = isHydrated ? chats : []
+  const displayCurrentChatId = isHydrated ? currentChatId : null
+
+  // For unauthenticated users with no real chat, render a synthetic "draft"
+  // chat so the prompt bar and dropdowns are interactive. The draft never
+  // talks to the server; on submit we save a pending-message blob to
+  // sessionStorage, prompt sign-in, and replay it once the user is signed in.
+  //
+  // The draft chat's id is a real-format nanoid generated once per page
+  // load (not a magic-string sentinel) — it's only used for ChatPanel's
+  // internal keying and is never sent to the server. "Draft mode" is
+  // detected by the existence of `draftChat`, not by id comparison.
+  const draftIdRef = useRef<string>(`draft-${nanoid()}`)
+  const draftChat: Chat | null = useMemo(() => {
+    if (!isHydrated || session || currentChatId) return null
+    const resolvedAgent = (draftAgent ?? settings.defaultAgent ?? getDefaultAgent(credentialFlags)) as Agent
+    const resolvedModel = draftModel ?? settings.defaultModel ?? getDefaultModelForAgent(resolvedAgent, credentialFlags)
+    return {
+      id: draftIdRef.current,
+      repo: NEW_REPOSITORY,
+      baseBranch: "main",
+      branch: null,
+      sandboxId: null,
+      sessionId: null,
+      agent: resolvedAgent,
+      model: resolvedModel,
+      messages: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      status: "pending",
+      displayName: null,
+    }
+  }, [isHydrated, session, currentChatId, draftAgent, draftModel, settings.defaultAgent, settings.defaultModel, credentialFlags])
+
+  const isDraftMode = !!draftChat
+  const displayCurrentChat = isHydrated ? (currentChat ?? draftChat) : null
+
+  // When in draft mode, agent/model dropdowns route to local draft state
+  // because no real chat row exists to PATCH yet.
+  const handleUpdateChatProp = useCallback(
+    (updates: Partial<Chat>) => {
+      if (isDraftMode) {
+        if (updates.agent !== undefined) setDraftAgent(updates.agent)
+        if (updates.model !== undefined) setDraftModel(updates.model)
+        // Other fields (repo, branch, etc.) are ignored — those pickers
+        // already prompt sign-in before they could fire onUpdateChat.
+        return
+      }
+      updateCurrentChat(updates)
+    },
+    [isDraftMode, updateCurrentChat]
+  )
 
   return (
     <PaletteProvider
       repos={repos}
-      activeRepoId={activeRepoId}
-      activeBranchId={activeBranchId}
+      currentRepo={currentChat?.repo !== NEW_REPOSITORY ? currentChat?.repo ?? null : null}
+      branches={branches}
+      chats={displayChats.map((c) => ({ id: c.id, displayName: c.displayName, repo: c.repo }))}
       onSelectRepo={handlePaletteSelectRepo}
       onSelectBranch={handlePaletteSelectBranch}
       onRunCommand={handleRunCommand}
+      onNewChat={handleNewChat}
+      onBranchChat={canBranch ? handleBranchChat : undefined}
+      onCreateRepo={currentChat?.repo === NEW_REPOSITORY ? handleCreateRepo : undefined}
+      showGitCommands={!!currentChat && currentChat.repo !== NEW_REPOSITORY}
+      onOpenInGitHub={githubBranchUrl ? handleOpenInGitHub : undefined}
+      onOpenSettings={() => handleOpenSettings()}
+      onToggleSidebar={!isMobile ? () => setSidebarCollapsed((v) => !v) : undefined}
+      onSignIn={!session ? () => signIn("github") : undefined}
+      onSignOut={session ? () => {
+            clearAllStorage()
+            signOut()
+          } : undefined}
+      onDeleteChat={displayCurrentChatId ? () => setDeleteConfirmChatId(displayCurrentChatId) : undefined}
+      onOpenInVSCode={currentChat?.sandboxId ? handleOpenInVSCode : undefined}
+      onOpenTerminal={
+        currentChat?.sandboxId
+          ? () => openPreview({ type: "terminal", id: currentChat.sandboxId! })
+          : undefined
+      }
+      servers={availableServers}
+      onOpenServer={(port, url) => openPreview({ type: "server", port, url })}
+      chatIds={displayChats.map((c) => c.id)}
+      onNavigateChat={handleNavigateChat}
+      currentChatId={displayCurrentChatId}
+      onSelectChat={handleSelectChat}
     >
-      <main className="flex h-dvh overflow-hidden">
-        {/* Repo Sidebar - desktop only */}
-        {!isMobile && (
-          <RepoSidebar
-            repos={repos}
-            activeRepoId={activeRepoId}
-            userAvatar={session?.user?.image || null}
-            userName={session?.user?.name || null}
-            userLogin={session?.user?.githubLogin || null}
-            onSelectRepo={selectRepo}
-            onRemoveRepo={handleRemoveRepo}
-            onReorderRepos={handleReorderRepos}
-            onOpenSettings={() => openSettings()}
-            onOpenAddRepo={openAddRepo}
-            onSignOut={() => { resetRepoState(); signOut({ callbackUrl: "/login" }) }}
-            quota={quota}
-            isAdmin={isAdmin}
-          />
-        )}
+    <div className={`flex overflow-hidden ${isMobile ? 'h-screen-mobile' : 'h-screen'}`}>
+      {/* Desktop Sidebar */}
+      {!isMobile && (
+        <Sidebar
+          chats={displayChats}
+          currentChatId={displayCurrentChatId}
+          deletingChatIds={deletingChatIds}
+          unseenChatIds={unseenChatIds}
+          onSelectChat={handleSelectChat}
+          onNewChat={handleNewChat}
+          onDeleteChat={removeChat}
+          onRenameChat={renameChat}
+          onOpenSettings={() => handleOpenSettings()}
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+          width={sidebarWidth}
+          onWidthChange={setSidebarWidth}
+          onOpenHelp={() => setHelpOpen(true)}
+          isMobile={false}
+          repoFilter={repoFilter}
+          onRepoFilterChange={setRepoFilter}
+          collapsedChatIds={collapsedChatIds}
+          onToggleChatCollapsed={toggleChatCollapsed}
+          onRequestMergeChats={handleRequestMergeChats}
+          onRequestRebaseChat={handleRequestRebaseChat}
+        />
+      )}
 
-        {/* Mobile Sidebar Drawer */}
+      {/* Mobile Sidebar (Drawer) */}
+      {isMobile && (
+        <Sidebar
+          chats={displayChats}
+          currentChatId={displayCurrentChatId}
+          deletingChatIds={deletingChatIds}
+          unseenChatIds={unseenChatIds}
+          onSelectChat={handleSelectChat}
+          onNewChat={handleNewChat}
+          onDeleteChat={removeChat}
+          onRenameChat={renameChat}
+          onOpenSettings={() => handleOpenSettings()}
+          collapsed={false}
+          onToggleCollapse={() => {}}
+          width={280}
+          onWidthChange={() => {}}
+          onOpenHelp={() => setHelpOpen(true)}
+          isMobile={true}
+          mobileOpen={mobileSidebarOpen}
+          onMobileClose={() => setMobileSidebarOpen(false)}
+          repoFilter={repoFilter}
+          onRepoFilterChange={setRepoFilter}
+          collapsedChatIds={collapsedChatIds}
+          onToggleChatCollapsed={toggleChatCollapsed}
+          onRequestMergeChats={handleRequestMergeChats}
+          onRequestRebaseChat={handleRequestRebaseChat}
+        />
+      )}
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Mobile Header */}
         {isMobile && (
-          <MobileSidebarDrawer
-            open={mobileSidebarOpen}
-            onOpenChange={setMobileSidebarOpen}
-            repos={repos}
-            activeRepoId={activeRepoId}
-            activeBranchId={activeBranchId}
-            userAvatar={session?.user?.image || null}
-            userName={session?.user?.name || null}
-            userLogin={session?.user?.githubLogin || null}
-            onSelectRepo={selectRepo}
-            onSelectBranch={(branchId) => {
-                handleUpdateBranch(branchId, { unread: false })
-                selectBranch(branchId)
-              }}
-            onRemoveRepo={handleRemoveRepo}
-            onOpenSettings={() => openSettings()}
-            onOpenAddRepo={openAddRepo}
-            onSignOut={() => { resetRepoState(); signOut({ callbackUrl: "/login" }) }}
-            quota={quota}
-            onAddBranch={handleAddBranch}
-            onUpdateBranch={handleUpdateBranch}
-            onQuotaRefresh={refreshQuotaOnly}
-            credentials={credentials}
-            onRemoveBranch={(branchId, deleteRemote) => handleRemoveBranch(branchId, deleteRemote, activeBranchId ?? undefined)}
-            onSwitchAwayFromBranchBeforeDelete={switchAwayFromBranchBeforeDelete}
-          />
-        )}
-
-        {/* Desktop: Branch List (always visible) */}
-        {!isMobile && (
-          <div className="flex">
-          {activeRepo ? (
-            <BranchList
-              repo={activeRepo}
-              activeBranchId={activeBranchId}
-              onSelectBranch={(branchId) => {
-                handleUpdateBranch(branchId, { unread: false })
-                selectBranch(branchId)
-              }}
-              onAddBranch={handleAddBranch}
-              onRemoveBranch={(branchId, deleteRemote) => handleRemoveBranch(branchId, deleteRemote, activeBranchId ?? undefined)}
-              onSwitchAwayFromBranchBeforeDelete={switchAwayFromBranchBeforeDelete}
-              onUpdateBranch={handleUpdateBranch}
-              onQuotaRefresh={refreshQuotaOnly}
-              width={branchListWidth}
-              onWidthChange={setBranchListWidth}
-              collapsed={branchListCollapsed}
-              onToggleCollapse={handleToggleBranchListCollapse}
-              pendingStartCommit={pendingStartCommit}
-              onClearPendingCommit={clearPendingStartCommit}
-              quota={quota}
-              credentials={credentials}
-              onOpenRepoSettings={handleOpenRepoSettings}
-            />
-          ) : (
-            <div
-              className="flex h-full shrink-0 flex-col items-center justify-center border-r border-border bg-card text-muted-foreground"
-              style={{ width: branchListWidth }}
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-background pt-safe">
+            <button
+              onClick={() => setMobileSidebarOpen(true)}
+              className="p-2 -ml-2 rounded-lg hover:bg-accent active:bg-accent text-foreground transition-colors touch-target"
+              aria-label="Open menu"
             >
-              <p className="text-xs">Add a repository to get started</p>
-            </div>
-          )}
-        </div>
-        )}
-
-        {/* Mobile: Header + Chat (Slack-like layout) */}
-        {isMobile && (
-          <div
-            className={cn(
-              "flex flex-1 flex-col min-h-0 min-w-0 w-full max-w-full overflow-hidden",
-              activeBranch &&
-                (mobileGitDialogs.rebaseConflict?.inRebase ||
-                  mobileGitDialogs.rebaseConflict?.inMerge) &&
-                "border border-red-700 dark:border-red-600"
-            )}
-          >
-            {/* Mobile Header with hamburger and actions */}
-            <MobileHeader
-              repoOwner={activeRepo?.owner || null}
-              repoName={activeRepo?.name || null}
-              branch={activeBranch}
-              onOpenSidebar={() => setMobileSidebarOpen(true)}
-              onToggleGitHistory={toggleGitHistory}
-              onOpenDiff={openMobileDiff}
-              onCreatePR={handleMobileCreatePR}
-              onSandboxToggle={handleMobileSandboxToggle}
-              onMerge={() => mobileGitDialogs.setMergeOpen(true)}
-              onRebase={() => mobileGitDialogs.setRebaseOpen(true)}
-              gitHistoryOpen={gitHistoryOpen}
-              sandboxToggleLoading={mobileSandboxToggleLoading}
-              prLoading={mobilePrLoading}
-              onUpdateBranch={handleUpdateBranch}
-              credentials={credentials}
-              rebaseConflict={mobileGitDialogs.rebaseConflict}
-              onAbortConflict={mobileGitDialogs.handleAbortConflict}
-              abortLoading={mobileGitDialogs.actionLoading}
-            />
-
-            {/* Chat content */}
-            <div className="flex-1 min-h-0 min-w-0 overflow-hidden">
-              {activeBranch && activeRepo ? (
-                <ChatPanel
-                  branch={activeBranch}
-                  repoFullName={`${activeRepo.owner}/${activeRepo.name}`}
-                  repoName={activeRepo.name}
-                  repoOwner={activeRepo.owner}
-                  gitHistoryOpen={gitHistoryOpen}
-                  onToggleGitHistory={toggleGitHistory}
-                  onAddMessage={handleAddMessage}
-                  onUpdateMessage={handleUpdateMessage}
-                  onUpdateBranch={handleUpdateBranch}
-                  onSaveDraftForBranch={handleSaveDraftForBranch}
-                  onForceSave={() => {}}
-                  onCommitsDetected={triggerGitHistoryRefresh}
-                  onBranchFromCommit={setPendingStartCommit}
-                  messagesLoading={messagesLoadingBranchIds.has(activeBranch.id)}
-                  isMobile={true}
-                  streamingMessageIdRef={streamingMessageIdRef}
-                  credentials={credentials}
-                  onOpenSettings={() => openSettings()}
-                  onOpenSettingsWithHighlight={handleOpenSettingsWithHighlight}
-                  getBranchById={getBranchById}
-                  executionRefreshGitRef={executionRefreshGitRef}
-                />
-              ) : (
-                <EmptyChatPanel hasRepos={repos.length > 0} />
-              )}
-            </div>
+              <Menu className="h-5 w-5" />
+            </button>
+            <h1 className="text-base font-semibold truncate flex-1">
+              {displayCurrentChat?.displayName || "Background Agents"}
+            </h1>
           </div>
         )}
 
-        {/* Mobile Git History Sheet */}
-        {isMobile && activeBranch?.sandboxId && activeRepo && (
-          <GitHistorySheet
-            open={gitHistoryOpen}
-            onOpenChange={(open) => open ? null : closeGitHistory()}
-            sandboxId={activeBranch.sandboxId}
-            repoName={activeRepo.name}
-            baseBranch={activeBranch.baseBranch}
-            refreshTrigger={gitHistoryRefreshTrigger}
-            onScrollToCommit={(shortHash) => {
-              document.getElementById(`commit-${shortHash}`)?.scrollIntoView({ behavior: "smooth", block: "center" })
-            }}
-            onBranchFromCommit={setPendingStartCommit}
-          />
-        )}
+        <div className="flex-1 flex min-h-0">
+            <div className="flex-1 flex flex-col min-w-0">
+              <ChatPanel
+                chat={displayCurrentChat}
+                settings={settings}
+                credentialFlags={credentialFlags}
+                onSendMessage={handleSendMessage}
+                onEnqueueMessage={enqueueMessage}
+                onRemoveQueuedMessage={removeQueuedMessage}
+                onResumeQueue={resumeQueue}
+                onStopAgent={stopAgent}
+                onChangeRepo={handleChangeRepo}
+                onChangeBranch={handleChangeBranch}
+                onUpdateChat={handleUpdateChatProp}
+                onOpenSettings={handleOpenSettings}
+                onSlashCommand={handleSlashCommand}
+                onRequireSignIn={!session ? () => setSignInModalOpen(true) : undefined}
+                onDeleteChat={displayCurrentChatId ? () => removeChat(displayCurrentChatId) : undefined}
+                onOpenHelp={() => setHelpOpen(true)}
+                onOpenFile={(filePath) => {
+                  const filename = filePath.split("/").pop() || filePath
+                  openPreview({ type: "file", filePath, filename })
+                }}
+                isMobile={isMobile}
+                rebaseConflict={gitDialogs.rebaseConflict}
+                onAbortConflict={gitDialogs.handleAbortConflict}
+                conflictActionLoading={gitDialogs.actionLoading}
+                onBranchWithMessage={handleBranchWithMessage}
+                onBranchQueuedMessage={handleBranchQueuedMessage}
+                canBranch={canBranch}
+              />
+            </div>
+            {!isMobile && previewOpen && (
+              <>
+                <div
+                  onMouseDown={startPreviewResize}
+                  className="group flex-shrink-0 w-1 cursor-col-resize relative"
+                  aria-label="Resize preview"
+                  role="separator"
+                >
+                  <span className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-px bg-border/60 group-hover:bg-border group-active:bg-primary transition-colors" />
+                </div>
+                <PreviewView
+                  style={{ width: previewWidth }}
+                  className="flex-shrink-0"
+                  item={previewItem}
+                  sandboxId={currentChat?.sandboxId ?? null}
+                  repo={currentChat?.repo && currentChat.repo !== NEW_REPOSITORY ? currentChat.repo : null}
+                  branch={currentChat?.branch ?? currentChat?.baseBranch ?? null}
+                  availableServers={availableServers}
+                  onSelectServer={(port, url) => openPreview({ type: "server", port, url })}
+                  onClose={closePreview}
+                />
+              </>
+            )}
+          </div>
+      </div>
 
-        {/* Desktop: Main content area (branch list is outside this wrapper) */}
-        {!isMobile && (
-        <div
-          className={cn(
-            "flex min-h-0 min-w-0 flex-1",
-            desktopRebaseConflict && "border border-red-700 dark:border-red-600"
-          )}
-        >
-          {activeBranch && activeRepo ? (
-            <ChatPanel
-              branch={activeBranch}
-              repoFullName={`${activeRepo.owner}/${activeRepo.name}`}
-              repoName={activeRepo.name}
-              repoOwner={activeRepo.owner}
-              gitHistoryOpen={gitHistoryOpen}
-              onToggleGitHistory={toggleGitHistory}
-              onAddMessage={handleAddMessage}
-              onUpdateMessage={handleUpdateMessage}
-              onUpdateBranch={handleUpdateBranch}
-              onSaveDraftForBranch={handleSaveDraftForBranch}
-              onForceSave={() => {}}
-              onCommitsDetected={triggerGitHistoryRefresh}
-              onBranchFromCommit={setPendingStartCommit}
-              messagesLoading={messagesLoadingBranchIds.has(activeBranch.id)}
-              streamingMessageIdRef={streamingMessageIdRef}
-              credentials={credentials}
-              onOpenSettings={() => openSettings()}
-              onOpenSettingsWithHighlight={handleOpenSettingsWithHighlight}
-              onRebaseConflictChange={setDesktopRebaseConflict}
-              getBranchById={getBranchById}
-              executionRefreshGitRef={executionRefreshGitRef}
-            />
-          ) : (
-            <EmptyChatPanel hasRepos={repos.length > 0} />
-          )}
+      {/* Transparent full-screen shield during split drag so the cursor isn't
+          swallowed by iframes or other child elements. */}
+      {isResizingPreview && (
+        <div className="fixed inset-0 z-[999] cursor-col-resize" />
+      )}
 
-          {gitHistoryOpen && activeBranch?.sandboxId && activeRepo && (
-            <GitHistoryPanel
-              sandboxId={activeBranch.sandboxId}
-              repoName={activeRepo.name}
-              baseBranch={activeBranch.baseBranch}
-              onClose={closeGitHistory}
-              refreshTrigger={gitHistoryRefreshTrigger}
-              onScrollToCommit={(shortHash) => {
-                document.getElementById(`commit-${shortHash}`)?.scrollIntoView({ behavior: "smooth", block: "center" })
-              }}
-              onBranchFromCommit={setPendingStartCommit}
-            />
-          )}
-
-          {/* Content Panel - shows file tabs, terminals, and server previews */}
-          {activeBranch?.sandboxId && activeRepo && (
-            <ContentPanel
-              sandboxId={activeBranch.sandboxId}
-              repoPath={`/home/daytona/${activeRepo.name}`}
-              cacheKey={`${activeRepo.id}-${activeBranch.id}`}
-              previewUrlPattern={activeBranch.previewUrlPattern}
-            />
-          )}
-        </div>
-        )}
-      </main>
-
-      <SettingsModal
-        open={settingsOpen}
-        onClose={handleSettingsClose}
-        credentials={credentials}
-        onCredentialsUpdate={refresh}
-        highlightField={settingsHighlightField}
-        onClearHighlight={clearSettingsHighlight}
+      <RepoPickerModal
+        open={repoSelectOpen}
+        onClose={() => setRepoSelectOpen(false)}
+        onSelect={handleRepoSelect}
+        isMobile={isMobile}
+        mode="select"
+        onRequestCreate={() => setRepoCreateOpen(true)}
       />
-      <AddRepoModal
-        open={addRepoOpen}
-        onClose={() => {
-          closeAddRepo()
-          // If user cancels adding a repo from URL, clear pending and go home
-          if (pendingRepoFromUrl) {
-            clearPendingRepoFromUrl()
-            router.replace("/")
+
+      <RepoPickerModal
+        open={repoCreateOpen}
+        onClose={() => setRepoCreateOpen(false)}
+        onSelect={handleRepoSelect}
+        isMobile={isMobile}
+        mode="create"
+        suggestedName={currentChat?.displayName ?? null}
+      />
+
+      <BranchPickerModal
+        open={branchSelectOpen}
+        onClose={() => setBranchSelectOpen(false)}
+        onSelect={async (branch) => {
+          if (currentChat && currentChat.messages.length === 0 && !currentChat.sandboxId) {
+            updateCurrentChat({ branch })
+          } else if (currentChat) {
+            const chatId = await startNewChat(currentChat.repo, branch)
+            if (chatId) selectChat(chatId)
           }
+          setBranchSelectOpen(false)
         }}
-        githubUser={session?.user?.githubLogin || null}
-        existingRepos={repos}
-        onAddRepo={(repo) => {
-          clearPendingRepoFromUrl()
-          return handleAddRepo(repo)
-        }}
-        onSelectExistingRepo={(repoId) => {
-          clearPendingRepoFromUrl()
-          selectRepo(repoId)
-        }}
-        initialRepoUrl={pendingRepoFromUrl ? `${pendingRepoFromUrl.owner}/${pendingRepoFromUrl.name}` : undefined}
+        repo={currentChat?.repo?.split("/")[1] || ""}
+        owner={currentChat?.repo?.split("/")[0] || ""}
+        defaultBranch={currentChat?.branch ?? undefined}
+        isMobile={isMobile}
       />
-      {activeRepo && (
-        <RepoSettingsModal
-          open={repoSettingsOpen}
-          onClose={handleRepoSettingsClose}
-          repoId={activeRepo.id}
-          repoOwner={activeRepo.owner}
-          repoName={activeRepo.name}
-          initialEnvVars={repoEnvVars ?? undefined}
-          onEnvVarsUpdate={handleOpenRepoSettings}
-        />
-      )}
 
-      {/* Mobile Diff Modal */}
-      {isMobile && activeRepo && activeBranch && (
-        <DiffModal
-          open={mobileDiffOpen}
-          onClose={closeMobileDiff}
-          repoOwner={activeRepo.owner}
-          repoName={activeRepo.name}
-          branchName={activeBranch.name}
-          baseBranch={activeBranch.baseBranch || activeRepo.defaultBranch}
-          startCommit={activeBranch.startCommit}
+        <SettingsModal
+          open={settingsOpen}
+          onClose={handleCloseSettings}
+          settings={settings}
+          credentialFlags={credentialFlags}
+          onSave={updateSettings}
+          highlightKey={settingsHighlightKey}
+          isMobile={isMobile}
         />
-      )}
 
-      {/* Mobile Git Dialogs (Merge, Rebase, Tag) - shared component */}
-      {isMobile && activeRepo && activeBranch && activeBranch.sandboxId && (
-        <GitDialogs gitDialogs={mobileGitDialogs} />
-      )}
+      {/* Git Dialogs - now use API calls instead of pasting git commands */}
+      <MergeDialog
+        open={gitDialogs.mergeOpen}
+        onClose={() => gitDialogs.setMergeOpen(false)}
+        gitDialogs={gitDialogs}
+        chat={displayCurrentChat}
+        isMobile={isMobile}
+      />
+      <RebaseDialog
+        open={gitDialogs.rebaseOpen}
+        onClose={() => gitDialogs.setRebaseOpen(false)}
+        gitDialogs={gitDialogs}
+        chat={displayCurrentChat}
+        isMobile={isMobile}
+      />
+      <PRDialog
+        open={gitDialogs.prOpen}
+        onClose={() => gitDialogs.setPROpen(false)}
+        gitDialogs={gitDialogs}
+        chat={displayCurrentChat}
+        isMobile={isMobile}
+      />
+      <SquashDialog
+        open={gitDialogs.squashOpen}
+        onClose={() => gitDialogs.setSquashOpen(false)}
+        gitDialogs={gitDialogs}
+        chat={displayCurrentChat}
+        isMobile={isMobile}
+      />
+
+      {/* Sign In Modal - shown when user tries to send message without being signed in */}
+      <SignInModal
+        open={signInModalOpen}
+        onClose={() => setSignInModalOpen(false)}
+        isMobile={isMobile}
+      />
+
+      <HelpModal
+        open={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        isMobile={isMobile}
+      />
+
+      <ConfirmDialog
+        open={deleteConfirmChatId !== null}
+        onClose={() => setDeleteConfirmChatId(null)}
+        onConfirm={() => {
+          if (deleteConfirmChatId) removeChat(deleteConfirmChatId)
+        }}
+        title="Delete chat"
+        description={
+          <>
+            Delete{" "}
+            <span className="font-medium text-foreground">
+              {chats.find((c) => c.id === deleteConfirmChatId)?.displayName || "this chat"}
+            </span>
+            ? This cannot be undone.
+          </>
+        }
+        confirmLabel="Delete"
+        variant="destructive"
+        isMobile={isMobile}
+      />
+    </div>
     </PaletteProvider>
   )
 }

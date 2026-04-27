@@ -1,17 +1,20 @@
-import { DefaultSession } from "next-auth"
+import "next-auth"
 
 declare module "next-auth" {
   interface Session {
+    accessToken?: string
     user: {
       id: string
-      githubLogin?: string
-    } & DefaultSession["user"]
-    accessToken?: string
+      name?: string | null
+      email?: string | null
+      image?: string | null
+    }
   }
 }
 
 declare module "next-auth/jwt" {
   interface JWT {
-    sub: string
+    accessToken?: string
+    sub?: string
   }
 }

@@ -1,43 +1,41 @@
-import { prisma } from "@/lib/db/prisma"
-import { ensureSandboxStarted } from "@/lib/sandbox/sandbox-resume"
-import {
-  requireAuth,
-  isAuthError,
-  badRequest,
-  notFound,
-  getDaytonaApiKey,
-  isDaytonaKeyError,
-  internalError,
-} from "@/lib/shared/api-helpers"
+import { Daytona } from "@daytonaio/sdk"
 
+export const maxDuration = 30
+
+/**
+ * POST /api/sandbox/ssh
+ *
+ * Creates a short-lived SSH access for the sandbox and returns the ssh command
+ * so the browser can construct a `vscode://vscode-remote/ssh-remote+host/path`
+ * link for opening the workspace in VS Code.
+ */
 export async function POST(req: Request) {
-  const auth = await requireAuth()
-  if (isAuthError(auth)) return auth
-
-  const body = await req.json()
+  const body = (await req.json().catch(() => null)) as { sandboxId?: string } | null
+  if (!body) return Response.json({ error: "Invalid JSON body" }, { status: 400 })
   const { sandboxId } = body
+  if (!sandboxId) return Response.json({ error: "Missing sandboxId" }, { status: 400 })
 
-  if (!sandboxId) {
-    return badRequest("Missing sandbox ID")
+  const daytonaApiKey = process.env.DAYTONA_API_KEY
+  if (!daytonaApiKey) {
+    return Response.json({ error: "Daytona API key not configured" }, { status: 500 })
   }
-
-  // Verify ownership
-  const sandboxRecord = await prisma.sandbox.findUnique({
-    where: { sandboxId },
-  })
-
-  if (!sandboxRecord || sandboxRecord.userId !== auth.userId) {
-    return notFound("Sandbox not found")
-  }
-
-  const daytonaApiKey = getDaytonaApiKey()
-  if (isDaytonaKeyError(daytonaApiKey)) return daytonaApiKey
 
   try {
-    const sandbox = await ensureSandboxStarted(daytonaApiKey, sandboxId)
+    const daytona = new Daytona({ apiKey: daytonaApiKey })
+    let sandbox
+    try {
+      sandbox = await daytona.get(sandboxId)
+    } catch {
+      return Response.json({ error: "SANDBOX_NOT_FOUND" }, { status: 410 })
+    }
+    if (sandbox.state !== "started") {
+      await sandbox.start(120)
+    }
     const sshAccess = await sandbox.createSshAccess(60)
     return Response.json({ sshCommand: sshAccess.sshCommand })
-  } catch (error: unknown) {
-    return internalError(error)
+  } catch (error) {
+    console.error("[sandbox/ssh] Error:", error)
+    const message = error instanceof Error ? error.message : "Unknown error"
+    return Response.json({ error: message }, { status: 500 })
   }
 }
