@@ -1030,7 +1030,13 @@ export function useGitDialogs({ chat, onAddMessage, onAddMessageToBranch, resolv
       )
       setRebaseOpen(false)
     } catch (err: unknown) {
-      addSystemMessage(`Rebase failed: ${err instanceof Error ? err.message : "Unknown error"}`, true)
+      const errMsg = err instanceof Error ? err.message : "Unknown error"
+      // The bare PATCH-ref path on the rebase route fails with "Object does not
+      // exist" when rebase rewrote commits whose SHAs aren't on GitHub yet.
+      // Surface the force-push affordance so the user can recover via the dance.
+      const recoverable = errMsg.includes("Force push failed") || errMsg.includes("Object does not exist")
+      const suffix = recoverable ? " You can **force push** to overwrite the remote history." : ""
+      addSystemMessage(`Rebase failed: ${errMsg}.${suffix}`, true)
       setRebaseOpen(false)
     } finally {
       setActionLoading(false)
