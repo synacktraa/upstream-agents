@@ -477,8 +477,10 @@ export function ChatPanel({
     if (!prompt || branch.status === BRANCH_STATUS.RUNNING || branch.status === BRANCH_STATUS.CREATING) return
     if (!branch.sandboxId) return
 
-    // Mark that user has interacted - enable auto-scroll for new messages
+    // Mark that user has interacted and force near-bottom state
+    // This ensures auto-scroll works even if user was scrolled up when sending
     hasUserInteractedRef.current = true
+    isNearBottomRef.current = true
 
     setInput("")
 
