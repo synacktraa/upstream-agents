@@ -123,21 +123,20 @@ export function ChatPanel({ chat, settings, credentialFlags, onSendMessage, onEn
     }
   }, [chat?.messages, userHasScrolledUp])
 
-  // Focus prompt when switching chats (desktop only)
-  // Use setTimeout to ensure the focus happens after DOM updates are complete.
-  // Without this, the focus can be lost when other state updates happen during
-  // the same render cycle (e.g., when creating a new chat).
+  // Focus prompt when switching chats or after sending the first message.
+  // When a new chat starts (status changes to "creating" or "running"), the
+  // component switches from the "welcome" view to the "messages" view, which
+  // remounts the textarea in a different DOM location. We need to re-focus it.
   useEffect(() => {
-    if (!isMobile) {
-      const t = window.setTimeout(() => {
-        const el = textareaRef.current
-        if (el && document.activeElement !== el) {
-          el.focus()
-        }
-      }, 0)
-      return () => window.clearTimeout(t)
-    }
-  }, [chat?.id, isMobile])
+    if (isMobile) return
+    const t = window.setTimeout(() => {
+      const el = textareaRef.current
+      if (el && document.activeElement !== el) {
+        el.focus()
+      }
+    }, 0)
+    return () => window.clearTimeout(t)
+  }, [chat?.id, chat?.status, isMobile])
 
   // Auto-resize textarea
   useEffect(() => {
