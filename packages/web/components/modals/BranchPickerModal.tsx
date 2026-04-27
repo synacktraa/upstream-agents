@@ -51,22 +51,32 @@ export function BranchPickerModal({
     setSelectedIndex(0)
   }, [search])
 
+  // Reset state and fetch branches when modal opens or repo changes
   useEffect(() => {
     if (open && session?.accessToken && repo && owner) {
-      setLoading(true)
+      // Reset all state when opening with a new repo
+      setSearch("")
       setError(null)
+      setDragY(0)
+      setBranches([])
+      setSelectedIndex(0)
+      setLoading(true)
 
       fetchBranches(session.accessToken, owner, repo)
-        .then(setBranches)
+        .then((fetchedBranches) => {
+          setBranches(fetchedBranches)
+          // Set selectedIndex to the default branch if it exists
+          const defaultIndex = fetchedBranches.findIndex(b => b.name === defaultBranch)
+          setSelectedIndex(defaultIndex >= 0 ? defaultIndex : 0)
+        })
         .catch((err) => setError(err instanceof Error ? err.message : "Failed to fetch branches"))
         .finally(() => setLoading(false))
     }
-  }, [open, session?.accessToken, repo, owner])
+  }, [open, session?.accessToken, repo, owner, defaultBranch])
 
+  // Reset drag state when modal closes
   useEffect(() => {
-    if (open) {
-      setSearch("")
-      setError(null)
+    if (!open) {
       setDragY(0)
     }
   }, [open])
