@@ -223,6 +223,8 @@ export function ChatPanel({
   const hasUserInteractedRef = useRef(false)
   // Track previous message count to only scroll on new messages
   const prevMessageCountRef = useRef(branch.messages.length)
+  // Track previous content length for streaming auto-scroll
+  const prevContentLengthRef = useRef(0)
 
   const runAgentExecute = useCallback(
     async (args: {
@@ -442,19 +444,30 @@ export function ChatPanel({
     }
   }, [isNearBottomRef])
 
-  // Auto-scroll to bottom when new messages arrive (not on every array change).
+  // Auto-scroll to bottom when new messages arrive or content grows during streaming.
   // Uses useLayoutEffect to measure DOM synchronously before browser paint,
   // preventing scroll jumps when loading long chats.
+  const lastMessage = branch.messages[branch.messages.length - 1]
+  const lastMessageContent = lastMessage?.content ?? ""
+  const lastMessageToolCallsCount = lastMessage?.toolCalls?.length ?? 0
+  const isStreaming = lastMessage ? useExecutionStore.getState().isStreaming(lastMessage.id) : false
+
   useLayoutEffect(() => {
     const currentCount = branch.messages.length
     const hasNewMessages = currentCount > prevMessageCountRef.current
     prevMessageCountRef.current = currentCount
 
-    // Only scroll if: user has interacted, near bottom, and new messages arrived
-    if (scrollRef.current && isNearBottomRef.current && hasUserInteractedRef.current && hasNewMessages) {
+    // Track content length changes during streaming
+    const currentContentLength = lastMessageContent.length + lastMessageToolCallsCount
+    const hasContentGrown = currentContentLength > prevContentLengthRef.current
+    prevContentLengthRef.current = currentContentLength
+
+    // Scroll if: user has interacted, near bottom, and (new messages OR content grew during streaming)
+    const shouldScroll = hasNewMessages || (isStreaming && hasContentGrown)
+    if (scrollRef.current && isNearBottomRef.current && hasUserInteractedRef.current && shouldScroll) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [branch.messages.length, isNearBottomRef])
+  }, [branch.messages.length, lastMessageContent, lastMessageToolCallsCount, isStreaming, isNearBottomRef])
 
   // Send message handler
   const handleSend = useCallback(async () => {
