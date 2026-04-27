@@ -46,9 +46,11 @@ interface ChatPanelProps {
   onBranchQueuedMessage?: (id: string, message: string, agent?: string, model?: string) => void
   /** Whether branching is available (has repo and branch) */
   canBranch?: boolean
+  /** Whether messages are currently being loaded for this chat */
+  isLoadingMessages?: boolean
 }
 
-export function ChatPanel({ chat, settings, credentialFlags, onSendMessage, onEnqueueMessage, onRemoveQueuedMessage, onResumeQueue, onStopAgent, onChangeRepo, onChangeBranch, onUpdateChat, onOpenSettings, onSlashCommand, onRequireSignIn, onDeleteChat, onOpenHelp, onOpenFile, isMobile = false, rebaseConflict, onAbortConflict, conflictActionLoading = false, onBranchWithMessage, onBranchQueuedMessage, canBranch = false }: ChatPanelProps) {
+export function ChatPanel({ chat, settings, credentialFlags, onSendMessage, onEnqueueMessage, onRemoveQueuedMessage, onResumeQueue, onStopAgent, onChangeRepo, onChangeBranch, onUpdateChat, onOpenSettings, onSlashCommand, onRequireSignIn, onDeleteChat, onOpenHelp, onOpenFile, isMobile = false, rebaseConflict, onAbortConflict, conflictActionLoading = false, onBranchWithMessage, onBranchQueuedMessage, canBranch = false, isLoadingMessages = false }: ChatPanelProps) {
   const [input, setInput] = useState("")
   const [userHasScrolledUp, setUserHasScrolledUp] = useState(false)
   const [showAgentDropdown, setShowAgentDropdown] = useState(false)
@@ -438,7 +440,8 @@ export function ChatPanel({ chat, settings, credentialFlags, onSendMessage, onEn
   const canCreateRepo = isNewRepo
   // Show the repo button if either action is available
   const showRepoButton = canSelectRepo || canCreateRepo
-  const isNewChat = chat.messages.length === 0 && !chat.parentChatId
+  // Only show welcome screen if no messages AND not loading messages AND not a child chat
+  const isNewChat = chat.messages.length === 0 && !chat.parentChatId && !isLoadingMessages
 
   const agents: Agent[] = ["claude-code", "opencode", "codex", "gemini", "goose", "pi", "eliza"]
 
