@@ -49,6 +49,7 @@ interface PaletteProviderProps {
   onOpenTerminal?: () => void
   servers?: Array<{ port: number; url: string }>
   onOpenServer?: (port: number, url: string) => void
+  onClosePreview?: () => void
   // For Alt+Up/Down chat navigation
   chatIds: string[]
   currentChatId: string | null
@@ -82,6 +83,7 @@ export function PaletteProvider({
   onOpenTerminal,
   servers,
   onOpenServer,
+  onClosePreview,
   chatIds,
   currentChatId,
   onSelectChat,
@@ -195,6 +197,7 @@ export function PaletteProvider({
         onOpenTerminal={onOpenTerminal}
         servers={servers}
         onOpenServer={onOpenServer}
+        onClosePreview={onClosePreview}
       />
     </PaletteContext.Provider>
   )
