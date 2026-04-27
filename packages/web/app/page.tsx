@@ -768,6 +768,7 @@ export default function HomePage() {
       }
       servers={availableServers}
       onOpenServer={(port, url) => openPreview({ type: "server", port, url })}
+      onClosePreview={previewOpen ? closePreview : undefined}
       chatIds={displayChats.map((c) => c.id)}
       onNavigateChat={handleNavigateChat}
       currentChatId={displayCurrentChatId}

@@ -1,6 +1,6 @@
 "use client"
 
-import { GitMerge, GitBranch, GitPullRequest, GitCommitVertical, Plus, GitBranchPlus, Settings, Github, PanelLeft, LogIn, LogOut, FolderGit2, Trash2, Code2, TerminalSquare, Globe } from "lucide-react"
+import { GitMerge, GitBranch, GitPullRequest, GitCommitVertical, Plus, GitBranchPlus, Settings, Github, PanelLeft, LogIn, LogOut, FolderGit2, Trash2, Code2, TerminalSquare, Globe, PanelRightClose } from "lucide-react"
 import {
   CommandDialog,
   CommandInput,
@@ -43,6 +43,7 @@ interface CommandPaletteProps {
   onOpenTerminal?: () => void
   servers?: Array<{ port: number; url: string }>
   onOpenServer?: (port: number, url: string) => void
+  onClosePreview?: () => void
 }
 
 export function CommandPalette({
@@ -63,6 +64,7 @@ export function CommandPalette({
   onOpenTerminal,
   servers = [],
   onOpenServer,
+  onClosePreview,
 }: CommandPaletteProps) {
   const handleSelect = (command: string) => {
     onRunCommand(command)
@@ -126,6 +128,12 @@ export function CommandPalette({
             >
               <Globe className="mr-2 h-4 w-4 text-muted-foreground" />
               <span>Open Live Preview</span>
+            </CommandItem>
+          )}
+          {onClosePreview && (
+            <CommandItem value="close preview" onSelect={() => run(onClosePreview)}>
+              <PanelRightClose className="mr-2 h-4 w-4 text-muted-foreground" />
+              <span>Close Preview Pane</span>
             </CommandItem>
           )}
           {onDeleteChat && (
