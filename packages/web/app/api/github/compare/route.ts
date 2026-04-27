@@ -1,56 +1,37 @@
-import { requireGitHubAuth, isGitHubAuthError, badRequest, notFound, internalError } from "@/lib/shared/api-helpers"
-import { getDiff, compareBranches, isGitHubApiError } from "@upstream/common"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
+import { compareBranches, isGitHubApiError } from "@upstream/common"
 
 export async function POST(req: Request) {
-  const auth = await requireGitHubAuth()
-  if (isGitHubAuthError(auth)) return auth
-
-  const body = await req.json()
-  const { owner, repo, base, head, commitHash, includeStats } = body
-
-  if (!owner || !repo) {
-    return badRequest("Missing required fields")
+  const session = await getServerSession(authOptions)
+  if (!session?.accessToken) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  if (!commitHash && (!base || !head)) {
-    return badRequest("Must provide commitHash or base+head")
+  const body = await req.json()
+  const { owner, repo, base, head } = body
+
+  if (!owner || !repo || !base || !head) {
+    return Response.json({ error: "Missing required fields: owner, repo, base, head" }, { status: 400 })
   }
 
   try {
-    // If includeStats is true or we're comparing branches, also get the comparison stats
-    if (includeStats && base && head) {
-      const compareData = await compareBranches(auth.token, owner, repo, base, head)
-      return Response.json({
-        ahead_by: compareData.ahead_by,
-        behind_by: compareData.behind_by,
-        status: compareData.status,
-      })
-    }
-
-    const diff = await getDiff(auth.token, owner, repo, { commitHash, base, head })
-    return Response.json({ diff })
+    const compareData = await compareBranches(session.accessToken, owner, repo, base, head)
+    return Response.json({
+      ahead_by: compareData.ahead_by,
+      behind_by: compareData.behind_by,
+      status: compareData.status,
+    })
   } catch (error: unknown) {
-    // Handle GitHub API errors with appropriate status codes
+    console.error("[github/compare] Error:", error)
     if (isGitHubApiError(error)) {
-      // 404 - Branch or commit not found
-      if (error.status === 404) {
-        // For comparison stats requests, return zero ahead
-        if (body.includeStats) {
-          return Response.json({ ahead_by: 0, behind_by: 0, status: "identical" })
-        }
-        return notFound("Branch or commit not found")
-      }
-      // For "no commits between" errors (GitHub returns 404 with specific message),
-      // return empty diff instead of error
+      // For "no commits between" errors, return zero ahead
       if (error.message.includes("No commits") || error.message.includes("nothing to compare")) {
-        if (body.includeStats) {
-          return Response.json({ ahead_by: 0, behind_by: 0, status: "identical" })
-        }
-        return Response.json({ diff: "" })
+        return Response.json({ ahead_by: 0, behind_by: 0, status: "identical" })
       }
-      // Return the actual GitHub error status for other cases
       return Response.json({ error: error.message }, { status: error.status })
     }
-    return internalError(error)
+    const message = error instanceof Error ? error.message : "Unknown error"
+    return Response.json({ error: message }, { status: 500 })
   }
 }

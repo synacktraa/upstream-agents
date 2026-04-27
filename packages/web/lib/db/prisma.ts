@@ -19,14 +19,19 @@ function createPrismaClient() {
   }
 
   // Use pg adapter for local PostgreSQL, Neon adapter for serverless PostgreSQL
-  const isLocalPostgres = connectionString.includes("localhost") || connectionString.includes("127.0.0.1")
+  const isLocalPostgres =
+    connectionString.includes("localhost") ||
+    connectionString.includes("127.0.0.1")
 
   if (isLocalPostgres) {
     const pool = new pg.Pool({ connectionString })
     const adapter = new PrismaPg(pool)
     return new PrismaClient({
       adapter,
-      log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
+      log:
+        process.env.NODE_ENV === "development"
+          ? ["error", "warn"]
+          : ["error"],
     })
   }
 
@@ -34,7 +39,8 @@ function createPrismaClient() {
 
   return new PrismaClient({
     adapter,
-    log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
+    log:
+      process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
   })
 }
 

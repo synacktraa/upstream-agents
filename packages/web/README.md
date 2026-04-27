@@ -1,215 +1,138 @@
-# @upstream/web
+# Simple Chat
 
-A multi-tenant web application that enables users to run AI coding agents (Claude Code, OpenCode, Codex, Gemini, Goose, Pi) in isolated Daytona sandboxes. Features a Slack-like interface for managing AI-powered coding agents across multiple GitHub repositories with real-time streaming output, background execution, and persistent chat history.
+A Next.js chat application for interacting with AI coding agents in isolated Daytona sandboxes. Each chat session is tied to a Git branch, enabling safe code experimentation and collaboration.
 
-<img width="1361" height="749" alt="image" src="https://github.com/user-attachments/assets/301f461c-7a8a-43b3-b26b-c30d3b972dcf" />
+https://github.com/user-attachments/assets/d3a10c97-8a23-4171-a08f-c08179b419d6
 
 ## Features
 
-### Core Capabilities
-- **Multi-Agent Support** - Run Claude Code, OpenCode, or Codex agents with configurable models
-- **GitHub OAuth Login** - Sign in with GitHub, OAuth tokens used for seamless repo access
-- **Isolated Sandboxes** - Each branch gets its own Daytona sandbox environment
-- **Real-time Streaming** - Live agent output via Server-Sent Events (SSE)
-- **Background Execution** - Agent tasks continue even when browser is closed
-- **Persistent Chat History** - Full conversation history with tool calls and content blocks
+- **Multi-Agent Support**: Choose from multiple AI coding agents:
+  - Claude Code
+  - OpenCode
+  - Codex
+  - Gemini
+  - Goose
+  - Pi
 
-### User Experience
-- **Slack-like Interface** - Repository sidebar with branch-based conversations
-- **Multi-tenant Architecture** - User data fully isolated, shared infrastructure
-- **Quota Enforcement** - Configurable concurrent sandbox limits
-- **Encrypted Credentials** - API keys stored AES-encrypted in database
-- **Drag-and-Drop Reordering** - Customize repository order in sidebar
-- **Dark Mode Support** - Theme switching with next-themes
-- **Mobile Responsive** - Full mobile UI with drawer navigation
+- **Sandbox Isolation**: Each chat session runs in an isolated Daytona sandbox environment
 
-### Developer Features
-- **Pull Request Integration** - Create PRs directly from branches
-- **Git Diff Viewer** - Compare branches and view changes
-- **Git History** - Browse commit history per branch
-- **Advanced Git Operations** - Merge, rebase, reset, rename, and delete remote branches
-- **MCP Server Registry** - Browse and connect 3,000+ MCP servers via [Smithery](https://smithery.ai)
-- **Environment Variables** - Per-repository encrypted env vars for sandboxes
-- **Auto-Stop** - Configurable sandbox auto-stop intervals (5-20 minutes)
-- **Safe Push Handling** - Branch checks plus retry and graceful "already up-to-date" handling
+- **Git Integration**: Conversations are tied to Git branches, with optional GitHub repository integration
 
----
+- **Model Selection**: Choose different models for each agent based on your API keys
 
-## Architecture
+- **Dark/Light Theme**: System-aware theming with manual override options
 
-```
-┌─────────────────────┐     ┌─────────────────────┐     ┌──────────────────┐
-│   Browser (React)   │────▶│   Next.js 16 API    │────▶│   Neon Postgres  │
-│   - Shadcn/ui       │◀────│   (Vercel/Node)     │◀────│   (Serverless)   │
-│   - SSE Streaming   │     │   - 34 API routes   │     │   - Prisma ORM   │
-└─────────────────────┘     └──────────┬──────────┘     └──────────────────┘
-                                       │
-                    ┌──────────────────┼──────────────────┐
-                    │                  │                  │
-                    ▼                  ▼                  ▼
-          ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
-          │  Daytona Cloud  │ │   GitHub API    │ │   LLM APIs      │
-          │  (Sandboxes)    │ │   (OAuth)       │ │   - Anthropic   │
-          │  - SDK control  │ │   - Repos/PRs   │ │   - OpenAI      │
-          └────────┬────────┘ └─────────────────┘ └─────────────────┘
-                   │
-                   ▼
-          ┌─────────────────┐         ┌─────────────────┐
-          │  Coding Agents  │────────▶│  Smithery       │
-          │  - Claude Code  │         │  (MCP Registry  │
-          │  - OpenCode     │◀────────│   + Connect)    │
-          │  - Codex        │         └─────────────────┘
-          └─────────────────┘
-```
+## Prerequisites
 
----
-
-## Tech Stack
-
-### Frontend
-- **Framework**: Next.js 16 (App Router, React 19)
-- **UI Library**: Shadcn/ui (50+ Radix UI components)
-- **Styling**: Tailwind CSS 4
-- **Forms**: React Hook Form + Zod validation
-- **Icons**: Lucide React
-- **Charts**: Recharts
-- **Notifications**: Sonner toast notifications
-- **Markdown**: react-markdown for agent output
-
-### Backend
-- **Server**: Next.js API Routes (serverless)
-- **ORM**: Prisma with Neon adapter
-- **Database**: PostgreSQL (Neon serverless)
-- **Authentication**: NextAuth.js (GitHub OAuth)
-- **Encryption**: crypto-js (AES encryption)
-
-### External Services
-- **Sandboxes**: Daytona SDK (@daytonaio/sdk)
-- **Agent Runner**: @upstream/agents
-- **LLM Providers**: Anthropic SDK, OpenAI SDK
-- **MCP Registry**: [Smithery](https://smithery.ai) (server discovery + managed connections)
-
----
+- Node.js 18+
+- A Daytona API key (from [Daytona dashboard](https://www.daytona.io/))
+- PostgreSQL database (local or hosted, e.g., [Neon](https://neon.tech/))
+- API keys for the AI providers you want to use (Anthropic, OpenAI, Google, etc.)
+- GitHub OAuth app (optional, for GitHub repository integration)
 
 ## Setup
 
-### Prerequisites
+1. **Install dependencies**:
 
-- Node.js 18+
-- A Vercel account (for deployment + Neon integration)
-- A GitHub account (for OAuth app)
-- A Daytona API key
-
-### 1. Neon Database
-
-**Option A: Via Vercel (Recommended)**
-1. Go to your Vercel project → **Storage** tab
-2. Click **Create Database** → Select **Neon Postgres**
-3. Vercel auto-adds `DATABASE_URL` and `DATABASE_URL_UNPOOLED` env vars
-
-**Option B: Direct Setup**
-1. Go to [neon.tech](https://neon.tech) → Create project
-2. Copy the connection strings
-3. Add to Vercel env vars:
-   ```
-   DATABASE_URL=postgres://...?sslmode=require
-   DATABASE_URL_UNPOOLED=postgres://...?sslmode=require
+   ```bash
+   npm install
    ```
 
-### 2. GitHub OAuth App
+2. **Configure environment variables**:
 
-1. Go to GitHub → **Settings** → **Developer settings** → **OAuth Apps** → **New OAuth App**
-2. Fill in:
-   - **Application name**: `Upstream Agents`
-   - **Homepage URL**: `https://your-app.vercel.app`
-   - **Authorization callback URL**: `https://your-app.vercel.app/api/auth/callback/github`
-3. Click **Register application**
-4. Copy the **Client ID**
-5. Generate a **Client Secret** and copy it
+   Copy the example environment file and fill in your values:
 
-### 3. Generate Secrets
+   ```bash
+   cp .env.example .env
+   ```
 
-```bash
-# NextAuth secret (32-byte base64)
-openssl rand -base64 32
+   Required variables:
+   - `DAYTONA_API_KEY` - Your Daytona API key
+   - `DATABASE_URL` - PostgreSQL connection string (e.g., `postgresql://user:pass@localhost:5432/simple_chat`)
+   - `ENCRYPTION_KEY` - 32-character secret for encrypting API credentials
+   - `NEXTAUTH_SECRET` - A random secret for NextAuth session encryption
+   - `NEXTAUTH_URL` - Your app URL (default: `http://localhost:4000`)
 
-# Encryption key for API credentials (32-byte hex)
-openssl rand -hex 32
-```
+   Optional (for GitHub integration):
+   - `GITHUB_CLIENT_ID` - GitHub OAuth app client ID
+   - `GITHUB_CLIENT_SECRET` - GitHub OAuth app client secret
 
-### 4. Environment Variables
+3. **Set up the database**:
 
-Add these to Vercel (Settings → Environment Variables):
+   Generate the Prisma client and run migrations:
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `DATABASE_URL` | Neon pooled connection | (auto-set by Vercel) |
-| `DATABASE_URL_UNPOOLED` | Neon direct connection (migrations) | (auto-set by Vercel) |
-| `NEXTAUTH_URL` | Your app's URL | `https://your-app.vercel.app` |
-| `NEXTAUTH_SECRET` | Random secret for NextAuth | (output of `openssl rand -base64 32`) |
-| `GITHUB_CLIENT_ID` | From GitHub OAuth App | `Ov23li...` |
-| `GITHUB_CLIENT_SECRET` | From GitHub OAuth App | `abc123...` |
-| `ENCRYPTION_KEY` | For encrypting API keys | (output of `openssl rand -hex 32`) |
-| `DAYTONA_API_KEY` | Your shared Daytona API key | `dtn_...` |
-| `DAYTONA_API_URL` | Daytona API endpoint | `https://api.daytona.io` |
-| `SMITHERY_API_KEY` | Smithery API key for MCP registry | (from [smithery.ai/account/api-keys](https://smithery.ai/account/api-keys)) |
+   ```bash
+   npx prisma generate
+   npx prisma migrate dev
+   ```
 
-### 5. Deploy
+4. **Start the development server**:
 
-```bash
-# Install dependencies (from monorepo root)
-npm install
+   ```bash
+   npm run dev
+   ```
 
-# Generate Prisma client
-npx prisma generate
+   The app will be available at http://localhost:4000
 
-# Run migrations (uses DATABASE_URL_UNPOOLED)
-npx prisma migrate deploy
+## Scripts
 
-# Build
-npm run build:web
-```
-
-Or push to Vercel — the build command handles Prisma generation and migrations automatically.
-
----
-
-## Development
-
-```bash
-# From monorepo root
-npm run dev          # Start development server
-npm run build:web    # Build for production
-npm run start        # Start production server
-npm run lint         # ESLint check
-```
-
-### Scripts
-
-| Script | Description |
-|--------|-------------|
-| `npm run dev` | Start development server with Prisma generation |
-| `npm run build` | Build for production (runs Prisma generate) |
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start development server on port 4000 |
+| `npm run build` | Build for production |
 | `npm run start` | Start production server |
 | `npm run lint` | Run ESLint |
-| `npm run test` | Run Vitest unit tests |
-| `npm run test:run` | Run tests once |
-| `npm run test:coverage` | Run tests with coverage |
 | `npm run test:e2e` | Run Playwright E2E tests |
+| `npm run test:e2e:ui` | Run Playwright tests with UI |
 
----
+## Architecture
 
-## Deployment
+- **Frontend**: Next.js 16 with React 19, Tailwind CSS 4, and Radix UI primitives
+- **Authentication**: NextAuth.js with GitHub OAuth provider and Prisma adapter
+- **Database**: PostgreSQL with Prisma ORM (supports local and Neon serverless)
+- **Agent SDK**: Uses `background-agents` for agent session management
+- **Sandbox**: Daytona SDK for isolated development environments
+- **State Management**: Server-first with localStorage as read cache for cross-device sync
 
-This package deploys as a Vercel project. See the [monorepo README](../../README.md#deployment) for detailed deployment instructions.
+## Database
 
-Key points:
-- Set **Root Directory** to `packages/web` in Vercel
-- Leave Build & Output overrides off (uses `vercel.json`)
-- Add all environment variables before the first deploy
+The app uses PostgreSQL to store user data, chats, and messages. This enables:
 
----
+- **Cross-device sync**: Your chats are available on any device you sign into
+- **Server-generated IDs**: All entities have server-generated IDs for consistency
+- **Encrypted credentials**: API keys are stored encrypted (AES) in the database
 
-## License
+### Schema
 
-MIT
+- **User**: GitHub OAuth user with settings (JSONB) and encrypted credentials (JSONB)
+- **Chat**: Conversation tied to a repo/branch with sandbox info
+- **Message**: Individual messages with tool calls and content blocks
+
+### Data Flow
+
+1. All writes go through the server first (create chat, send message, update settings)
+2. Server responds with server-generated IDs
+3. Client updates localStorage cache
+4. On page load, client fetches fresh data from server and merges with cache
+5. Device-specific state (current chat, unseen notifications) stays local-only
+
+### Migrations
+
+Run these from the monorepo root:
+
+| Command | What it does |
+|---------|--------------|
+| `npm run prisma:migrate -- --name my_change` | Create + apply a migration |
+| `npm run prisma:status` | Check migration status |
+| `npm run prisma:generate` | Regenerate Prisma client |
+
+**Workflow:**
+
+1. Edit `packages/simple-chat/prisma/schema.prisma`
+2. Run `npm run prisma:migrate -- --name my_change`
+3. Commit the new files in `prisma/migrations/`
+4. Push to git
+
+**After pulling:** Run `npm run prisma:migrate` to apply new migrations.
+
+CI/CD runs `npm run prisma:migrate:deploy` to apply migrations to production.

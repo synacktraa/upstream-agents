@@ -1,87 +1,53 @@
-import { prisma } from "@/lib/db/prisma"
-import { ensureSandboxStarted } from "@/lib/sandbox/sandbox-resume"
-import {
-  requireAuth,
-  isAuthError,
-  badRequest,
-  notFound,
-  getDaytonaApiKey,
-  isDaytonaKeyError,
-  internalError,
-} from "@/lib/shared/api-helpers"
-import {
-  setupTerminal,
-  stopTerminal,
-  getTerminalStatus,
-} from "@upstream/terminal"
+import { Daytona } from "@daytonaio/sdk"
+import { setupTerminal, stopTerminal, getTerminalStatus } from "@upstream/terminal"
 
-// Timeout for terminal setup - 60 seconds
 export const maxDuration = 60
 
 /**
  * POST /api/sandbox/terminal
  *
- * Sets up a WebSocket PTY terminal server in the sandbox.
- * Returns the WebSocket URL for connecting from the browser.
+ * Provisions a WebSocket PTY server inside the sandbox and returns the
+ * signed wss:// URL the browser can connect to.
  *
- * Request body:
- *   - sandboxId: string - The sandbox ID
- *   - action: "setup" | "status" | "stop"
- *
- * Response:
- *   - websocketUrl: string - The WebSocket URL to connect to
- *   - httpsUrl: string - The HTTPS URL for health checks
- *   - status: "running" | "starting" | "stopped" | "error"
+ * Body: { sandboxId: string, action?: "setup" | "status" | "stop" }
  */
 export async function POST(req: Request) {
-  const auth = await requireAuth()
-  if (isAuthError(auth)) return auth
-
-  let body: {
+  const body = (await req.json().catch(() => null)) as {
     sandboxId?: string
     action?: "setup" | "status" | "stop"
-  }
+  } | null
 
-  try {
-    body = await req.json()
-  } catch {
-    return badRequest("Invalid or empty JSON body")
-  }
+  if (!body) return Response.json({ error: "Invalid JSON body" }, { status: 400 })
 
   const { sandboxId, action = "setup" } = body
+  if (!sandboxId) return Response.json({ error: "Missing sandboxId" }, { status: 400 })
 
-  if (!sandboxId) {
-    return badRequest("Missing sandboxId")
+  const daytonaApiKey = process.env.DAYTONA_API_KEY
+  if (!daytonaApiKey) {
+    return Response.json({ error: "Daytona API key not configured" }, { status: 500 })
   }
-
-  console.log(`[terminal] action=${action} sandboxId=${sandboxId}`)
-
-  // Verify ownership
-  const sandboxRecord = await prisma.sandbox.findUnique({
-    where: { sandboxId },
-  })
-
-  if (!sandboxRecord || sandboxRecord.userId !== auth.userId) {
-    return notFound("Sandbox not found")
-  }
-
-  const daytonaApiKey = getDaytonaApiKey()
-  if (isDaytonaKeyError(daytonaApiKey)) return daytonaApiKey
 
   try {
-    const sandbox = await ensureSandboxStarted(daytonaApiKey, sandboxId)
+    const daytona = new Daytona({ apiKey: daytonaApiKey })
+    let sandbox
+    try {
+      sandbox = await daytona.get(sandboxId)
+    } catch {
+      return Response.json({ error: "SANDBOX_NOT_FOUND" }, { status: 410 })
+    }
+    if (sandbox.state !== "started") {
+      await sandbox.start(120)
+    }
 
     switch (action) {
       case "status": {
         const result = await getTerminalStatus(sandbox)
         return Response.json(result)
       }
-
       case "stop": {
         const result = await stopTerminal(sandbox)
         return Response.json(result)
       }
-
       case "setup":
       default: {
         const result = await setupTerminal(sandbox)
@@ -91,8 +57,9 @@ export async function POST(req: Request) {
         return Response.json(result)
       }
     }
-  } catch (error: unknown) {
-    console.error("[terminal] Error:", error)
-    return internalError(error)
+  } catch (error) {
+    console.error("[sandbox/terminal] Error:", error)
+    const message = error instanceof Error ? error.message : "Unknown error"
+    return Response.json({ error: message }, { status: 500 })
   }
 }

@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
-import { GitBranch, FolderGit2, Clock } from "lucide-react"
+import { GitBranch, FolderGit2, Clock, MessageSquare } from "lucide-react"
 import {
   CommandDialog,
   CommandInput,
@@ -11,72 +11,91 @@ import {
   CommandItem,
   CommandShortcut,
 } from "@/components/ui/command"
-import { fuzzyMatch, addRecentItem, getRecentItems, type RecentItem } from "@upstream/common"
-import type { Repo } from "@/lib/shared/types"
+import { addRecentItem, getRecentItems, type RecentItem } from "@upstream/common"
+import type { GitHubRepo, GitHubBranch } from "@/lib/github"
+import { NEW_REPOSITORY } from "@/lib/types"
+
+interface Chat {
+  id: string
+  displayName: string | null
+  repo: string
+}
 
 interface SearchPaletteProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  repos: Repo[]
-  activeRepoId: string | null
-  onSelectRepo: (repoId: string) => void
-  onSelectBranch: (repoId: string, branchId: string) => void
+  repos: GitHubRepo[]
+  currentRepo: string | null // "owner/repo"
+  branches: GitHubBranch[]
+  chats: Chat[]
+  onSelectRepo: (repo: GitHubRepo) => void
+  onSelectBranch: (repo: GitHubRepo, branch: GitHubBranch) => void
+  onSelectChat: (chatId: string) => void
 }
 
 export function SearchPalette({
   open,
   onOpenChange,
   repos,
-  activeRepoId,
+  currentRepo,
+  branches,
+  chats,
   onSelectRepo,
   onSelectBranch,
+  onSelectChat,
 }: SearchPaletteProps) {
   const recentItems = useMemo(() => getRecentItems(), [open])
 
-  const activeRepo = useMemo(
-    () => repos.find((r) => r.id === activeRepoId) ?? null,
-    [repos, activeRepoId]
+  const currentRepoData = useMemo(
+    () => repos.find((r) => `${r.owner.login}/${r.name}` === currentRepo) ?? null,
+    [repos, currentRepo]
   )
 
-  const handleSelectRepo = (repo: Repo) => {
+  const handleSelectRepo = (repo: GitHubRepo) => {
     addRecentItem({
-      id: `repo:${repo.id}`,
+      id: `repo:${repo.owner.login}/${repo.name}`,
       type: "repo",
-      repoOwner: repo.owner,
+      repoOwner: repo.owner.login,
       repoName: repo.name,
     })
-    onSelectRepo(repo.id)
+    onSelectRepo(repo)
     onOpenChange(false)
   }
 
-  const handleSelectBranch = (repo: Repo, branchId: string, branchName: string) => {
+  const handleSelectBranch = (branch: GitHubBranch) => {
+    if (!currentRepoData) return
     addRecentItem({
-      id: `branch:${repo.id}:${branchId}`,
+      id: `branch:${currentRepoData.owner.login}/${currentRepoData.name}:${branch.name}`,
       type: "branch",
-      repoOwner: repo.owner,
-      repoName: repo.name,
-      branchName,
+      repoOwner: currentRepoData.owner.login,
+      repoName: currentRepoData.name,
+      branchName: branch.name,
     })
-    onSelectBranch(repo.id, branchId)
+    onSelectBranch(currentRepoData, branch)
+    onOpenChange(false)
+  }
+
+  const handleSelectChat = (chat: Chat) => {
+    onSelectChat(chat.id)
     onOpenChange(false)
   }
 
   const handleSelectRecent = (item: RecentItem) => {
     if (item.type === "repo") {
       const repo = repos.find(
-        (r) => r.owner === item.repoOwner && r.name === item.repoName
+        (r) => r.owner.login === item.repoOwner && r.name === item.repoName
       )
       if (repo) {
-        onSelectRepo(repo.id)
+        onSelectRepo(repo)
       }
     } else {
       const repo = repos.find(
-        (r) => r.owner === item.repoOwner && r.name === item.repoName
+        (r) => r.owner.login === item.repoOwner && r.name === item.repoName
       )
       if (repo) {
-        const branch = repo.branches.find((b) => b.name === item.branchName)
+        const branch = branches.find((b) => b.name === item.branchName)
         if (branch) {
-          onSelectBranch(repo.id, branch.id)
+          onSelectBranch(repo, branch)
         }
       }
     }
@@ -88,9 +107,9 @@ export function SearchPalette({
       open={open}
       onOpenChange={onOpenChange}
       title="Search"
-      description="Search for repos and branches"
+      description="Search for chats, repos, and branches"
     >
-      <CommandInput placeholder="Search repos and branches..." />
+      <CommandInput placeholder="Search chats, repos, and branches..." />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
 
@@ -115,30 +134,51 @@ export function SearchPalette({
           </CommandGroup>
         )}
 
+        {/* Chats */}
+        {chats.length > 0 && (
+          <CommandGroup heading="Chats">
+            {chats.map((chat) => (
+              <CommandItem
+                key={chat.id}
+                value={`chat:${chat.displayName ?? chat.id}:${chat.repo}`}
+                onSelect={() => handleSelectChat(chat)}
+              >
+                <MessageSquare className="mr-2 h-4 w-4 text-muted-foreground" />
+                <span>
+                  {chat.displayName ?? "Untitled Chat"}
+                  {chat.repo !== NEW_REPOSITORY && (
+                    <span className="text-muted-foreground text-xs ml-2">({chat.repo})</span>
+                  )}
+                </span>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+
         {/* Repositories */}
         <CommandGroup heading="Repositories">
           {repos.map((repo) => (
             <CommandItem
               key={repo.id}
-              value={`repo:${repo.owner}/${repo.name}`}
+              value={`repo:${repo.owner.login}/${repo.name}`}
               onSelect={() => handleSelectRepo(repo)}
             >
               <FolderGit2 className="mr-2 h-4 w-4 text-muted-foreground" />
               <span>
-                {repo.owner}/{repo.name}
+                {repo.owner.login}/{repo.name}
               </span>
             </CommandItem>
           ))}
         </CommandGroup>
 
-        {/* Branches from active repo */}
-        {activeRepo && activeRepo.branches.length > 0 && (
-          <CommandGroup heading={`Branches (${activeRepo.owner}/${activeRepo.name})`}>
-            {activeRepo.branches.map((branch) => (
+        {/* Branches from current repo */}
+        {currentRepoData && branches.length > 0 && (
+          <CommandGroup heading={`Branches (${currentRepoData.owner.login}/${currentRepoData.name})`}>
+            {branches.map((branch) => (
               <CommandItem
-                key={branch.id}
-                value={`branch:${activeRepo.owner}/${activeRepo.name}/${branch.name}`}
-                onSelect={() => handleSelectBranch(activeRepo, branch.id, branch.name)}
+                key={branch.name}
+                value={`branch:${currentRepoData.owner.login}/${currentRepoData.name}/${branch.name}`}
+                onSelect={() => handleSelectBranch(branch)}
               >
                 <GitBranch className="mr-2 h-4 w-4 text-muted-foreground" />
                 <span>{branch.name}</span>

@@ -6,20 +6,52 @@ datasource db {
   provider = "postgresql"
 }
 
+// =============================================================================
+// User - linked to GitHub OAuth
+// =============================================================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String?   @unique
+  emailVerified DateTime?
+  githubId      String?   @unique
+  name          String?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // JSONB for flexible settings storage (no migrations needed for new fields)
+  // { defaultAgent, defaultModel, theme }
+  settings Json?
+
+  // JSONB for encrypted credentials (no migrations needed for new keys)
+  // { anthropicApiKey, anthropicAuthToken, openaiApiKey, opencodeApiKey, geminiApiKey }
+  credentials Json?
+
+  chats    Chat[]
+  accounts Account[]
+  sessions Session[]
+}
+
+// =============================================================================
+// NextAuth.js required tables
+// =============================================================================
+
 model Account {
   id                String  @id @default(cuid())
   userId            String
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String?
-  access_token      String?
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String?
+  id_token          String? @db.Text
   session_state     String?
-  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
 }
@@ -29,43 +61,8 @@ model Session {
   sessionToken String   @unique
   userId       String
   expires      DateTime
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
 
-model User {
-  id            String           @id @default(cuid())
-  name          String?
-  email         String?          @unique
-  emailVerified DateTime?
-  image         String?
-  githubId      String?          @unique
-  githubLogin   String?
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
-  repoOrder     Json?
-  isAdmin       Boolean          @default(false)
-  maxSandboxes  Int?
-  accounts      Account[]
-  repos         Repo[]
-  sandboxes     Sandbox[]
-  sessions      Session[]
-  credentials   UserCredentials?
-  activityLogs  ActivityLog[]
-  ownedTeam     Team?            @relation("TeamOwner")
-  teamMembership TeamMember?
-}
-
-model ActivityLog {
-  id        String   @id @default(cuid())
-  userId    String
-  action    String
-  metadata  Json?
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([action])
-  @@index([createdAt])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model VerificationToken {
@@ -76,165 +73,97 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
-model UserCredentials {
-  id                        String   @id @default(cuid())
-  userId                    String   @unique
-  anthropicApiKey           String?
-  anthropicAuthType         String   @default("api-key")
-  anthropicAuthToken        String?
-  updatedAt                 DateTime @updatedAt
-  sandboxAutoStopInterval   Int      @default(5)
-  openaiApiKey              String?
-  daytonaApiKey             String?
-  opencodeApiKey            String?
-  geminiApiKey              String?
-  squashOnMerge             Boolean  @default(false)
-  prDescriptionMode         String   @default("ai") // "ai" or "commits"
-  user                      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
+// =============================================================================
+// Chat - server-owned resource with server-generated IDs
+// =============================================================================
 
-model Team {
-  id        String       @id @default(cuid())
-  ownerId   String       @unique
-  owner     User         @relation("TeamOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  members   TeamMember[]
-  createdAt DateTime     @default(now())
-}
-
-model TeamMember {
-  id        String   @id @default(cuid())
-  teamId    String
-  userId    String   @unique
-  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-}
-
-model Repo {
-  id            String          @id @default(cuid())
-  userId        String
-  name          String
-  owner         String
-  avatar        String?
-  defaultBranch      String
-  preferredBaseBranch String?
-  createdAt          DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
-  envVars       Json?
-  branches      Branch[]
-  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  mcpServers    RepoMcpServer[]
-
-  @@unique([userId, owner, name])
-}
-
-model RepoMcpServer {
-  id           String    @id @default(cuid())
-  repoId       String
-  slug         String
-  name         String
-  url          String
-  iconUrl      String?
-  accessToken  String?
-  refreshToken String?
-  tokenExpiry  DateTime?
-  status       String    @default("pending")
-  lastError    String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  clientId     String?
-  repo         Repo      @relation(fields: [repoId], references: [id], onDelete: Cascade)
-
-  @@unique([repoId, slug])
-  @@index([repoId])
-}
-
-model Branch {
+model Chat {
   id     String @id @default(cuid())
-  repoId String
-  repo   Repo   @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  userId String
 
-  name        String
-  baseBranch  String?
-  startCommit String?
-  status      String  @default("idle") // "idle" | "running" | "creating" | "stopped" | "error"
-  prUrl       String?
-  draftPrompt String? @db.Text // Persisted draft input for chat continuity
+  // Repo config (immutable after first message)
+  repo       String // "owner/repo" or "__new__"
+  baseBranch String @default("main")
 
-  // Agent configuration
-  agent String @default("claude-code") // "claude-code" | "opencode" | "codex" | "eliza" | "gemini" | "goose" | "pi"
-  model String? // Model selection for the agent (e.g., "sonnet", "gpt-4o")
+  // Sandbox-related fields (synced cloud resources)
+  branch              String? // Git branch name created for this chat
+  sandboxId           String? // Daytona sandbox ID
+  sessionId           String? // Agent session ID for conversation continuity
+  previewUrlPattern   String? // URL pattern for dev server previews
+  backgroundSessionId String? // Active execution ID (for recovery)
 
-  // Commit tracking - HEAD at start of last execution, used for detecting new commits
-  lastShownCommitHash String?
+  // Agent config
+  agent String  @default("opencode")
+  model String?
 
-  // Sync flag - set when remote is updated (e.g., merge into this branch) and sandbox needs to pull
+  // Display
+  displayName String?
+  status      String  @default("pending") // pending, creating, ready, running, error
+
+  // Branching support
+  parentChatId String?
+  parentChat   Chat?   @relation("ChatBranches", fields: [parentChatId], references: [id], onDelete: SetNull)
+  childChats   Chat[]  @relation("ChatBranches")
+
+  // Timestamps
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  lastActiveAt DateTime @default(now())
+
+  // Sync flag for git pull on next execution
   needsSync Boolean @default(false)
 
-  sandbox  Sandbox?
+  // Relations
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages Message[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([repoId, name])
+  @@index([userId, updatedAt])
+  @@index([userId, lastActiveAt])
 }
 
-model Sandbox {
-  id                String   @id @default(cuid())
-  sandboxId         String   @unique
-  sandboxName       String
-  userId            String
-  branchId          String   @unique
-  contextId         String?
-  sessionId         String?
-  previewUrlPattern String?
-  status            String   @default("creating")
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  lastActiveAt      DateTime @default(now())
-  sessionAgent      String?
-  branch            Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
+// =============================================================================
+// Message - server-generated IDs, ordered by timestamp
+// =============================================================================
 
 model Message {
-  id            String          @id @default(cuid())
-  branchId      String
-  role          String
-  content       String
-  toolCalls     Json?
-  timestamp     String?
-  commitHash    String?
-  commitMessage String?
-  createdAt     DateTime        @default(now())
-  contentBlocks Json?
-  /// Ephemeral push-retry UI payload (same shape as PushErrorInfo); survives reload when set
-  pushError     Json?
-  /// Failed agent execute (ExecuteErrorInfo); survives reload when set
-  executeError  Json?
-  /// model | system | commit — only meaningful when role is assistant
-  assistantSource String?
-  agentId       String?
-  execution     AgentExecution?
-  branch        Branch          @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  chatId String
 
-  @@index([branchId, createdAt])
+  role      String // "user" | "assistant"
+  content   String  @db.Text
+  timestamp BigInt // Unix timestamp in milliseconds
+
+  // Optional fields
+  messageType String? // "chat" | "git-operation"
+  isError     Boolean @default(false)
+
+  // JSONB for complex nested data (avoids separate tables)
+  toolCalls     Json? // Array<{ tool, summary, fullSummary?, output? }>
+  contentBlocks Json? // Array<ContentBlock>
+  uploadedFiles Json? // Array<string> - file paths
+
+  // Git operation message fields
+  linkBranch String?
+
+  createdAt DateTime @default(now())
+
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@index([chatId, timestamp])
+  @@index([chatId, id])
 }
 
-model AgentExecution {
-  id                   String    @id @default(cuid())
-  messageId            String    @unique
-  sandboxId            String
-  executionId          String?   @unique
-  status               String    @default("running")
-  startedAt            DateTime  @default(now())
-  completedAt          DateTime?
-  latestSnapshot       Json?
-  accumulatedEvents    Json?
-  lastSnapshotPolledAt DateTime?
-  snapshotVersion      Int       @default(0) // Monotonic counter for optimistic concurrency
-  message              Message   @relation(fields: [messageId], references: [id], onDelete: Cascade)
+// =============================================================================
+// CcAuthInfo - kv blobs managed by ccauth + /api/cron/refresh-claude-creds
+// =============================================================================
+// Two well-known rows:
+//   id="claude-cookies":     { value: "<claude.ai cookies JSON>" }
+//   id="claude-credentials": { value: '{"claudeAiOauth":{...}}' }
+// Stored as text (not JSONB) — we hand the raw string to the agent's
+// CLAUDE_CODE_CREDENTIALS env var without re-serializing.
 
-  @@index([sandboxId, status])
+model CcAuthInfo {
+  id        String   @id
+  value     String   @db.Text
+  updatedAt DateTime @updatedAt
 }

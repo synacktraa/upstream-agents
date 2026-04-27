@@ -2,5 +2,11 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "npm run build",
   "outputDirectory": ".next",
-  "ignoreCommand": "bash ../../scripts/vercel-ignore.sh web"
+  "ignoreCommand": "bash ../../scripts/vercel-ignore.sh web",
+  "crons": [
+    {
+      "path": "/api/cron/refresh-claude-creds",
+      "schedule": "0 * * * *"
+    }
+  ]
 }
