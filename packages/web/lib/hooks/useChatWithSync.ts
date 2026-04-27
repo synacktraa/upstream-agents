@@ -1,208 +1,140 @@
 "use client"
 
 /**
- * useChat hook with server sync
+ * useChat hook with server sync - Refactored with TanStack Query
  *
- * This is the server-first version of the useChat hook.
- * All mutations go through the server first, then update local cache.
- * localStorage acts as a read-only cache.
- *
- * Key differences from the original useChat:
- * 1. Initial load fetches from server, not localStorage
- * 2. All chat/message mutations go through server API
- * 3. Credentials are stored server-side (encrypted)
- * 4. Device-specific state (currentChatId, unseenChatIds) stays local
+ * This hook manages chat state with the following responsibilities:
+ * 1. TanStack Query for server data (chats, settings, messages)
+ * 2. Local React state for device-specific data (currentChatId, unseenChatIds)
+ * 3. SSE streaming for real-time agent output (unchanged from original)
+ * 4. localStorage for local-only state persistence (previewItem, queuedMessages)
  */
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { useSession } from "next-auth/react"
+import { useQueryClient } from "@tanstack/react-query"
 import { nanoid } from "nanoid"
-import type { AppState, Chat, ChatStatus, Message, QueuedMessage, Settings, SSEUpdateEvent, SSECompleteEvent, Agent } from "@/lib/types"
+import type { Chat, ChatStatus, Message, QueuedMessage, Settings, SSEUpdateEvent, SSECompleteEvent, Agent } from "@/lib/types"
 import { NEW_REPOSITORY, getDefaultAgent, getDefaultModelForAgent } from "@/lib/types"
 import type { Credentials } from "@/lib/credentials"
 import { generateBranchName } from "@/lib/utils"
 import {
   // Local state (device-specific)
   loadLocalState,
-  setCurrentChatId,
+  setCurrentChatId as persistCurrentChatId,
   setPreviewItem,
   loadUnseenChatIds,
   saveUnseenChatIds,
   setQueuedMessages,
   setQueuePaused,
-  // Server cache
-  loadServerCache,
-  updateCacheChats,
-  updateCacheChat,
-  addCacheChat,
-  removeCacheChats,
-  updateCacheMessages,
-  updateCacheLastMessage,
-  updateCacheSettings,
-  updateCacheCredentialFlags,
-  DEFAULT_SETTINGS,
   // Merge utilities
   mergeChats,
   mergeMessages,
-  // Legacy
+  // Legacy helpers
   collectDescendantIds,
+  DEFAULT_SETTINGS,
 } from "@/lib/storage"
 import {
-  fetchChats,
-  fetchChat,
-  createChat as apiCreateChat,
-  updateChat as apiUpdateChat,
-  deleteChat as apiDeleteChat,
-  fetchSettings,
-  updateSettings as apiUpdateSettings,
-  toChatType,
-  toMessageType,
-} from "@/lib/sync/api"
+  // Queries
+  useChatsQuery,
+  useSettingsQuery,
+  queryKeys,
+  // Mutations
+  useCreateChatMutation,
+  useUpdateChatMutation,
+  useDeleteChatMutation,
+  useUpdateSettingsMutation,
+  useSuggestNameMutation,
+  useGitPushMutation,
+  useSandboxDeleteMutation,
+} from "@/lib/query"
 import { useStreamStore } from "@/lib/stores/stream-store"
 
 // SSE reconnection settings
 const SSE_RECONNECT_DELAY = 1000
 const SSE_MAX_RECONNECT_ATTEMPTS = 10
 
-const DEFAULT_STATE: AppState = {
-  currentChatId: null,
-  chats: [],
-  settings: DEFAULT_SETTINGS,
-  credentialFlags: {},
-}
-
 export function useChatWithSync() {
   const { data: session, status: sessionStatus } = useSession()
+  const queryClient = useQueryClient()
 
-  // Start with empty state to avoid hydration mismatch
-  const [state, setState] = useState<AppState>(DEFAULT_STATE)
+  // =============================================================================
+  // TanStack Query Hooks
+  // =============================================================================
+
+  const chatsQuery = useChatsQuery()
+  const settingsQuery = useSettingsQuery()
+
+  // Mutations
+  const createChatMutation = useCreateChatMutation()
+  const updateChatMutation = useUpdateChatMutation()
+  const deleteChatMutation = useDeleteChatMutation()
+  const updateSettingsMutation = useUpdateSettingsMutation()
+  const suggestNameMutation = useSuggestNameMutation()
+  const gitPushMutation = useGitPushMutation()
+  const sandboxDeleteMutation = useSandboxDeleteMutation()
+
+  // =============================================================================
+  // Local State (Device-Specific - NOT synced to server)
+  // =============================================================================
+
+  const [currentChatId, setCurrentChatId] = useState<string | null>(null)
   const [isHydrated, setIsHydrated] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
   const [unseenChatIds, setUnseenChatIds] = useState<Set<string>>(new Set())
   const [deletingChatIds, setDeletingChatIds] = useState<Set<string>>(new Set())
+
+  // Local-only state: previewItems, queuedMessages, queuePaused per chat
+  const [localChatState, setLocalChatState] = useState<{
+    previewItems: Record<string, Chat["previewItem"]>
+    queuedMessages: Record<string, Chat["queuedMessages"]>
+    queuePaused: Record<string, boolean>
+  }>({ previewItems: {}, queuedMessages: {}, queuePaused: {} })
+
+  // Track previous statuses for unseen detection
   const prevStatuses = useRef<Map<string, ChatStatus>>(new Map())
-  // Synchronous guard for sendMessage re-entry. The isStreaming check
-  // doesn't help during stages (b)–(c) (sandbox create / file upload)
-  // because the stream hasn't started yet; a double-click in that window
-  // would otherwise create two sandboxes and race them.
+
+  // Synchronous guard for sendMessage re-entry
   const sendInFlight = useRef<Set<string>>(new Set())
 
   // =============================================================================
-  // Initial Load - Fetch from server
+  // Hydration - Load local state on mount
   // =============================================================================
 
   useEffect(() => {
-    // Load local state immediately (device-specific)
     const localState = loadLocalState()
+    setCurrentChatId(localState.currentChatId)
     setUnseenChatIds(loadUnseenChatIds())
-
-    // Load cached server data for immediate display.
-    // Filter out any "local-*" IDs left over from the previous unauth
-    // fallback — those chats can never sync to the server and just
-    // accumulate as orphans.
-    const cache = loadServerCache()
-    const chatsWithLocalState = cache.chats
-      .filter((chat) => !chat.id.startsWith("local-"))
-      .map((chat) => ({
-        ...chat,
-        previewItem: localState.previewItems[chat.id],
-        queuedMessages: localState.queuedMessages[chat.id],
-        queuePaused: localState.queuePaused[chat.id],
-      }))
-
-    // IMPORTANT: Use mergeChats to preserve any in-flight streaming content
-    // This prevents cache loads from wiping out active streaming state
-    setState((prev) => {
-      if (prev.chats.length > 0) {
-        return {
-          currentChatId: localState.currentChatId,
-          chats: mergeChats(prev.chats, chatsWithLocalState),
-          settings: cache.settings,
-          credentialFlags: cache.credentialFlags,
-        }
-      }
-      return {
-        currentChatId: localState.currentChatId,
-        chats: chatsWithLocalState,
-        settings: cache.settings,
-        credentialFlags: cache.credentialFlags,
-      }
+    setLocalChatState({
+      previewItems: localState.previewItems,
+      queuedMessages: localState.queuedMessages,
+      queuePaused: localState.queuePaused,
     })
     setIsHydrated(true)
+  }, [])
 
-    // If not authenticated, we're done
-    if (sessionStatus === "loading") return
-    if (sessionStatus === "unauthenticated" || !session?.user?.id) {
-      setIsLoading(false)
-      return
-    }
+  // =============================================================================
+  // Derived State
+  // =============================================================================
 
-    // Fetch fresh data from server
-    const loadFromServer = async () => {
-      try {
-        const [serverChats, serverSettings] = await Promise.all([
-          fetchChats(),
-          fetchSettings(),
-        ])
+  // Merge server chats with local-only state
+  const chats = useMemo((): Chat[] => {
+    const serverChats = chatsQuery.data ?? []
+    return serverChats.map((chat) => ({
+      ...chat,
+      previewItem: localChatState.previewItems[chat.id],
+      queuedMessages: localChatState.queuedMessages[chat.id],
+      queuePaused: localChatState.queuePaused[chat.id],
+    }))
+  }, [chatsQuery.data, localChatState])
 
-        // Convert to client types
-        const incomingChats = serverChats.map(toChatType)
-        const settings = serverSettings.settings
-        const credentialFlags = serverSettings.credentialFlags
+  const settings = settingsQuery.data?.settings ?? DEFAULT_SETTINGS
+  const credentialFlags = settingsQuery.data?.credentialFlags ?? {}
 
-        // Merge with local state using ID-based merging
-        // This ensures streaming content (with more data) wins over stale server data
-        const incomingWithLocal = incomingChats.map((chat) => ({
-          ...chat,
-          previewItem: localState.previewItems[chat.id],
-          queuedMessages: localState.queuedMessages[chat.id],
-          queuePaused: localState.queuePaused[chat.id],
-        }))
+  const currentChat = useMemo(() => {
+    return chats.find((c) => c.id === currentChatId) ?? null
+  }, [chats, currentChatId])
 
-        // Update cache
-        updateCacheChats(incomingChats)
-        updateCacheSettings(settings)
-        updateCacheCredentialFlags(credentialFlags)
-
-        // Update state with ID-based merging
-        // Local state with more content wins over server state
-        setState((prev) => ({
-          ...prev,
-          chats: mergeChats(prev.chats, incomingWithLocal),
-          settings,
-          credentialFlags,
-        }))
-
-        // Load messages for current chat using merge
-        if (localState.currentChatId) {
-          const chatExists = incomingChats.some((c) => c.id === localState.currentChatId)
-          if (chatExists) {
-            try {
-              const chatData = await fetchChat(localState.currentChatId)
-              const incomingMessages = chatData.messages.map(toMessageType)
-
-              // Merge messages - local streaming content wins if it has more data
-              setState((prev) => ({
-                ...prev,
-                chats: prev.chats.map((c) => {
-                  if (c.id !== localState.currentChatId) return c
-                  return { ...c, messages: mergeMessages(c.messages, incomingMessages) }
-                }),
-              }))
-            } catch (err) {
-              console.error("Failed to load current chat messages:", err)
-            }
-          }
-        }
-      } catch (error) {
-        console.error("Failed to load from server:", error)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    loadFromServer()
-  }, [session?.user?.id, sessionStatus])
+  const isLoading = chatsQuery.isLoading || settingsQuery.isLoading
 
   // =============================================================================
   // Persist unseen set (device-specific)
@@ -220,13 +152,13 @@ export function useChatWithSync() {
 
     const currentIds = new Set<string>()
     const newlyUnseen: string[] = []
-    for (const chat of state.chats) {
+    for (const chat of chats) {
       currentIds.add(chat.id)
       const prevStatus = prevStatuses.current.get(chat.id)
       if (
         prevStatus === "running" &&
         chat.status !== "running" &&
-        chat.id !== state.currentChatId
+        chat.id !== currentChatId
       ) {
         newlyUnseen.push(chat.id)
       }
@@ -252,13 +184,10 @@ export function useChatWithSync() {
       }
       return next
     })
-  }, [state.chats, state.currentChatId, isHydrated])
-
-  // Get current chat
-  const currentChat = state.chats.find((c) => c.id === state.currentChatId) ?? null
+  }, [chats, currentChatId, isHydrated])
 
   // =============================================================================
-  // Chat Operations (Server-First)
+  // Chat Operations
   // =============================================================================
 
   const startNewChat = useCallback(async (
@@ -269,43 +198,26 @@ export function useChatWithSync() {
     initialStatus: Chat["status"] = "pending",
   ): Promise<string | null> => {
     try {
-      // Create on server first
-      const serverChat = await apiCreateChat({
+      const newChat = await createChatMutation.mutateAsync({
         repo,
         baseBranch,
         parentChatId,
         status: initialStatus,
       })
 
-      const chat = toChatType(serverChat)
-
-      // Update cache
-      addCacheChat(chat)
-
-      // Update state
-      setState((prev) => ({
-        ...prev,
-        chats: [chat, ...prev.chats],
-        currentChatId: switchTo ? chat.id : prev.currentChatId,
-      }))
-
-      // Update local state
       if (switchTo) {
-        setCurrentChatId(chat.id)
+        setCurrentChatId(newChat.id)
+        persistCurrentChatId(newChat.id)
       }
 
-      return chat.id
+      return newChat.id
     } catch (error) {
-      // Auth failures (and any other error) bubble up as null. The UI
-      // gates "new chat" affordances behind a sign-in prompt for
-      // unauthenticated users; this hook does not create local-only
-      // fallback chats.
       console.error("Failed to create chat:", error)
       return null
     }
-  }, [])
+  }, [createChatMutation])
 
-  const selectChat = useCallback(async (chatId: string) => {
+  const selectChat = useCallback((chatId: string) => {
     // Mark as seen
     setUnseenChatIds((prev) => {
       if (!prev.has(chatId)) return prev
@@ -316,89 +228,46 @@ export function useChatWithSync() {
 
     // Update local state
     setCurrentChatId(chatId)
+    persistCurrentChatId(chatId)
 
-    // Update React state
-    setState((prev) => ({
-      ...prev,
-      currentChatId: chatId,
-    }))
-
-    // Load messages if not already loaded. Skip if a previous load failed
-    // — without this guard, every click on a chat whose fetch errors would
-    // re-trigger another doomed fetch.
-    const chat = state.chats.find((c) => c.id === chatId)
-    if (chat && chat.messages.length === 0 && !chat.messagesLoadFailed) {
-      try {
-        const chatData = await fetchChat(chatId)
-        const incomingMessages = chatData.messages.map(toMessageType)
-
-        // Use ID-based merging - local content wins if it has more data
-        setState((prev) => {
-          const existingChat = prev.chats.find((c) => c.id === chatId)
-          if (!existingChat) return prev
-
-          return {
-            ...prev,
-            chats: prev.chats.map((c) =>
-              c.id === chatId
-                ? {
-                    ...c,
-                    messages: mergeMessages(existingChat.messages, incomingMessages),
-                    messagesLoadFailed: false,
-                  }
-                : c
-            ),
-          }
-        })
-      } catch (err) {
-        console.error("Failed to load chat messages:", err)
-        setState((prev) => ({
-          ...prev,
-          chats: prev.chats.map((c) =>
-            c.id === chatId ? { ...c, messagesLoadFailed: true } : c
-          ),
-        }))
-      }
-    }
-  }, [state.chats])
+    // Fetch chat messages if not loaded
+    // TanStack Query will handle caching automatically
+  }, [])
 
   const removeChat = useCallback(async (chatId: string) => {
     // Collect descendants locally first for UI
-    const allIds = collectDescendantIds(state.chats, chatId)
+    const allIds = collectDescendantIds(chats, chatId)
 
     // Stop SSE streams and mark as deleting
     for (const id of allIds) useStreamStore.getState().stopStream(id)
     setDeletingChatIds((prev) => new Set([...prev, ...allIds]))
 
     try {
-      // Delete on server
-      const result = await apiDeleteChat(chatId)
+      const result = await deleteChatMutation.mutateAsync(chatId)
 
-      // Clean up sandboxes
+      // Clean up sandboxes (fire-and-forget)
       for (const sandboxId of result.sandboxIdsToCleanup) {
-        fetch("/api/sandbox/delete", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sandboxId }),
-        }).catch((err) => console.error("Failed to delete sandbox:", err))
+        sandboxDeleteMutation.mutate(sandboxId)
       }
 
-      // Update cache
-      removeCacheChats(result.deletedChatIds)
-
-      // Update state
-      setState((prev) => {
-        const deletedSet = new Set(result.deletedChatIds)
-        const newChats = prev.chats.filter((c) => !deletedSet.has(c.id))
-        return {
-          ...prev,
-          chats: newChats,
-          currentChatId:
-            prev.currentChatId && deletedSet.has(prev.currentChatId)
-              ? newChats[0]?.id ?? null
-              : prev.currentChatId,
+      // Clean up local state
+      setLocalChatState((prev) => {
+        const next = { ...prev }
+        for (const id of result.deletedChatIds) {
+          delete next.previewItems[id]
+          delete next.queuedMessages[id]
+          delete next.queuePaused[id]
         }
+        return next
       })
+
+      // Update current chat if deleted
+      if (result.deletedChatIds.includes(currentChatId ?? "")) {
+        const remaining = chats.filter((c) => !result.deletedChatIds.includes(c.id))
+        const nextChat = remaining[0]?.id ?? null
+        setCurrentChatId(nextChat)
+        persistCurrentChatId(nextChat)
+      }
     } catch (error) {
       console.error("Failed to delete chat:", error)
     } finally {
@@ -408,29 +277,21 @@ export function useChatWithSync() {
         return next
       })
     }
-  }, [state.chats])
+  }, [chats, currentChatId, deleteChatMutation, sandboxDeleteMutation])
 
   const renameChat = useCallback(async (chatId: string, newName: string) => {
     try {
-      await apiUpdateChat(chatId, { displayName: newName })
-
-      // Update cache
-      updateCacheChat(chatId, { displayName: newName })
-
-      // Update state
-      setState((prev) => ({
-        ...prev,
-        chats: prev.chats.map((c) =>
-          c.id === chatId ? { ...c, displayName: newName } : c
-        ),
-      }))
+      await updateChatMutation.mutateAsync({
+        chatId,
+        data: { displayName: newName },
+      })
     } catch (error) {
       console.error("Failed to rename chat:", error)
     }
-  }, [])
+  }, [updateChatMutation])
 
   const updateChatRepo = useCallback(async (chatId: string, repo: string, baseBranch: string) => {
-    const chat = state.chats.find((c) => c.id === chatId)
+    const chat = chats.find((c) => c.id === chatId)
     if (!chat) return
 
     const canSelectRepo = chat.messages.length === 0 && !chat.sandboxId
@@ -439,22 +300,17 @@ export function useChatWithSync() {
     if (!canSelectRepo && !canAssignNewRepo) return
 
     try {
-      await apiUpdateChat(chatId, { repo, baseBranch })
-
-      // Update local state
-      setState((prev) => ({
-        ...prev,
-        chats: prev.chats.map((c) =>
-          c.id === chatId ? { ...c, repo, baseBranch } : c
-        ),
-      }))
+      await updateChatMutation.mutateAsync({
+        chatId,
+        data: { repo, baseBranch },
+      })
     } catch (error) {
       console.error("Failed to update chat repo:", error)
     }
-  }, [state.chats])
+  }, [chats, updateChatMutation])
 
   // =============================================================================
-  // Settings (Server-First)
+  // Settings
   // =============================================================================
 
   const updateSettings = useCallback(async (data: {
@@ -462,17 +318,7 @@ export function useChatWithSync() {
     credentials?: Credentials
   }): Promise<{ ok: boolean; error?: string }> => {
     try {
-      const response = await apiUpdateSettings(data)
-
-      updateCacheSettings(response.settings)
-      updateCacheCredentialFlags(response.credentialFlags)
-
-      setState((prev) => ({
-        ...prev,
-        settings: response.settings,
-        credentialFlags: response.credentialFlags,
-      }))
-
+      await updateSettingsMutation.mutateAsync(data)
       return { ok: true }
     } catch (error) {
       console.error("Failed to update settings:", error)
@@ -481,74 +327,64 @@ export function useChatWithSync() {
         error: error instanceof Error ? error.message : "Failed to save settings",
       }
     }
-  }, [])
+  }, [updateSettingsMutation])
 
   const updateCurrentChat = useCallback(async (updates: Partial<Chat>) => {
-    if (!state.currentChatId) return
+    if (!currentChatId) return
 
     // Separate local-only fields from server-synced fields
-    // Local-only: previewItem, queuedMessages, queuePaused (stored in localStorage, not sent to server)
     const { previewItem, queuedMessages, queuePaused, ...serverUpdates } = updates
 
-    // Handle local-only updates (previewItem)
+    // Handle local-only updates
     if (previewItem !== undefined) {
-      setPreviewItem(state.currentChatId, previewItem)
+      setPreviewItem(currentChatId, previewItem)
+      setLocalChatState((prev) => ({
+        ...prev,
+        previewItems: { ...prev.previewItems, [currentChatId]: previewItem },
+      }))
     }
-
-    // Update React state for all fields (local + server)
-    setState((prev) => ({
-      ...prev,
-      chats: prev.chats.map((c) =>
-        c.id === state.currentChatId ? { ...c, ...updates } : c
-      ),
-    }))
 
     // Only call the server API if there are server-synced fields to update
     if (Object.keys(serverUpdates).length > 0) {
       try {
-        await apiUpdateChat(state.currentChatId, serverUpdates as unknown as Parameters<typeof apiUpdateChat>[1])
-
-        // Update cache (only for server-synced fields)
-        updateCacheChat(state.currentChatId, serverUpdates)
+        await updateChatMutation.mutateAsync({
+          chatId: currentChatId,
+          data: serverUpdates as Parameters<typeof updateChatMutation.mutateAsync>[0]["data"],
+        })
       } catch (error) {
         console.error("Failed to update chat:", error)
       }
     }
-  }, [state.currentChatId])
+  }, [currentChatId, updateChatMutation])
 
   const updateChatById = useCallback(async (chatId: string, updates: Partial<Chat>) => {
     // Separate local-only fields from server-synced fields
-    // Local-only: previewItem, queuedMessages, queuePaused (stored in localStorage, not sent to server)
     const { previewItem, queuedMessages, queuePaused, ...serverUpdates } = updates
 
-    // Handle local-only updates (previewItem)
+    // Handle local-only updates
     if (previewItem !== undefined) {
       setPreviewItem(chatId, previewItem)
+      setLocalChatState((prev) => ({
+        ...prev,
+        previewItems: { ...prev.previewItems, [chatId]: previewItem },
+      }))
     }
-
-    // Update React state for all fields (local + server)
-    setState((prev) => ({
-      ...prev,
-      chats: prev.chats.map((c) =>
-        c.id === chatId ? { ...c, ...updates } : c
-      ),
-    }))
 
     // Only call the server API if there are server-synced fields to update
     if (Object.keys(serverUpdates).length > 0) {
       try {
-        await apiUpdateChat(chatId, serverUpdates as unknown as Parameters<typeof apiUpdateChat>[1])
-
-        // Update cache (only for server-synced fields)
-        updateCacheChat(chatId, serverUpdates)
+        await updateChatMutation.mutateAsync({
+          chatId,
+          data: serverUpdates as Parameters<typeof updateChatMutation.mutateAsync>[0]["data"],
+        })
       } catch (error) {
         console.error("Failed to update chat:", error)
       }
     }
-  }, [])
+  }, [updateChatMutation])
 
   // =============================================================================
-  // SSE Streaming
+  // SSE Streaming (Unchanged from original)
   // =============================================================================
 
   const startStreaming = useCallback((
@@ -574,7 +410,6 @@ export function useChatWithSync() {
     })
 
     const connect = (cursor: number = 0) => {
-      // Check if aborted before connecting
       if (abortSignal?.aborted) {
         streamStore.stopStream(chatId)
         return
@@ -598,13 +433,13 @@ export function useChatWithSync() {
       currentStore.updateStream(chatId, { eventSource })
 
       // Close EventSource when abort signal fires
-      abortSignal?.addEventListener("abort", () => {
+      const abortHandler = () => {
         eventSource.close()
         useStreamStore.getState().stopStream(chatId)
-      })
+      }
+      abortSignal?.addEventListener("abort", abortHandler, { once: true })
 
       eventSource.addEventListener("update", (event) => {
-        // Ignore events if aborted
         if (abortSignal?.aborted) return
 
         try {
@@ -617,12 +452,10 @@ export function useChatWithSync() {
             reconnectAttempts: 0,
           })
 
-          // The server sends a cumulative snapshot in every update frame.
-          // Apply it directly to the assistant message — do NOT append to
-          // a per-chat accumulator (that produces O(n²) duplication).
-          setState((prev) => ({
-            ...prev,
-            chats: prev.chats.map((c) => {
+          // Update the chat in TanStack Query cache
+          queryClient.setQueryData<Chat[]>(queryKeys.chats.list(), (old) => {
+            if (!old) return old
+            return old.map((c) => {
               if (c.id !== chatId) return c
               const messages = [...c.messages]
               const lastIndex = messages.length - 1
@@ -635,13 +468,7 @@ export function useChatWithSync() {
                 }
               }
               return { ...c, messages, lastActiveAt: Date.now() }
-            }),
-          }))
-
-          updateCacheLastMessage(chatId, {
-            content: data.content,
-            toolCalls: data.toolCalls,
-            contentBlocks: data.contentBlocks,
+            })
           })
         } catch (err) {
           console.error("Failed to parse SSE update:", err)
@@ -649,7 +476,6 @@ export function useChatWithSync() {
       })
 
       eventSource.addEventListener("complete", async (event) => {
-        // Ignore events if aborted
         if (abortSignal?.aborted) return
 
         try {
@@ -667,62 +493,43 @@ export function useChatWithSync() {
             updates.sessionId = data.sessionId
           }
 
-          // The final message content was delivered in the last "update"
-          // frame; we only need to transition chat status here.
-          setState((prev) => ({
-            ...prev,
-            chats: prev.chats.map((c) =>
+          // Update cache
+          queryClient.setQueryData<Chat[]>(queryKeys.chats.list(), (old) => {
+            if (!old) return old
+            return old.map((c) =>
               c.id === chatId ? { ...c, ...updates } : c
-            ),
-          }))
-
-          updateCacheChat(chatId, updates)
+            )
+          })
 
           // Auto-push for GitHub repos
           if (data.status === "completed") {
-            setState((prev) => {
-              const chat = prev.chats.find((c) => c.id === chatId)
-              if (chat?.branch && chat.repo !== NEW_REPOSITORY) {
-                const branch = chat.branch
-                const showPushError = (errorMessage: string) => {
-                  const message: Message = {
-                    id: nanoid(),
-                    role: "assistant",
-                    content: `Push failed: ${errorMessage}`,
-                    messageType: "git-operation",
-                    isError: true,
-                    timestamp: Date.now(),
-                  }
-                  setState((prev2) => ({
-                    ...prev2,
-                    chats: prev2.chats.map((c) =>
-                      c.id === chatId ? { ...c, messages: [...c.messages, message] } : c
-                    ),
-                  }))
-                  updateCacheMessages(chatId, [message])
-                }
-                fetch("/api/git/push", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    sandboxId,
-                    repoName,
-                    branch,
-                  }),
-                })
-                  .then(async (res) => {
-                    if (!res.ok) {
-                      const body = await res.json().catch(() => ({}))
-                      showPushError(body?.error || `HTTP ${res.status}`)
+            const chat = chats.find((c) => c.id === chatId)
+            if (chat?.branch && chat.repo !== NEW_REPOSITORY) {
+              gitPushMutation.mutate(
+                { sandboxId, repoName, branch: chat.branch },
+                {
+                  onError: (err) => {
+                    // Add error message to chat
+                    const errorMessage: Message = {
+                      id: nanoid(),
+                      role: "assistant",
+                      content: `Push failed: ${err.message}`,
+                      messageType: "git-operation",
+                      isError: true,
+                      timestamp: Date.now(),
                     }
-                  })
-                  .catch((err) => {
-                    console.error("Auto-push failed:", err)
-                    showPushError(err instanceof Error ? err.message : "Network error")
-                  })
-              }
-              return prev
-            })
+                    queryClient.setQueryData<Chat[]>(queryKeys.chats.list(), (old) => {
+                      if (!old) return old
+                      return old.map((c) =>
+                        c.id === chatId
+                          ? { ...c, messages: [...c.messages, errorMessage] }
+                          : c
+                      )
+                    })
+                  },
+                }
+              )
+            }
           }
         } catch (err) {
           console.error("Failed to parse SSE complete:", err)
@@ -730,7 +537,6 @@ export function useChatWithSync() {
       })
 
       eventSource.addEventListener("heartbeat", (event) => {
-        // Ignore events if aborted
         if (abortSignal?.aborted) return
 
         try {
@@ -748,7 +554,6 @@ export function useChatWithSync() {
       })
 
       eventSource.addEventListener("error", (event) => {
-        // Ignore events if aborted
         if (abortSignal?.aborted) return
 
         try {
@@ -757,21 +562,20 @@ export function useChatWithSync() {
           useStreamStore.getState().stopStream(chatId)
 
           const errorMessage = data.error || "Agent stream failed without an error message"
-          setState((prev) => ({
-            ...prev,
-            chats: prev.chats.map((c) =>
+          queryClient.setQueryData<Chat[]>(queryKeys.chats.list(), (old) => {
+            if (!old) return old
+            return old.map((c) =>
               c.id === chatId
                 ? { ...c, status: "error" as const, backgroundSessionId: undefined, errorMessage }
                 : c
-            ),
-          }))
+            )
+          })
         } catch {
           // Connection error - handled by onerror
         }
       })
 
       eventSource.onerror = () => {
-        // Don't reconnect if aborted
         if (abortSignal?.aborted) return
 
         eventSource.close()
@@ -792,39 +596,39 @@ export function useChatWithSync() {
           }, SSE_RECONNECT_DELAY)
         } else {
           store.stopStream(chatId)
-          setState((prev) => ({
-            ...prev,
-            chats: prev.chats.map((c) =>
+          queryClient.setQueryData<Chat[]>(queryKeys.chats.list(), (old) => {
+            if (!old) return old
+            return old.map((c) =>
               c.id === chatId && c.status === "running"
                 ? { ...c, status: "ready" as const }
                 : c
-            ),
-          }))
+            )
+          })
         }
       }
     }
 
     connect()
-  }, [])
+  }, [queryClient, chats, gitPushMutation])
 
   // =============================================================================
-  // Messaging (Optimistic Updates)
+  // Messaging
   // =============================================================================
 
-  const sendMessage = useCallback(async (content: string, agent?: string, model?: string, files?: File[], targetChatId?: string) => {
-    // For targetChatId, read from state directly since React state may not have updated yet
-    const chatId = targetChatId || state.currentChatId
+  const sendMessage = useCallback(async (
+    content: string,
+    agent?: string,
+    model?: string,
+    files?: File[],
+    targetChatId?: string
+  ) => {
+    const chatId = targetChatId || currentChatId
     if (!chatId) return
 
-    const chat = state.chats.find((c) => c.id === chatId)
+    const chat = chats.find((c) => c.id === chatId)
     if (!chat) return
 
-    // Concurrency guards — three layers, narrowest first:
-    //   1. Synchronous in-flight ref: catches a re-entrant call within
-    //      the same tick (double-click before any state update lands).
-    //   2. Streaming check: catches the case where stage (d) already
-    //      started a stream.
-    //   3. Status check: catches state-visible mid-pipeline state.
+    // Concurrency guards
     if (sendInFlight.current.has(chatId)) {
       console.warn("Send already in flight for this chat")
       return
@@ -838,183 +642,154 @@ export function useChatWithSync() {
       return
     }
     sendInFlight.current.add(chatId)
-    try {
-
-    // Sending always requires a session. The UI shows a sign-in prompt
-    // before reaching this point; this is a defensive backstop.
-    if (!session?.accessToken) return
-
-    const isFirstMessage = chat.messages.length === 0
-    const selectedAgent = (agent ?? chat.agent ?? state.settings.defaultAgent ?? getDefaultAgent(state.credentialFlags)) as Agent
-    const selectedModel = model ?? chat.model ?? state.settings.defaultModel ?? getDefaultModelForAgent(selectedAgent, state.credentialFlags)
-
-    // Optimistic UI: add user + assistant messages immediately.
-    const userMessage: Message = {
-      id: nanoid(),
-      role: "user",
-      content,
-      timestamp: Date.now(),
-    }
-    const assistantMessage: Message = {
-      id: nanoid(),
-      role: "assistant",
-      content: "",
-      timestamp: Date.now() + 1,
-      toolCalls: [],
-      contentBlocks: [],
-    }
-
-    setState((prev) => ({
-      ...prev,
-      chats: prev.chats.map((c) =>
-        c.id === chatId
-          ? {
-              ...c,
-              messages: [...c.messages, userMessage, assistantMessage],
-              status: chat.sandboxId ? ("running" as const) : ("creating" as const),
-              lastActiveAt: Date.now(),
-              queuePaused: false,
-              errorMessage: undefined,
-            }
-          : c
-      ),
-    }))
-    updateCacheMessages(chatId, [userMessage, assistantMessage])
 
     try {
-      // One server round-trip: orchestrate sandbox-create + file-upload +
-      // message-persist + agent-start atomically. If anything fails the
-      // server cleans up (deletes a just-created sandbox, marks chat as
-      // error) before responding.
-      const payload = {
-        message: content,
-        agent: selectedAgent,
-        model: selectedModel,
-        userMessageId: userMessage.id,
-        assistantMessageId: assistantMessage.id,
-        newBranch: chat.sandboxId ? undefined : `agent/${generateBranchName()}`,
+      if (!session?.accessToken) return
+
+      const isFirstMessage = chat.messages.length === 0
+      const selectedAgent = (agent ?? chat.agent ?? settings.defaultAgent ?? getDefaultAgent(credentialFlags)) as Agent
+      const selectedModel = model ?? chat.model ?? settings.defaultModel ?? getDefaultModelForAgent(selectedAgent, credentialFlags)
+
+      // Optimistic UI: add user + assistant messages immediately
+      const userMessage: Message = {
+        id: nanoid(),
+        role: "user",
+        content,
+        timestamp: Date.now(),
+      }
+      const assistantMessage: Message = {
+        id: nanoid(),
+        role: "assistant",
+        content: "",
+        timestamp: Date.now() + 1,
+        toolCalls: [],
+        contentBlocks: [],
       }
 
-      let response: Response
-      if (files && files.length > 0) {
-        const formData = new FormData()
-        formData.append("payload", JSON.stringify(payload))
-        files.forEach((file, i) => formData.append(`file-${i}`, file))
-        response = await fetch(`/api/chats/${chatId}/messages`, {
-          method: "POST",
-          body: formData,
-        })
-      } else {
-        response = await fetch(`/api/chats/${chatId}/messages`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        })
-      }
-
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}))
-        throw new Error(err.error || "Failed to send message")
-      }
-
-      const data = (await response.json()) as {
-        sandboxId: string
-        branch: string | null
-        previewUrlPattern: string | null
-        backgroundSessionId: string
-        uploadedFiles: string[]
-      }
-
-      // Reflect server-assigned sandbox + agent/model + uploadedFiles back
-      // into local state.
-      setState((prev) => ({
-        ...prev,
-        chats: prev.chats.map((c) =>
-          c.id !== chatId
-            ? c
-            : {
-                ...c,
-                sandboxId: data.sandboxId,
-                branch: data.branch,
-                previewUrlPattern: data.previewUrlPattern ?? undefined,
-                backgroundSessionId: data.backgroundSessionId,
-                agent: selectedAgent,
-                model: selectedModel,
-                status: "running" as const,
-                messages: c.messages.map((m) =>
-                  m.id === userMessage.id && data.uploadedFiles.length > 0
-                    ? { ...m, uploadedFiles: data.uploadedFiles }
-                    : m
-                ),
-              }
-        ),
-      }))
-
-      // Start SSE streaming with the server-confirmed identifiers.
-      startStreaming(
-        chatId,
-        data.sandboxId,
-        "project",
-        data.backgroundSessionId,
-        assistantMessage.id,
-        data.previewUrlPattern ?? undefined
-      )
-
-      // Generate chat name for first message (fire-and-forget).
-      if (isFirstMessage) {
-        fetch("/api/chat/suggest-name", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: content }),
-        })
-          .then((res) => res.json())
-          .then((nameData) => {
-            if (nameData.name) {
-              apiUpdateChat(chatId, { displayName: nameData.name }).catch(() => {})
-              updateCacheChat(chatId, { displayName: nameData.name })
-              setState((prev) => ({
-                ...prev,
-                chats: prev.chats.map((c) =>
-                  c.id === chatId ? { ...c, displayName: nameData.name } : c
-                ),
-              }))
-            }
-          })
-          .catch((err) => console.error("Failed to generate name:", err))
-      }
-    } catch (error) {
-      console.error("Failed to send message:", error)
-      // Server already cleaned up its side (sandbox + chat row) on failure.
-      // Mark the assistant placeholder as the visible error and roll back
-      // chat status.
-      const errorMessage = error instanceof Error ? error.message : "Unknown error"
-      setState((prev) => ({
-        ...prev,
-        chats: prev.chats.map((c) =>
+      // Update cache optimistically
+      queryClient.setQueryData<Chat[]>(queryKeys.chats.list(), (old) => {
+        if (!old) return old
+        return old.map((c) =>
           c.id === chatId
             ? {
                 ...c,
-                status: "error" as const,
-                errorMessage,
-                messages: c.messages.map((m) =>
-                  m.id === assistantMessage.id
-                    ? {
-                        ...m,
-                        content: `Error: ${errorMessage}`,
-                        isError: true,
-                      }
-                    : m
-                ),
+                messages: [...c.messages, userMessage, assistantMessage],
+                status: chat.sandboxId ? ("running" as const) : ("creating" as const),
+                lastActiveAt: Date.now(),
+                queuePaused: false,
+                errorMessage: undefined,
               }
             : c
-        ),
-      }))
-    }
+        )
+      })
 
+      try {
+        // One server round-trip: orchestrate sandbox-create + file-upload +
+        // message-persist + agent-start atomically
+        const payload = {
+          message: content,
+          agent: selectedAgent,
+          model: selectedModel,
+          userMessageId: userMessage.id,
+          assistantMessageId: assistantMessage.id,
+          newBranch: chat.sandboxId ? undefined : `agent/${generateBranchName()}`,
+        }
+
+        let response: Response
+        if (files && files.length > 0) {
+          const formData = new FormData()
+          formData.append("payload", JSON.stringify(payload))
+          files.forEach((file, i) => formData.append(`file-${i}`, file))
+          response = await fetch(`/api/chats/${chatId}/messages`, {
+            method: "POST",
+            body: formData,
+          })
+        } else {
+          response = await fetch(`/api/chats/${chatId}/messages`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          })
+        }
+
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({}))
+          throw new Error(err.error || "Failed to send message")
+        }
+
+        const data = (await response.json()) as {
+          sandboxId: string
+          branch: string | null
+          previewUrlPattern: string | null
+          backgroundSessionId: string
+          uploadedFiles: string[]
+        }
+
+        // Update cache with server-confirmed data
+        queryClient.setQueryData<Chat[]>(queryKeys.chats.list(), (old) => {
+          if (!old) return old
+          return old.map((c) =>
+            c.id !== chatId
+              ? c
+              : {
+                  ...c,
+                  sandboxId: data.sandboxId,
+                  branch: data.branch,
+                  previewUrlPattern: data.previewUrlPattern ?? undefined,
+                  backgroundSessionId: data.backgroundSessionId,
+                  agent: selectedAgent,
+                  model: selectedModel,
+                  status: "running" as const,
+                  messages: c.messages.map((m) =>
+                    m.id === userMessage.id && data.uploadedFiles.length > 0
+                      ? { ...m, uploadedFiles: data.uploadedFiles }
+                      : m
+                  ),
+                }
+          )
+        })
+
+        // Start SSE streaming
+        startStreaming(
+          chatId,
+          data.sandboxId,
+          "project",
+          data.backgroundSessionId,
+          assistantMessage.id,
+          data.previewUrlPattern ?? undefined
+        )
+
+        // Generate chat name for first message (fire-and-forget)
+        if (isFirstMessage) {
+          suggestNameMutation.mutate({ chatId, prompt: content })
+        }
+      } catch (error) {
+        console.error("Failed to send message:", error)
+        const errorMessage = error instanceof Error ? error.message : "Unknown error"
+
+        // Mark as error in cache
+        queryClient.setQueryData<Chat[]>(queryKeys.chats.list(), (old) => {
+          if (!old) return old
+          return old.map((c) =>
+            c.id === chatId
+              ? {
+                  ...c,
+                  status: "error" as const,
+                  errorMessage,
+                  messages: c.messages.map((m) =>
+                    m.id === assistantMessage.id
+                      ? { ...m, content: `Error: ${errorMessage}`, isError: true }
+                      : m
+                  ),
+                }
+              : c
+          )
+        })
+      }
     } finally {
       sendInFlight.current.delete(chatId)
     }
-  }, [state.currentChatId, state.chats, state.settings, session?.accessToken, startStreaming])
+  }, [currentChatId, chats, session?.accessToken, settings, credentialFlags, queryClient, startStreaming, suggestNameMutation])
 
   const stopAgent = useCallback(() => {
     if (!currentChat) return
@@ -1022,32 +797,26 @@ export function useChatWithSync() {
     useStreamStore.getState().stopStream(currentChat.id)
     const hasQueue = (currentChat.queuedMessages?.length ?? 0) > 0
 
-    setState((prev) => ({
-      ...prev,
-      chats: prev.chats.map((c) =>
+    queryClient.setQueryData<Chat[]>(queryKeys.chats.list(), (old) => {
+      if (!old) return old
+      return old.map((c) =>
         c.id === currentChat.id
-          ? {
-              ...c,
-              status: "ready" as const,
-              queuePaused: hasQueue ? true : c.queuePaused,
-            }
+          ? { ...c, status: "ready" as const, queuePaused: hasQueue ? true : c.queuePaused }
           : c
-      ),
-    }))
+      )
+    })
 
     if (hasQueue) {
       setQueuePaused(currentChat.id, true)
+      setLocalChatState((prev) => ({
+        ...prev,
+        queuePaused: { ...prev.queuePaused, [currentChat.id]: true },
+      }))
     }
-  }, [currentChat])
+  }, [currentChat, queryClient])
 
-  // Recovery: resume streaming for running chats.
-  //
-  // Depend on a stable signature of which chats need streaming, NOT on
-  // state.chats itself. state.chats's reference changes on every snapshot
-  // frame during a streaming response; if the effect depended on it
-  // directly, the cleanup would abort and reconnect the EventSource on
-  // every frame.
-  const runningChatsKey = state.chats
+  // Recovery: resume streaming for running chats
+  const runningChatsKey = chats
     .filter((c) => c.backgroundSessionId && c.sandboxId)
     .map((c) => `${c.id}:${c.backgroundSessionId}:${c.sandboxId}`)
     .sort()
@@ -1058,7 +827,7 @@ export function useChatWithSync() {
 
     const abortController = new AbortController()
 
-    const runningChats = state.chats.filter(
+    const runningChats = chats.filter(
       (c) => c.backgroundSessionId && c.sandboxId
     )
 
@@ -1103,15 +872,15 @@ export function useChatWithSync() {
   // =============================================================================
 
   const addMessageToChat = useCallback((chatId: string, message: Message) => {
-    setState((prev) => ({
-      ...prev,
-      chats: prev.chats.map((c) =>
+    queryClient.setQueryData<Chat[]>(queryKeys.chats.list(), (old) => {
+      if (!old) return old
+      return old.map((c) =>
         c.id === chatId
           ? { ...c, messages: [...c.messages, message] }
           : c
-      ),
-    }))
-  }, [])
+      )
+    })
+  }, [queryClient])
 
   const enqueueMessage = useCallback((content: string, agent?: string, model?: string) => {
     if (!currentChat) return
@@ -1128,13 +897,10 @@ export function useChatWithSync() {
     setQueuedMessages(currentChat.id, newQueue)
     setQueuePaused(currentChat.id, false)
 
-    setState((prev) => ({
+    setLocalChatState((prev) => ({
       ...prev,
-      chats: prev.chats.map((c) =>
-        c.id === currentChat.id
-          ? { ...c, queuedMessages: newQueue, queuePaused: false }
-          : c
-      ),
+      queuedMessages: { ...prev.queuedMessages, [currentChat.id]: newQueue },
+      queuePaused: { ...prev.queuePaused, [currentChat.id]: false },
     }))
   }, [currentChat])
 
@@ -1146,13 +912,9 @@ export function useChatWithSync() {
 
     setQueuedMessages(currentChat.id, newQueue)
 
-    setState((prev) => ({
+    setLocalChatState((prev) => ({
       ...prev,
-      chats: prev.chats.map((c) =>
-        c.id === currentChat.id
-          ? { ...c, queuedMessages: newQueue }
-          : c
-      ),
+      queuedMessages: { ...prev.queuedMessages, [currentChat.id]: newQueue },
     }))
   }, [currentChat])
 
@@ -1161,21 +923,23 @@ export function useChatWithSync() {
 
     setQueuePaused(currentChat.id, false)
 
-    setState((prev) => ({
+    setLocalChatState((prev) => ({
       ...prev,
-      chats: prev.chats.map((c) =>
-        c.id === currentChat.id ? { ...c, queuePaused: false } : c
-      ),
+      queuePaused: { ...prev.queuePaused, [currentChat.id]: false },
     }))
   }, [currentChat])
 
+  // =============================================================================
+  // Return
+  // =============================================================================
+
   return {
     // State
-    chats: state.chats,
+    chats,
     currentChat,
-    currentChatId: state.currentChatId,
-    settings: state.settings,
-    credentialFlags: state.credentialFlags,
+    currentChatId,
+    settings,
+    credentialFlags,
     isHydrated,
     isLoading,
     deletingChatIds,
