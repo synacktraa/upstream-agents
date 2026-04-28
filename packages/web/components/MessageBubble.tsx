@@ -46,7 +46,7 @@ export function MessageBubble({ message, isStreaming, isMobile = false, repo, on
             {hasUploadedFiles && (
               <div className={cn(
                 "mt-1 space-y-1 text-muted-foreground",
-                isMobile ? "text-sm" : "text-xs"
+                isMobile ? "text-sm" : "text-[13px]"
               )}>
                 {message.uploadedFiles!.map((filePath, index) => {
                   const fileName = filePath.split("/").pop() || filePath
@@ -437,7 +437,7 @@ function ToolCallRow({ tool, isMobile = false, onOpenFile }: ToolCallRowProps) {
       {/* Tool call header */}
       <div className={cn(
         "flex items-center gap-1.5 text-muted-foreground transition-colors",
-        isMobile ? "text-sm" : "text-xs",
+        isMobile ? "text-sm" : "text-[13px]",
         hasOutput && !hasFileLink && "hover:text-foreground"
       )}>
         <Icon className={cn("shrink-0", isMobile ? "h-4 w-4" : "h-3 w-3")} />

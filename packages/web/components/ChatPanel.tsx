@@ -1263,7 +1263,7 @@ function ErrorBanner({ message, isMobile }: { message: string; isMobile?: boolea
         "flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 text-destructive",
         isMobile
           ? "[&:not(:first-child)]:-mt-4 px-3 py-2 text-sm"
-          : "[&:not(:first-child)]:-mt-6 px-3 py-2 text-xs"
+          : "[&:not(:first-child)]:-mt-6 px-3 py-2 text-[13px]"
       )}
     >
       <AlertTriangle className={cn("shrink-0 mt-0.5", isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
