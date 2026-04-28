@@ -51,6 +51,7 @@ export function useUpdateChatMutation() {
         if (data.backgroundSessionId !== undefined) updated.backgroundSessionId = data.backgroundSessionId ?? undefined
         if (data.needsSync !== undefined) updated.needsSync = data.needsSync
         if (data.lastActiveAt !== undefined) updated.lastActiveAt = data.lastActiveAt
+        if (data.parentChatId !== undefined) updated.parentChatId = data.parentChatId ?? undefined
 
         queryClient.setQueryData<Chat>(queryKeys.chats.detail(chatId), updated)
       }
@@ -73,6 +74,7 @@ export function useUpdateChatMutation() {
           if (data.backgroundSessionId !== undefined) updated.backgroundSessionId = data.backgroundSessionId ?? undefined
           if (data.needsSync !== undefined) updated.needsSync = data.needsSync
           if (data.lastActiveAt !== undefined) updated.lastActiveAt = data.lastActiveAt
+          if (data.parentChatId !== undefined) updated.parentChatId = data.parentChatId ?? undefined
           return updated
         })
         queryClient.setQueryData<Chat[]>(queryKeys.chats.list(), updatedChats)

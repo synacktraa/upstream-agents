@@ -277,6 +277,15 @@ export default function HomePage() {
         updateChatById(target.id, { needsSync: true })
       }
     },
+    onSetParentChat: (branch) => {
+      if (!currentChat) return
+      const target = chats.find(
+        (c) => c.id !== currentChat.id && c.repo === currentChat.repo && c.branch === branch
+      )
+      if (target) {
+        updateChatById(currentChat.id, { parentChatId: target.id })
+      }
+    },
   })
 
   // Close mobile sidebar when switching to desktop
