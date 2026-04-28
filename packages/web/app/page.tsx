@@ -277,14 +277,9 @@ export default function HomePage() {
         updateChatById(target.id, { needsSync: true })
       }
     },
-    onSetParentChat: (branch) => {
+    onSetBaseBranch: (branch) => {
       if (!currentChat) return
-      const target = chats.find(
-        (c) => c.id !== currentChat.id && c.repo === currentChat.repo && c.branch === branch
-      )
-      if (target) {
-        updateChatById(currentChat.id, { parentChatId: target.id })
-      }
+      updateChatById(currentChat.id, { baseBranch: branch })
     },
   })
 
