@@ -50,6 +50,8 @@ export async function GET(req: Request) {
 
   const encoder = new TextEncoder()
   let isStreamClosed = false
+  // Flag to distinguish intentional stop from accidental disconnect
+  let wasIntentionallyCancelled = false
   // Store sandbox reference for use in cancel() callback
   let sandboxRef: Awaited<ReturnType<Daytona["get"]>> | null = null
   let sessionOptsRef: { repoPath: string; previewUrlPattern?: string } | null = null
@@ -194,23 +196,29 @@ export async function GET(req: Request) {
           )
         }
 
-        // Client disconnected mid-stream. Take one more snapshot (the agent
-        // may have produced output between our last poll and the disconnect)
-        // and flush. Leave chat.status as "running" — the agent is still
-        // alive in the sandbox and a reconnect will resume.
+        // Client disconnected mid-stream.
         if (heartbeatTimer) {
           clearInterval(heartbeatTimer)
           heartbeatTimer = null
         }
-        try {
-          const finalSnap = await snapshotBackgroundAgent(
-            sandbox,
-            backgroundSessionId,
-            sessionOpts
-          )
-          await persistSnapshot(finalSnap, false)
-        } catch (error) {
-          console.error("[agent/stream] disconnect-flush error:", error)
+        // If user intentionally cancelled, skip the final snapshot - the agent
+        // was killed and DB was already updated in cancel(). Taking a snapshot
+        // would incorrectly report "crashed" since the process is now dead.
+        if (!wasIntentionallyCancelled) {
+          // Accidental disconnect: take one more snapshot (the agent may have
+          // produced output between our last poll and the disconnect) and flush.
+          // Leave chat.status as "running" — the agent is still alive in the
+          // sandbox and a reconnect will resume.
+          try {
+            const finalSnap = await snapshotBackgroundAgent(
+              sandbox,
+              backgroundSessionId,
+              sessionOpts
+            )
+            await persistSnapshot(finalSnap, false)
+          } catch (error) {
+            console.error("[agent/stream] disconnect-flush error:", error)
+          }
         }
       } catch (error) {
         console.error("[agent/stream] Error:", error)
@@ -234,6 +242,7 @@ export async function GET(req: Request) {
 
     async cancel() {
       isStreamClosed = true
+      wasIntentionallyCancelled = true
       // Kill the agent process when the client disconnects/stops
       if (sandboxRef && sessionOptsRef) {
         await cancelBackgroundAgent(sandboxRef, backgroundSessionId, sessionOptsRef)
