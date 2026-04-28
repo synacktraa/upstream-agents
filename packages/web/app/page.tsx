@@ -277,6 +277,10 @@ export default function HomePage() {
         updateChatById(target.id, { needsSync: true })
       }
     },
+    onSetBaseBranch: (branch) => {
+      if (!currentChat) return
+      updateChatById(currentChat.id, { baseBranch: branch })
+    },
   })
 
   // Close mobile sidebar when switching to desktop

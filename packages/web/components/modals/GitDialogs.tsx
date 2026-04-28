@@ -30,6 +30,8 @@ export interface UseGitDialogsOptions {
   getTargetChatStatus?: (branch: string) => string | null
   /** Mark a branch as needing sync (used when merge succeeds but sandbox was stopped). */
   onMarkBranchNeedsSync?: (branch: string) => void
+  /** Update base branch after successful merge (only if chat has no parent chat). */
+  onSetBaseBranch?: (targetBranch: string) => void
 }
 
 /** PR description format options */
@@ -955,7 +957,7 @@ export function ForcePushDialog({ open, onClose, gitDialogs, chat, isMobile = fa
 // useGitDialogs Hook
 // ============================================================================
 
-export function useGitDialogs({ chat, onAddMessage, onAddMessageToBranch, resolveChatName, getTargetSandboxId, getTargetChatStatus, onMarkBranchNeedsSync }: UseGitDialogsOptions): UseGitDialogsResult {
+export function useGitDialogs({ chat, onAddMessage, onAddMessageToBranch, resolveChatName, getTargetSandboxId, getTargetChatStatus, onMarkBranchNeedsSync, onSetBaseBranch }: UseGitDialogsOptions): UseGitDialogsResult {
   const branchName = chat?.branch ?? ""
   const baseBranch = chat?.baseBranch ?? ""
   const sandboxId = chat?.sandboxId ?? ""
@@ -1099,6 +1101,11 @@ export function useGitDialogs({ chat, onAddMessage, onAddMessageToBranch, resolv
         onMarkBranchNeedsSync(selectedBranch)
       }
 
+      // If this chat has no parent chat, update base branch to the merge target
+      if (!chat?.parentChatId && onSetBaseBranch) {
+        onSetBaseBranch(selectedBranch)
+      }
+
       const verb = squashMerge ? "Squash merged" : "Merged"
       const sourceName = chat?.displayName || branchName
       const targetName = resolveChatName?.(selectedBranch) || selectedBranch
@@ -1123,7 +1130,7 @@ export function useGitDialogs({ chat, onAddMessage, onAddMessageToBranch, resolv
     } finally {
       setActionLoading(false)
     }
-  }, [selectedBranch, branchName, sandboxId, repoName, repoOwner, repoApiName, squashMerge, addSystemMessage, getTargetSandboxId, getTargetChatStatus, onMarkBranchNeedsSync])
+  }, [selectedBranch, branchName, sandboxId, repoName, repoOwner, repoApiName, squashMerge, addSystemMessage, getTargetSandboxId, getTargetChatStatus, onMarkBranchNeedsSync, chat?.parentChatId, onSetBaseBranch])
 
   // Handle rebase
   const handleRebase = useCallback(async () => {
