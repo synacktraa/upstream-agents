@@ -148,7 +148,6 @@ interface PatchChatBody {
   backgroundSessionId?: string | null
   needsSync?: boolean
   lastActiveAt?: number
-  parentChatId?: string | null
 }
 
 export async function PATCH(
@@ -185,7 +184,6 @@ export async function PATCH(
     if (body.backgroundSessionId !== undefined) updateData.backgroundSessionId = body.backgroundSessionId
     if (body.needsSync !== undefined) updateData.needsSync = body.needsSync
     if (body.lastActiveAt !== undefined) updateData.lastActiveAt = new Date(body.lastActiveAt)
-    if (body.parentChatId !== undefined) updateData.parentChatId = body.parentChatId
 
     if (Object.keys(updateData).length === 0) {
       return badRequest("No valid fields to update")

@@ -151,7 +151,6 @@ export async function updateChat(
     backgroundSessionId: string | null
     needsSync: boolean
     lastActiveAt: number
-    parentChatId: string | null
   }>
 ): Promise<ChatResponse> {
   return fetchApi<ChatResponse>(`/api/chats/${chatId}`, {
