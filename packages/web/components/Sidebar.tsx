@@ -1187,36 +1187,21 @@ function ChatItem({ chat, isActive, collapsed, isDeleting, isUnseen, depth = 0, 
         onDragStartRow?.()
       } : undefined}
       onDragEnd={draggable ? () => onDragEndRow?.() : undefined}
-      onDragEnter={(e) => {
-        e.preventDefault()
-        e.stopPropagation()
+      onDragEnter={onDragEnterRow ? (e) => { e.preventDefault(); onDragEnterRow() } : undefined}
+      onDragOver={onDragOverRow ? (e) => {
+        // Continuously reassert that this row is the active drop target so
+        // cursor movements over nested children don't flicker the highlight.
+        onDragOverRow(e)
         onDragEnterRow?.()
-      }}
-      onDragOver={(e) => {
-        // Always handle dragOver to prevent bubbling to parent rows.
-        // This ensures the correct row is highlighted as the drop target.
-        e.preventDefault()
-        e.stopPropagation()
-        onDragOverRow?.(e)
-        onDragEnterRow?.()
-      }}
-      onDragLeave={(e) => {
-        // Always stop propagation to prevent bubbling to parent rows.
-        e.stopPropagation()
+      } : undefined}
+      onDragLeave={onDragLeaveRow ? (e) => {
         // Ignore leaves into descendant elements — dragleave fires on the
         // parent whenever the cursor moves to a child node.
         const related = e.relatedTarget as Node | null
         if (related && e.currentTarget.contains(related)) return
-        onDragLeaveRow?.()
-      }}
-      onDrop={(e) => {
-        // Always prevent default and stop propagation to avoid drop events
-        // bubbling to parent rows (which would cause merges to target the
-        // parent branch instead of the actual drop target).
-        e.preventDefault()
-        e.stopPropagation()
-        onDropRow?.()
-      }}
+        onDragLeaveRow()
+      } : undefined}
+      onDrop={onDropRow ? (e) => { e.preventDefault(); onDropRow() } : undefined}
       onClick={isDeleting ? undefined : onSelect}
       onDoubleClick={hasChildren && !isDeleting ? (e) => { e.stopPropagation(); onToggleExpanded?.() } : undefined}
     >
