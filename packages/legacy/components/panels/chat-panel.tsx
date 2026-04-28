@@ -456,12 +456,22 @@ export function ChatPanel({
   const lastMessage = branch.messages[branch.messages.length - 1]
   const lastMessageContent = lastMessage?.content ?? ""
   const lastMessageToolCallsCount = lastMessage?.toolCalls?.length ?? 0
-  const isStreaming = lastMessage ? useExecutionStore.getState().isStreaming(lastMessage.id) : false
+  // Subscribe to execution store to get reactive updates when streaming state changes
+  const lastMessageId = lastMessage?.id
+  const isStreaming = useExecutionStore(
+    useCallback((state: { activeExecutions: Map<string, unknown> }) => lastMessageId ? state.activeExecutions.has(lastMessageId) : false, [lastMessageId])
+  )
 
   useLayoutEffect(() => {
     const currentCount = branch.messages.length
     const hasNewMessages = currentCount > prevMessageCountRef.current
     prevMessageCountRef.current = currentCount
+
+    // Reset content length tracking when a new message is added
+    // This ensures streaming content growth is detected for the new message
+    if (hasNewMessages) {
+      prevContentLengthRef.current = 0
+    }
 
     // Track content length changes during streaming
     const currentContentLength = lastMessageContent.length + lastMessageToolCallsCount
