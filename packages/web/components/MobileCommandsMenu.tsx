@@ -1,9 +1,19 @@
 "use client"
 
-import { GitMerge, GitBranch, GitPullRequest, GitCommitVertical, GitBranchPlus, Settings, HelpCircle, Github } from "lucide-react"
+import { GitMerge, GitBranch, GitPullRequest, GitCommitVertical, GitBranchPlus, XCircle, Settings, HelpCircle, Github } from "lucide-react"
 import { MobileBottomSheet } from "./ui/MobileBottomSheet"
 import { cn } from "@/lib/utils"
+import { SLASH_COMMANDS, ABORT_COMMAND, type SlashCommand } from "@upstream/common"
 import type { SlashCommandType } from "./SlashCommandMenu"
+
+const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+  GitMerge,
+  GitBranch,
+  GitPullRequest,
+  GitCommitVertical,
+  GitBranchPlus,
+  XCircle,
+}
 
 interface CommandItem {
   id: SlashCommandType | "settings" | "help" | "github"
@@ -11,6 +21,17 @@ interface CommandItem {
   description: string
   icon: React.ReactNode
   variant?: "default" | "destructive"
+}
+
+function slashCommandToItem(cmd: SlashCommand, variant?: "default" | "destructive"): CommandItem {
+  const Icon = ICON_MAP[cmd.icon]
+  return {
+    id: cmd.name as SlashCommandType,
+    label: cmd.label,
+    description: cmd.description,
+    icon: Icon ? <Icon className="h-5 w-5" /> : null,
+    variant,
+  }
 }
 
 interface MobileCommandsMenuProps {
@@ -46,44 +67,11 @@ export function MobileCommandsMenu({
   if (hasLinkedRepo) {
     if (inConflict) {
       // During conflict, only show abort
-      commands.push({
-        id: "abort",
-        label: "Abort",
-        description: "Abort the current merge or rebase",
-        icon: <GitMerge className="h-5 w-5" />,
-        variant: "destructive",
-      })
+      commands.push(slashCommandToItem(ABORT_COMMAND, "destructive"))
     } else {
       // Normal git operations
-      commands.push({
-        id: "merge",
-        label: "Merge",
-        description: "Merge another branch into this one",
-        icon: <GitMerge className="h-5 w-5" />,
-      })
-      commands.push({
-        id: "rebase",
-        label: "Rebase",
-        description: "Rebase this branch onto another",
-        icon: <GitBranch className="h-5 w-5" />,
-      })
-      commands.push({
-        id: "pr",
-        label: "Pull Request",
-        description: "Create a pull request",
-        icon: <GitPullRequest className="h-5 w-5" />,
-      })
-      commands.push({
-        id: "squash",
-        label: "Squash",
-        description: "Squash commits into one",
-        icon: <GitCommitVertical className="h-5 w-5" />,
-      })
-      commands.push({
-        id: "branch",
-        label: "Branch",
-        description: "Create a new branch from here",
-        icon: <GitBranchPlus className="h-5 w-5" />,
+      SLASH_COMMANDS.forEach(cmd => {
+        commands.push(slashCommandToItem(cmd))
       })
     }
   }
