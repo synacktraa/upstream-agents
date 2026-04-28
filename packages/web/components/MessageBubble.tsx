@@ -38,7 +38,7 @@ export function MessageBubble({ message, isStreaming, isMobile = false, repo, on
           <div>
             <div className={cn(
               "inline-block rounded-lg bg-muted text-foreground",
-              isMobile ? "px-3 py-2 text-base" : "px-4 py-2 text-sm"
+              isMobile ? "px-3 py-2 text-base" : "px-4 py-2 text-[15px]"
             )}>
               <p className="whitespace-pre-wrap">{message.content}</p>
             </div>
@@ -46,7 +46,7 @@ export function MessageBubble({ message, isStreaming, isMobile = false, repo, on
             {hasUploadedFiles && (
               <div className={cn(
                 "mt-1 space-y-1 text-muted-foreground",
-                isMobile ? "text-sm" : "text-xs"
+                isMobile ? "text-sm" : "text-[13px]"
               )}>
                 {message.uploadedFiles!.map((filePath, index) => {
                   const fileName = filePath.split("/").pop() || filePath
@@ -81,7 +81,7 @@ function MarkdownContent({ text, isMobile = false }: { text: string; isMobile?: 
       "prose-ul:my-2 prose-ol:my-2",
       "prose-headings:mt-4 prose-headings:mb-2",
       "[&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
-      isMobile ? "prose-base" : "prose-sm"
+      isMobile ? "prose-base" : "prose-sm prose-p:text-[15px] prose-li:text-[15px]"
     )}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
@@ -185,7 +185,7 @@ function AssistantContent({ message, isStreaming, isMobile = false, repo, onOpen
   return (
     <div className={cn(
       "leading-relaxed",
-      isMobile ? "space-y-4 text-base" : "space-y-3 text-sm"
+      isMobile ? "space-y-4 text-base" : "space-y-3 text-[15px]"
     )}>
       {mergedBlocks ? (
         // Render merged content blocks
@@ -437,7 +437,7 @@ function ToolCallRow({ tool, isMobile = false, onOpenFile }: ToolCallRowProps) {
       {/* Tool call header */}
       <div className={cn(
         "flex items-center gap-1.5 text-muted-foreground transition-colors",
-        isMobile ? "text-sm" : "text-xs",
+        isMobile ? "text-sm" : "text-[13px]",
         hasOutput && !hasFileLink && "hover:text-foreground"
       )}>
         <Icon className={cn("shrink-0", isMobile ? "h-4 w-4" : "h-3 w-3")} />
