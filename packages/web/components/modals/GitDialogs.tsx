@@ -510,6 +510,7 @@ interface RebaseDialogProps {
 
 export function RebaseDialog({ open, onClose, gitDialogs, chat, isMobile = false }: RebaseDialogProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false)
+  const rebaseButtonRef = useRef<HTMLButtonElement>(null)
 
   const handleRebaseAndClose = useCallback(async () => {
     await gitDialogs.handleRebase()
@@ -524,6 +525,7 @@ export function RebaseDialog({ open, onClose, gitDialogs, chat, isMobile = false
       icon={<GitBranch className={cn(isMobile ? "h-5 w-5" : "h-4 w-4")} />}
       isMobile={isMobile}
       allowOverflow={dropdownOpen}
+      initialFocusRef={rebaseButtonRef}
     >
       <div className={cn("space-y-5")}>
         <div>
@@ -545,7 +547,6 @@ export function RebaseDialog({ open, onClose, gitDialogs, chat, isMobile = false
             isMobile ? "text-sm" : "text-xs"
           )}>Onto branch</label>
           <BranchSelector
-            autoFocus
             value={gitDialogs.selectedBranch}
             onChange={gitDialogs.setSelectedBranch}
             branches={gitDialogs.remoteBranches}
@@ -568,6 +569,7 @@ export function RebaseDialog({ open, onClose, gitDialogs, chat, isMobile = false
             Cancel
           </button>
           <button
+            ref={rebaseButtonRef}
             onClick={handleRebaseAndClose}
             disabled={!gitDialogs.selectedBranch || gitDialogs.actionLoading}
             className={cn(
@@ -612,6 +614,7 @@ export function PRDialog({ open, onClose, gitDialogs, chat, isMobile = false }: 
   const [descriptionType, setDescriptionType] = useState<PRDescriptionType>("short")
   const [descriptionDropdownOpen, setDescriptionDropdownOpen] = useState(false)
   const [branchDropdownOpen, setBranchDropdownOpen] = useState(false)
+  const createPRButtonRef = useRef<HTMLButtonElement>(null)
 
   const handleCreatePRAndClose = useCallback(async () => {
     await gitDialogs.handleCreatePR(descriptionType)
@@ -626,6 +629,7 @@ export function PRDialog({ open, onClose, gitDialogs, chat, isMobile = false }: 
       icon={<GitPullRequest className={cn(isMobile ? "h-5 w-5" : "h-4 w-4")} />}
       isMobile={isMobile}
       allowOverflow={descriptionDropdownOpen || branchDropdownOpen}
+      initialFocusRef={createPRButtonRef}
     >
       <div className={cn("space-y-5")}>
         {!isGitHubRepo ? (
@@ -656,7 +660,6 @@ export function PRDialog({ open, onClose, gitDialogs, chat, isMobile = false }: 
                 isMobile ? "text-sm" : "text-xs"
               )}>Into chat</label>
               <BranchSelector
-                autoFocus
                 value={gitDialogs.selectedBranch}
                 onChange={gitDialogs.setSelectedBranch}
                 branches={gitDialogs.remoteBranches}
@@ -732,6 +735,7 @@ export function PRDialog({ open, onClose, gitDialogs, chat, isMobile = false }: 
           </button>
           {isGitHubRepo && (
             <button
+              ref={createPRButtonRef}
               onClick={handleCreatePRAndClose}
               disabled={!gitDialogs.selectedBranch || gitDialogs.actionLoading}
               className={cn(
