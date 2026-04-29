@@ -16,6 +16,7 @@ export const authOptions: NextAuthOptions = {
             scope: "repo read:user user:email",
           },
         },
+        allowDangerousEmailAccountLinking: true,
       }),
       // GitHub now sends `iss=https://github.com/login/oauth` in the OAuth
       // callback. openid-client validates this against the issuer config, but
