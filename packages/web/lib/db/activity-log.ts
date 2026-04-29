@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client"
 import { prisma } from "./prisma"
 
 /**
@@ -46,7 +47,7 @@ export async function logActivity(
       data: {
         userId,
         action,
-        metadata: metadata ?? undefined,
+        metadata: metadata ? (metadata as Prisma.InputJsonValue) : undefined,
       },
     })
   } catch (error) {

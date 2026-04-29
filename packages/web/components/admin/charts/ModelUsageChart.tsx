@@ -66,7 +66,7 @@ export function ModelUsageChart({ data }: ModelUsageChartProps) {
               borderRadius: "6px",
             }}
             labelStyle={{ color: "hsl(var(--popover-foreground))" }}
-            formatter={(value: number) => [value, "Chats"]}
+            formatter={(value) => [value, "Chats"]}
           />
           <Bar dataKey="count" radius={[0, 4, 4, 0]}>
             {data.map((_, index) => (

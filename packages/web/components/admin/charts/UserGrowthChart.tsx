@@ -64,7 +64,7 @@ export function UserGrowthChart({ data }: UserGrowthChartProps) {
               borderRadius: "6px",
             }}
             labelStyle={{ color: "hsl(var(--popover-foreground))" }}
-            formatter={(value: number, name: string) => [
+            formatter={(value, name) => [
               value,
               name === "totalUsers" ? "Total Users" : "New Users",
             ]}
