@@ -292,6 +292,7 @@ export async function getChatWithMessagesAuth(
     contentBlocks: unknown
     uploadedFiles: unknown
     linkBranch: string | null
+    metadata: unknown
     createdAt: Date
   }>
 } | null> {

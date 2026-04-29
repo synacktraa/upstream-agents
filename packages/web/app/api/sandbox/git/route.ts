@@ -1,8 +1,37 @@
 import { Daytona } from "@daytonaio/sdk"
+import { Prisma } from "@prisma/client"
 import { getServerSession } from "next-auth"
+import { nanoid } from "nanoid"
 import { authOptions } from "@/lib/auth"
 import { PATHS } from "@/lib/constants"
+import { prisma } from "@/lib/db/prisma"
 import { fetchBranchWithAuth } from "@upstream/common"
+
+/**
+ * Creates a git-operation message in the database
+ */
+async function createGitOperationMessage(
+  chatId: string,
+  content: string,
+  isError: boolean = false,
+  metadata?: { action?: string; prUrl?: string; prNumber?: number },
+  linkBranch?: string
+): Promise<string> {
+  const message = await prisma.message.create({
+    data: {
+      id: nanoid(),
+      chatId,
+      role: "assistant",
+      content,
+      timestamp: BigInt(Date.now()),
+      messageType: "git-operation",
+      isError,
+      metadata: metadata as Prisma.InputJsonValue,
+      linkBranch,
+    },
+  })
+  return message.id
+}
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions)
@@ -11,7 +40,7 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json()
-  const { sandboxId, repoPath, action, targetBranch, currentBranch, repoOwner, repoApiName, squash, targetSandboxId } = body
+  const { sandboxId, repoPath, action, targetBranch, currentBranch, repoOwner, repoApiName, squash, targetSandboxId, chatId, sourceName, targetName } = body
 
   if (!sandboxId || !repoPath || !action) {
     return Response.json({ error: "Missing required fields: sandboxId, repoPath, action" }, { status: 400 })
@@ -94,6 +123,13 @@ export async function POST(req: Request) {
           if (mergeRes.status === 409) {
             // Conflict
             if (!isMergingIntoActiveBranch) {
+              if (chatId) {
+                await createGitOperationMessage(
+                  chatId,
+                  `Merge conflict. Switch to "${targetBranch}" and merge from there.`,
+                  true
+                )
+              }
               return Response.json(
                 { error: `Merge conflict. Switch to "${targetBranch}" and merge from there.` },
                 { status: 409 }
@@ -101,6 +137,9 @@ export async function POST(req: Request) {
             }
 
             if (squash) {
+              if (chatId) {
+                await createGitOperationMessage(chatId, `Merge conflict: ${errorMessage}`, true)
+              }
               return Response.json({ error: "Merge conflict: " + errorMessage }, { status: 409 })
             }
 
@@ -130,6 +169,16 @@ export async function POST(req: Request) {
                 .trim()
                 .split("\n")
                 .filter(Boolean)
+
+              if (chatId) {
+                const fileList = conflictedFiles.join(", ")
+                await createGitOperationMessage(
+                  chatId,
+                  `Merge conflict: ${currentBranch} into ${targetBranch}. Conflicted files: ${fileList}`,
+                  true
+                )
+              }
+
               return Response.json(
                 {
                   conflict: true,
@@ -143,12 +192,31 @@ export async function POST(req: Request) {
               )
             }
 
+            if (chatId) {
+              await createGitOperationMessage(chatId, `Merge conflict: ${errorMessage}`, true)
+            }
             return Response.json({ error: "Merge conflict: " + errorMessage }, { status: 409 })
+          }
+          if (chatId) {
+            await createGitOperationMessage(chatId, `Merge failed: ${errorMessage}`, true)
           }
           return Response.json({ error: "Merge failed: " + errorMessage }, { status: 500 })
         }
 
-        // Merge succeeded on GitHub
+        // Merge succeeded on GitHub - create success message
+        const verb = squash ? "Squash merged" : "Merged"
+        const source = sourceName || currentBranch
+        const target = targetName || targetBranch
+        if (chatId) {
+          await createGitOperationMessage(
+            chatId,
+            `${verb} ${source} into ${target}.`,
+            false,
+            undefined,
+            targetBranch
+          )
+        }
+
         if (isMergingIntoActiveBranch) {
           try {
             await sandbox.git.pull(repoPath, "x-access-token", githubToken)
@@ -214,6 +282,15 @@ export async function POST(req: Request) {
             )
             const conflictedFiles = conflictResult.result.trim().split('\n').filter(Boolean)
 
+            if (chatId) {
+              const fileList = conflictedFiles.join(", ")
+              await createGitOperationMessage(
+                chatId,
+                `Rebase conflict: ${currentBranch} onto ${targetBranch}. Conflicted files: ${fileList}`,
+                true
+              )
+            }
+
             return Response.json({
               conflict: true,
               targetBranch,
@@ -224,6 +301,9 @@ export async function POST(req: Request) {
 
           // Non-conflict error - abort and return error
           await sandbox.process.executeCommand(`cd ${repoPath} && git rebase --abort 2>&1`)
+          if (chatId) {
+            await createGitOperationMessage(chatId, `Rebase failed: ${rebaseResult.result}`, true)
+          }
           return Response.json({ error: "Rebase failed: " + rebaseResult.result }, { status: 500 })
         }
 
@@ -245,7 +325,27 @@ export async function POST(req: Request) {
         )
         if (!refRes.ok) {
           const refData = await refRes.json().catch(() => ({}))
-          return Response.json({ error: "Force push failed: " + ((refData as { message?: string }).message || refRes.status) }, { status: 500 })
+          const errMsg = (refData as { message?: string }).message || String(refRes.status)
+          // Surface force-push affordance for recoverable errors
+          const recoverable = errMsg.includes("Object does not exist")
+          if (chatId) {
+            const suffix = recoverable ? " You can force push to overwrite the remote history." : ""
+            await createGitOperationMessage(
+              chatId,
+              `Rebase failed: ${errMsg}.${suffix}`,
+              true,
+              recoverable ? { action: "force-push" } : undefined
+            )
+          }
+          return Response.json({ error: "Force push failed: " + errMsg }, { status: 500 })
+        }
+
+        // Success
+        if (chatId) {
+          await createGitOperationMessage(
+            chatId,
+            `Rebased ${currentBranch} onto ${targetBranch}. The branch on GitHub now points at your rebased commits.`
+          )
         }
 
         return Response.json({ success: true })
@@ -256,7 +356,13 @@ export async function POST(req: Request) {
           `cd ${repoPath} && git rebase --abort 2>&1`
         )
         if (abortResult.exitCode) {
+          if (chatId) {
+            await createGitOperationMessage(chatId, `Abort failed: ${abortResult.result}`, true)
+          }
           return Response.json({ error: "Abort failed: " + abortResult.result }, { status: 500 })
+        }
+        if (chatId) {
+          await createGitOperationMessage(chatId, `Rebase aborted. Your branch is back to its previous state.`)
         }
         return Response.json({ success: true })
       }
@@ -266,7 +372,13 @@ export async function POST(req: Request) {
           `cd ${repoPath} && git merge --abort 2>&1`
         )
         if (abortMergeResult.exitCode) {
+          if (chatId) {
+            await createGitOperationMessage(chatId, `Abort failed: ${abortMergeResult.result}`, true)
+          }
           return Response.json({ error: "Abort failed: " + abortMergeResult.result }, { status: 500 })
+        }
+        if (chatId) {
+          await createGitOperationMessage(chatId, `Merge aborted. Your branch is back to its previous state.`)
         }
         return Response.json({ success: true })
       }
@@ -306,6 +418,9 @@ export async function POST(req: Request) {
           `cd ${repoPath} && git rev-parse HEAD 2>&1`
         )
         if (shaResult.exitCode !== 0) {
+          if (chatId) {
+            await createGitOperationMessage(chatId, `Force push failed: Failed to get HEAD: ${shaResult.result}`, true)
+          }
           return Response.json({ error: "Failed to get HEAD: " + shaResult.result }, { status: 500 })
         }
         const sha = shaResult.result.trim()
@@ -315,6 +430,9 @@ export async function POST(req: Request) {
           `cd ${repoPath} && git checkout -b ${tempBranch} 2>&1`
         )
         if (createBranchResult.exitCode !== 0) {
+          if (chatId) {
+            await createGitOperationMessage(chatId, `Force push failed: Failed to create temp branch: ${createBranchResult.result}`, true)
+          }
           return Response.json({ error: "Failed to create temp branch: " + createBranchResult.result }, { status: 500 })
         }
 
@@ -323,8 +441,12 @@ export async function POST(req: Request) {
         } catch (pushErr) {
           await sandbox.process.executeCommand(`cd ${repoPath} && git checkout ${currentBranch} 2>&1`)
           await sandbox.process.executeCommand(`cd ${repoPath} && git branch -D ${tempBranch} 2>&1`)
+          const errMsg = pushErr instanceof Error ? pushErr.message : String(pushErr)
+          if (chatId) {
+            await createGitOperationMessage(chatId, `Force push failed: Failed to push temp branch: ${errMsg}`, true)
+          }
           return Response.json({
-            error: "Failed to push temp branch: " + (pushErr instanceof Error ? pushErr.message : String(pushErr))
+            error: "Failed to push temp branch: " + errMsg
           }, { status: 500 })
         }
 
@@ -360,9 +482,18 @@ export async function POST(req: Request) {
 
         if (!refRes.ok) {
           const refData = await refRes.json().catch(() => ({}))
+          const errMsg = (refData as { message?: string }).message || String(refRes.status)
+          if (chatId) {
+            await createGitOperationMessage(chatId, `Force push failed: ${errMsg}`, true)
+          }
           return Response.json({
-            error: "Force push failed: " + ((refData as { message?: string }).message || refRes.status)
+            error: "Force push failed: " + errMsg
           }, { status: 500 })
+        }
+
+        // Success
+        if (chatId) {
+          await createGitOperationMessage(chatId, `Force pushed ${currentBranch}. Remote history overwritten.`)
         }
 
         return Response.json({ success: true })

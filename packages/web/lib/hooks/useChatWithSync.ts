@@ -36,7 +36,6 @@ import {
   useDeleteChatMutation,
   useUpdateSettingsMutation,
   useSuggestNameMutation,
-  useGitPushMutation,
   useSandboxDeleteMutation,
   queryKeys,
 } from "@/lib/query"
@@ -95,7 +94,6 @@ export function useChatWithSync() {
   const deleteChatMutation = useDeleteChatMutation()
   const updateSettingsMutation = useUpdateSettingsMutation()
   const suggestNameMutation = useSuggestNameMutation()
-  const gitPushMutation = useGitPushMutation()
   const sandboxDeleteMutation = useSandboxDeleteMutation()
 
   // Local-only state
@@ -417,34 +415,12 @@ export function useChatWithSync() {
           const data: SSECompleteEvent = JSON.parse(event.data)
           useStreamStore.getState().stopStream(chatId)
 
-          // Clear backgroundSessionId immediately to prevent the "resume streaming" effect
-          // from starting a duplicate SSE connection while we await the push below
-          updateChatsCache((old) => old.map((c) =>
-            c.id === chatId ? { ...c, backgroundSessionId: undefined } : c
-          ))
-
-          // Auto-push before updating status (use branch parameter directly to avoid stale closure issues)
-          // Keep chat in "running" status until push completes so user sees the loading indicator
-          if (data.status === "completed" && branch) {
-            try {
-              await gitPushMutation.mutateAsync({ sandboxId, repoName, branch })
-            } catch (err) {
-              const errorMsg: Message = {
-                id: nanoid(),
-                role: "assistant",
-                content: `Push failed: ${err instanceof Error ? err.message : "Unknown error"}. You can **force push** to overwrite the remote history.`,
-                messageType: "git-operation",
-                isError: true,
-                timestamp: Date.now()
-              }
-              updateChatsCache((old) => old.map((c) => c.id === chatId ? { ...c, messages: [...c.messages, errorMsg] } : c))
-            }
-          }
-
-          // Now update status to ready/error after push attempt
+          // Auto-push is now handled by the backend in the stream route
+          // Clear backgroundSessionId and update status
           updateChatsCache((old) => old.map((c) =>
             c.id === chatId ? {
               ...c,
+              backgroundSessionId: undefined,
               status: data.status === "error" ? "error" : "ready",
               lastActiveAt: Date.now(),
               errorMessage: data.status === "error" ? (data.error || "Agent failed") : undefined,
@@ -501,7 +477,7 @@ export function useChatWithSync() {
     }
 
     connect()
-  }, [updateChatsCache, gitPushMutation])
+  }, [updateChatsCache])
 
   // Send message
   const sendMessage = useCallback(async (content: string, agent?: string, model?: string, files?: File[], targetChatId?: string) => {

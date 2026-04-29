@@ -1,5 +1,6 @@
 import { Daytona } from "@daytonaio/sdk"
 import { Prisma } from "@prisma/client"
+import { nanoid } from "nanoid"
 import { PATHS } from "@/lib/constants"
 import {
   cancelBackgroundAgent,
@@ -10,6 +11,48 @@ import {
 } from "@/lib/agent-session"
 import { prisma } from "@/lib/db/prisma"
 import { isAuthError, requireChatStreamAccess } from "@/lib/db/api-helpers"
+
+/**
+ * Creates a git-operation message in the database
+ */
+async function createGitOperationMessage(
+  chatId: string,
+  content: string,
+  isError: boolean = false,
+  metadata?: { action?: string; prUrl?: string; prNumber?: number }
+): Promise<string> {
+  const message = await prisma.message.create({
+    data: {
+      id: nanoid(),
+      chatId,
+      role: "assistant",
+      content,
+      timestamp: BigInt(Date.now()),
+      messageType: "git-operation",
+      isError,
+      metadata: metadata as Prisma.InputJsonValue,
+    },
+  })
+  return message.id
+}
+
+/**
+ * Auto-push to remote after agent completion
+ * Returns true if push succeeded, false otherwise
+ */
+async function autoPush(
+  sandbox: Awaited<ReturnType<Daytona["get"]>>,
+  repoPath: string,
+  githubToken: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await sandbox.git.push(repoPath, "x-access-token", githubToken)
+    return { success: true }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error"
+    return { success: false, error: message }
+  }
+}
 
 // Allow longer streaming connections (5 minutes max)
 export const maxDuration = 300
@@ -172,6 +215,41 @@ export async function GET(req: Request) {
           if (lastSnap.status === "completed" || lastSnap.status === "error") {
             await persistSnapshot(lastSnap, true)
             await finalizeTurn(sandbox, backgroundSessionId, sessionOpts)
+
+            // Auto-push on successful completion if chat has a branch (GitHub repo)
+            if (lastSnap.status === "completed" && chatId) {
+              const chat = await prisma.chat.findUnique({
+                where: { id: chatId },
+                select: { branch: true, repo: true, userId: true },
+              })
+
+              if (chat?.branch && chat.repo && chat.repo !== "__new__") {
+                // Get GitHub token from user's account
+                const account = await prisma.account.findFirst({
+                  where: { userId: chat.userId, provider: "github" },
+                  select: { access_token: true },
+                })
+
+                if (account?.access_token) {
+                  const pushResult = await autoPush(
+                    sandbox,
+                    sessionOpts.repoPath,
+                    account.access_token
+                  )
+
+                  if (!pushResult.success) {
+                    // Create error message with force-push action
+                    await createGitOperationMessage(
+                      chatId,
+                      `Push failed: ${pushResult.error}. You can force push to overwrite the remote history.`,
+                      true,
+                      { action: "force-push" }
+                    )
+                  }
+                }
+              }
+            }
+
             sendEvent("complete", {
               status: lastSnap.status,
               sessionId: lastSnap.sessionId,

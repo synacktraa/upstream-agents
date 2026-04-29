@@ -1,5 +1,8 @@
+import { Prisma } from "@prisma/client"
 import { getServerSession } from "next-auth"
+import { nanoid } from "nanoid"
 import { authOptions } from "@/lib/auth"
+import { prisma } from "@/lib/db/prisma"
 import { compareBranches, githubFetch, isGitHubApiError } from "@upstream/common"
 import { Daytona } from "@daytonaio/sdk"
 import { PATHS } from "@/lib/constants"
@@ -13,6 +16,31 @@ interface SquashRequestBody {
   head: string  // current branch to squash
   base: string  // base branch to squash relative to
   sandboxId: string
+  chatId?: string
+}
+
+/**
+ * Creates a git-operation message in the database
+ */
+async function createGitOperationMessage(
+  chatId: string,
+  content: string,
+  isError: boolean = false,
+  metadata?: { action?: string; prUrl?: string; prNumber?: number }
+): Promise<string> {
+  const message = await prisma.message.create({
+    data: {
+      id: nanoid(),
+      chatId,
+      role: "assistant",
+      content,
+      timestamp: BigInt(Date.now()),
+      messageType: "git-operation",
+      isError,
+      metadata: metadata as Prisma.InputJsonValue,
+    },
+  })
+  return message.id
 }
 
 /**
@@ -35,7 +63,7 @@ export async function POST(req: Request) {
   }
 
   const body: SquashRequestBody = await req.json()
-  const { owner, repo, head, base, sandboxId } = body
+  const { owner, repo, head, base, sandboxId, chatId } = body
 
   if (!owner || !repo || !head || !base || !sandboxId) {
     return Response.json({ error: "Missing required fields: owner, repo, head, base, sandboxId" }, { status: 400 })
@@ -198,6 +226,14 @@ export async function POST(req: Request) {
         })
       }
 
+      // Create success message
+      if (chatId) {
+        await createGitOperationMessage(
+          chatId,
+          `Squashed ${compareData.ahead_by} commits into one on ${head}.`
+        )
+      }
+
       return Response.json({
         success: true,
         squashedSha,
@@ -220,10 +256,13 @@ export async function POST(req: Request) {
 
   } catch (error: unknown) {
     console.error("[github/squash] Error:", error)
-    if (isGitHubApiError(error)) {
-      return Response.json({ error: error.message }, { status: error.status })
+    const message = isGitHubApiError(error) ? error.message : (error instanceof Error ? error.message : "Unknown error")
+    const status = isGitHubApiError(error) ? error.status : 500
+
+    if (chatId) {
+      await createGitOperationMessage(chatId, `Squash failed: ${message}`, true)
     }
-    const message = error instanceof Error ? error.message : "Unknown error"
-    return Response.json({ error: message }, { status: 500 })
+
+    return Response.json({ error: message }, { status })
   }
 }

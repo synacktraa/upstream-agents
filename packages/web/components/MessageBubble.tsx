@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react"
 import { ChevronDown, ChevronRight, Terminal, FileText, Search, GitMerge, LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { Message, ContentBlock, ToolCall } from "@/lib/types"
+import type { Message, ContentBlock, ToolCall, MessageMetadata } from "@/lib/types"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 
@@ -172,6 +172,7 @@ function AssistantContent({ message, isStreaming, isMobile = false, repo, onOpen
         isMobile={isMobile}
         repo={repo}
         linkBranch={message.linkBranch}
+        metadata={message.metadata}
         onForcePush={onForcePush}
       />
     )
@@ -240,10 +241,11 @@ interface SystemMessageProps {
   isMobile?: boolean
   repo?: string
   linkBranch?: string
+  metadata?: MessageMetadata
   onForcePush?: () => void
 }
 
-function SystemMessage({ icon: Icon, content, variant = "success", isMobile = false, repo, linkBranch, onForcePush }: SystemMessageProps) {
+function SystemMessage({ icon: Icon, content, variant = "success", isMobile = false, repo, linkBranch, metadata, onForcePush }: SystemMessageProps) {
   const iconClasses = cn(
     "shrink-0",
     variant === "error" && "text-red-500 dark:text-red-400",
@@ -265,10 +267,12 @@ function SystemMessage({ icon: Icon, content, variant = "success", isMobile = fa
     return null
   }
 
-  // Push-failure messages embed the literal "**force push**" marker so we can
-  // render that span as a clickable trigger for the ForcePushDialog.
-  const FORCE_PUSH_MARKER = "**force push**"
-  const forcePushIdx = onForcePush ? content.indexOf(FORCE_PUSH_MARKER) : -1
+  // Check if this message has a force-push action via metadata
+  const hasForcePushAction = metadata?.action === "force-push" && onForcePush
+
+  // Find "force push" text in content to make it clickable
+  const FORCE_PUSH_TEXT = "force push"
+  const forcePushIdx = hasForcePushAction ? content.toLowerCase().indexOf(FORCE_PUSH_TEXT) : -1
   const hasForcePushLink = forcePushIdx !== -1
 
   const parsed = parseMergeMessage(content)
@@ -276,7 +280,7 @@ function SystemMessage({ icon: Icon, content, variant = "success", isMobile = fa
   const renderContent = () => {
     if (hasForcePushLink && onForcePush) {
       const before = content.slice(0, forcePushIdx)
-      const after = content.slice(forcePushIdx + FORCE_PUSH_MARKER.length)
+      const after = content.slice(forcePushIdx + FORCE_PUSH_TEXT.length)
       return (
         <>
           {before}

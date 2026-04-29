@@ -18,7 +18,6 @@ export type { RebaseConflictState }
 
 export interface UseGitDialogsOptions {
   chat: Chat | null
-  onAddMessage?: (message: Message) => void
   /** When merging into a branch, the parent can route a mirrored system
    *  message to whichever chat owns that branch in the same repo. */
   onAddMessageToBranch?: (branch: string, message: Message) => void
@@ -969,7 +968,8 @@ export function ForcePushDialog({ open, onClose, gitDialogs, chat, isMobile = fa
 // useGitDialogs Hook
 // ============================================================================
 
-export function useGitDialogs({ chat, onAddMessage, onAddMessageToBranch, resolveChatName, getTargetSandboxId, getTargetChatStatus, onMarkBranchNeedsSync, onSetBaseBranch }: UseGitDialogsOptions): UseGitDialogsResult {
+export function useGitDialogs({ chat, onAddMessageToBranch, resolveChatName, getTargetSandboxId, getTargetChatStatus, onMarkBranchNeedsSync, onSetBaseBranch }: UseGitDialogsOptions): UseGitDialogsResult {
+  const chatId = chat?.id ?? ""
   const branchName = chat?.branch ?? ""
   const baseBranch = chat?.baseBranch ?? ""
   const sandboxId = chat?.sandboxId ?? ""
@@ -1019,20 +1019,6 @@ export function useGitDialogs({ chat, onAddMessage, onAddMessageToBranch, resolv
   // Always use "project" as the directory name - sandbox/create always uses this
   const repoName = "project"
 
-  // Add system message helper for git operations
-  const addSystemMessage = useCallback((content: string, isError = false, linkBranch?: string) => {
-    if (!onAddMessage) return
-    onAddMessage({
-      id: generateId(),
-      role: "assistant",
-      content,
-      messageType: "git-operation",
-      isError,
-      timestamp: Date.now(),
-      linkBranch,
-    })
-  }, [onAddMessage])
-
   // Fetch branches when dialog opens
   const fetchBranches = useCallback(async () => {
     if (!repoOwner || !repoApiName) {
@@ -1077,12 +1063,12 @@ export function useGitDialogs({ chat, onAddMessage, onAddMessageToBranch, resolv
 
   // Handle merge
   const handleMerge = useCallback(async () => {
-    if (!selectedBranch || !branchName || !sandboxId) return
+    if (!selectedBranch || !branchName || !sandboxId || !chatId) return
 
-    // Block merge into a running branch
+    // Block merge into a running branch (frontend check only - backend creates the message)
     const targetStatus = getTargetChatStatus?.(selectedBranch)
     if (targetStatus === "running") {
-      addSystemMessage(`Cannot merge into "${selectedBranch}" while an agent is running on it.`, true)
+      // The API will create the error message
       setMergeOpen(false)
       return
     }
@@ -1092,6 +1078,10 @@ export function useGitDialogs({ chat, onAddMessage, onAddMessageToBranch, resolv
     // Get the target sandbox ID so we can pull the merged changes there
     const targetSandboxId = getTargetSandboxId?.(selectedBranch) ?? null
     console.log(`[merge] selectedBranch: ${selectedBranch}, targetSandboxId: ${targetSandboxId}`)
+
+    // Resolve names for the success message
+    const sourceName = chat?.displayName || branchName
+    const targetName = resolveChatName?.(selectedBranch) || selectedBranch
 
     try {
       const res = await fetch("/api/sandbox/git", {
@@ -1107,6 +1097,9 @@ export function useGitDialogs({ chat, onAddMessage, onAddMessageToBranch, resolv
           repoOwner,
           repoApiName,
           targetSandboxId,
+          chatId,
+          sourceName,
+          targetName,
         }),
       })
 
@@ -1118,16 +1111,15 @@ export function useGitDialogs({ chat, onAddMessage, onAddMessageToBranch, resolv
           inMerge: true,
           conflictedFiles: data.conflictedFiles || [],
         })
-        const fileList = (data.conflictedFiles || []).join(", ")
-        addSystemMessage(
-          `Merge conflict: ${branchName} into ${selectedBranch}. Conflicted files: ${fileList}`
-        )
+        // Message is created by the backend
         setMergeOpen(false)
         return
       }
 
       if (!res.ok) {
-        throw new Error(typeof data.error === "string" ? data.error : "Merge failed")
+        // Error message created by backend
+        setMergeOpen(false)
+        return
       }
 
       // If sandbox was stopped, mark branch for sync on next wake
@@ -1140,35 +1132,19 @@ export function useGitDialogs({ chat, onAddMessage, onAddMessageToBranch, resolv
         onSetBaseBranch(selectedBranch)
       }
 
-      const verb = squashMerge ? "Squash merged" : "Merged"
-      const sourceName = chat?.displayName || branchName
-      const targetName = resolveChatName?.(selectedBranch) || selectedBranch
-      const summary = `${verb} ${sourceName} into ${targetName}.`
-      addSystemMessage(summary, false, selectedBranch)
-      // Mirror the message to whichever chat is tracking the merged-into
-      // branch so both sides see the history.
-      if (onAddMessageToBranch) {
-        onAddMessageToBranch(selectedBranch, {
-          id: generateId(),
-          role: "assistant",
-          content: summary,
-          messageType: "git-operation",
-          timestamp: Date.now(),
-          linkBranch: selectedBranch,
-        })
-      }
+      // Success message created by backend
       setMergeOpen(false)
-    } catch (err: unknown) {
-      addSystemMessage(`Merge failed: ${err instanceof Error ? err.message : "Unknown error"}`, true)
+    } catch {
+      // Error message created by backend on API error
       setMergeOpen(false)
     } finally {
       setActionLoading(false)
     }
-  }, [selectedBranch, branchName, sandboxId, repoName, repoOwner, repoApiName, squashMerge, addSystemMessage, getTargetSandboxId, getTargetChatStatus, onMarkBranchNeedsSync, chat?.parentChatId, onSetBaseBranch])
+  }, [selectedBranch, branchName, sandboxId, chatId, repoName, repoOwner, repoApiName, squashMerge, getTargetSandboxId, getTargetChatStatus, onMarkBranchNeedsSync, chat?.parentChatId, chat?.displayName, onSetBaseBranch, resolveChatName])
 
   // Handle rebase
   const handleRebase = useCallback(async () => {
-    if (!selectedBranch || !branchName || !sandboxId) return
+    if (!selectedBranch || !branchName || !sandboxId || !chatId) return
     setActionLoading(true)
 
     try {
@@ -1183,6 +1159,7 @@ export function useGitDialogs({ chat, onAddMessage, onAddMessageToBranch, resolv
           currentBranch: branchName,
           repoOwner,
           repoApiName,
+          chatId,
         }),
       })
 
@@ -1194,39 +1171,30 @@ export function useGitDialogs({ chat, onAddMessage, onAddMessageToBranch, resolv
           inMerge: false,
           conflictedFiles: data.conflictedFiles || [],
         })
-        const fileList = (data.conflictedFiles || []).join(", ")
-        addSystemMessage(
-          `Rebase conflict: ${branchName} onto ${selectedBranch}. Conflicted files: ${fileList}`
-        )
+        // Message created by backend
         setRebaseOpen(false)
         return
       }
 
       if (!res.ok) {
-        throw new Error(typeof data.error === "string" ? data.error : "Rebase failed")
+        // Error message created by backend
+        setRebaseOpen(false)
+        return
       }
 
-      addSystemMessage(
-        `Rebased ${branchName} onto ${selectedBranch}. The branch on GitHub now points at your rebased commits.`
-      )
+      // Success message created by backend
       setRebaseOpen(false)
-    } catch (err: unknown) {
-      const errMsg = err instanceof Error ? err.message : "Unknown error"
-      // The bare PATCH-ref path on the rebase route fails with "Object does not
-      // exist" when rebase rewrote commits whose SHAs aren't on GitHub yet.
-      // Surface the force-push affordance so the user can recover via the dance.
-      const recoverable = errMsg.includes("Force push failed") || errMsg.includes("Object does not exist")
-      const suffix = recoverable ? " You can **force push** to overwrite the remote history." : ""
-      addSystemMessage(`Rebase failed: ${errMsg}.${suffix}`, true)
+    } catch {
+      // Error message created by backend
       setRebaseOpen(false)
     } finally {
       setActionLoading(false)
     }
-  }, [selectedBranch, branchName, sandboxId, repoName, repoOwner, repoApiName, addSystemMessage])
+  }, [selectedBranch, branchName, sandboxId, chatId, repoName, repoOwner, repoApiName])
 
   // Handle create PR
   const handleCreatePR = useCallback(async (descriptionType: PRDescriptionTypeForHook = "short") => {
-    if (!selectedBranch || !branchName || !repoOwner || !repoApiName) return
+    if (!selectedBranch || !branchName || !repoOwner || !repoApiName || !chatId) return
     setActionLoading(true)
 
     try {
@@ -1239,31 +1207,24 @@ export function useGitDialogs({ chat, onAddMessage, onAddMessageToBranch, resolv
           head: branchName,
           base: selectedBranch,
           descriptionType,
+          chatId,
         }),
       })
 
-      const data = await res.json()
-
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to create PR")
-      }
-
-      addSystemMessage(
-        `Pull request created: #${data.number} - ${data.title} (${data.url})`
-      )
+      // Message created by backend (success or error)
       setPROpen(false)
-    } catch (err: unknown) {
-      addSystemMessage(`PR creation failed: ${err instanceof Error ? err.message : "Unknown error"}`, true)
+    } catch {
+      // Error message created by backend
       setPROpen(false)
     } finally {
       setActionLoading(false)
     }
-  }, [selectedBranch, branchName, repoOwner, repoApiName, addSystemMessage])
+  }, [selectedBranch, branchName, repoOwner, repoApiName, chatId])
 
   // Handle force push (temp-branch dance: push commits to a throwaway remote
   // branch so GitHub has the objects, then PATCH the real branch ref to that SHA).
   const handleForcePush = useCallback(async () => {
-    if (!branchName || !sandboxId || !repoOwner || !repoApiName) return
+    if (!branchName || !sandboxId || !repoOwner || !repoApiName || !chatId) return
     setActionLoading(true)
 
     try {
@@ -1277,27 +1238,23 @@ export function useGitDialogs({ chat, onAddMessage, onAddMessageToBranch, resolv
           currentBranch: branchName,
           repoOwner,
           repoApiName,
+          chatId,
         }),
       })
 
-      const data = await res.json()
-      if (!res.ok) {
-        throw new Error(typeof data.error === "string" ? data.error : "Force push failed")
-      }
-
-      addSystemMessage(`Force pushed ${branchName}. Remote history overwritten.`)
+      // Message created by backend (success or error)
       setForcePushOpen(false)
-    } catch (err: unknown) {
-      addSystemMessage(`Force push failed: ${err instanceof Error ? err.message : "Unknown error"}`, true)
+    } catch {
+      // Error message created by backend
       setForcePushOpen(false)
     } finally {
       setActionLoading(false)
     }
-  }, [branchName, sandboxId, repoName, repoOwner, repoApiName, addSystemMessage])
+  }, [branchName, sandboxId, chatId, repoName, repoOwner, repoApiName])
 
   // Handle abort conflict
   const handleAbortConflict = useCallback(async () => {
-    if (!sandboxId) return
+    if (!sandboxId || !chatId) return
     const isMerge = rebaseConflict.inMerge
     setActionLoading(true)
 
@@ -1309,24 +1266,24 @@ export function useGitDialogs({ chat, onAddMessage, onAddMessageToBranch, resolv
           sandboxId,
           repoPath: `${PATHS.SANDBOX_HOME}/${repoName}`,
           action: isMerge ? "abort-merge" : "abort-rebase",
+          chatId,
         }),
       })
 
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error)
+      if (!res.ok) {
+        // Error message created by backend
+        return
+      }
 
       setRebaseConflict(EMPTY_CONFLICT_STATE)
-      addSystemMessage(
-        isMerge
-          ? `Merge aborted. Your branch is back to its previous state.`
-          : `Rebase aborted. Your branch is back to its previous state.`
-      )
-    } catch (err: unknown) {
-      addSystemMessage(`Abort failed: ${err instanceof Error ? err.message : "Unknown error"}`, true)
+      // Success message created by backend
+    } catch {
+      // Error message created by backend
     } finally {
       setActionLoading(false)
     }
-  }, [sandboxId, repoName, rebaseConflict.inMerge, addSystemMessage])
+  }, [sandboxId, chatId, repoName, rebaseConflict.inMerge])
 
   // Fetch commits ahead when squash dialog opens
   const fetchCommitsAhead = useCallback(async () => {
@@ -1368,7 +1325,7 @@ export function useGitDialogs({ chat, onAddMessage, onAddMessageToBranch, resolv
 
   // Handle squash
   const handleSquash = useCallback(async () => {
-    if (!branchName || !sandboxId || commitsAhead < 2) return
+    if (!branchName || !sandboxId || !chatId || commitsAhead < 2) return
     setActionLoading(true)
 
     try {
@@ -1381,23 +1338,19 @@ export function useGitDialogs({ chat, onAddMessage, onAddMessageToBranch, resolv
           head: branchName,
           base: baseBranch,
           sandboxId,
+          chatId,
         }),
       })
 
-      const data = await res.json()
-      if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Squash failed")
-
-      addSystemMessage(
-        `Squashed ${commitsAhead} commits into one on ${branchName}.`
-      )
+      // Message created by backend (success or error)
       setSquashOpen(false)
-    } catch (err: unknown) {
-      addSystemMessage(`Squash failed: ${err instanceof Error ? err.message : "Unknown error"}`, true)
+    } catch {
+      // Error message created by backend
       setSquashOpen(false)
     } finally {
       setActionLoading(false)
     }
-  }, [branchName, sandboxId, commitsAhead, baseBranch, repoOwner, repoApiName, addSystemMessage])
+  }, [branchName, sandboxId, chatId, commitsAhead, baseBranch, repoOwner, repoApiName])
 
   // Check rebase status
   const checkRebaseStatus = useCallback(async () => {

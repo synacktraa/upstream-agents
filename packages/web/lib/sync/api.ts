@@ -46,6 +46,7 @@ export interface MessageResponse {
   contentBlocks: unknown
   uploadedFiles: unknown
   linkBranch: string | null
+  metadata: unknown
 }
 
 export interface ChatWithMessagesResponse extends ChatResponse {
@@ -241,6 +242,7 @@ export function toMessageType(serverMessage: MessageResponse): Message {
     contentBlocks: serverMessage.contentBlocks as Message["contentBlocks"],
     uploadedFiles: serverMessage.uploadedFiles as Message["uploadedFiles"],
     linkBranch: serverMessage.linkBranch || undefined,
+    metadata: serverMessage.metadata as Message["metadata"],
   }
 }
 

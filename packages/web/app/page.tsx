@@ -238,17 +238,9 @@ export default function HomePage() {
     }
   }, [currentChatId, addMessage])
 
-  // Git dialogs state - now uses API calls
+  // Git dialogs state - backend creates messages directly in DB
   const gitDialogs = useGitDialogs({
     chat: currentChat ?? null,
-    onAddMessage: handleAddMessage,
-    onAddMessageToBranch: (branch, message) => {
-      if (!currentChat) return
-      const target = chats.find(
-        (c) => c.id !== currentChat.id && c.repo === currentChat.repo && c.branch === branch
-      )
-      if (target) addMessage(target.id, message)
-    },
     resolveChatName: (branch) => {
       if (!currentChat) return null
       const target = chats.find(
