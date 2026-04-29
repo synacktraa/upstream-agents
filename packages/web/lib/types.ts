@@ -29,6 +29,19 @@ export {
 /** Message type for distinguishing system messages from regular chat */
 export type MessageType = "chat" | "git-operation"
 
+/** Action types for git-operation messages */
+export type MessageAction = "force-push" | "view-pr" | "view-branch"
+
+/** Metadata for git-operation messages */
+export interface MessageMetadata {
+  /** Action hint for rendering clickable links */
+  action?: MessageAction
+  /** PR URL for view-pr action */
+  prUrl?: string
+  /** PR number for view-pr action */
+  prNumber?: number
+}
+
 export interface Message {
   id: string
   role: "user" | "assistant"
@@ -51,6 +64,8 @@ export interface Message {
   uploadedFiles?: string[]
   /** For git-operation merge messages: the branch the link should point at on GitHub. */
   linkBranch?: string
+  /** Flexible metadata for actions, links, etc. */
+  metadata?: MessageMetadata
 }
 
 // Special value for new repository (local git repo, no GitHub)

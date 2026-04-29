@@ -145,6 +145,10 @@ model Message {
   // Git operation message fields
   linkBranch String?
 
+  // Flexible metadata for actions, links, etc.
+  // { action?: "force-push" | "view-pr" | "view-branch", prUrl?: string, ... }
+  metadata Json?
+
   createdAt DateTime @default(now())
 
   chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)

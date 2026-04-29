@@ -24,6 +24,7 @@ interface MessageResponse {
   contentBlocks: unknown
   uploadedFiles: unknown
   linkBranch: string | null
+  metadata: unknown
 }
 
 interface ChatWithMessagesResponse {
@@ -121,6 +122,7 @@ export async function GET(
         contentBlocks: m.contentBlocks,
         uploadedFiles: m.uploadedFiles,
         linkBranch: m.linkBranch,
+        metadata: m.metadata,
       })),
     }
 
