@@ -24,6 +24,7 @@ import {
   saveUnseenChatIds,
   setQueuedMessages,
   setQueuePaused,
+  setDraft,
   clearLocalStateForChats,
   collectDescendantIds,
   DEFAULT_SETTINGS,
@@ -105,7 +106,8 @@ export function useChatWithSync() {
     previewItems: Record<string, Chat["previewItem"]>
     queuedMessages: Record<string, Chat["queuedMessages"]>
     queuePaused: Record<string, boolean>
-  }>({ previewItems: {}, queuedMessages: {}, queuePaused: {} })
+    drafts: Record<string, string>
+  }>({ previewItems: {}, queuedMessages: {}, queuePaused: {}, drafts: {} })
 
   const prevStatuses = useRef<Map<string, ChatStatus>>(new Map())
   const sendInFlight = useRef<Set<string>>(new Set())
@@ -120,6 +122,7 @@ export function useChatWithSync() {
       previewItems: localState.previewItems,
       queuedMessages: localState.queuedMessages,
       queuePaused: localState.queuePaused,
+      drafts: localState.drafts,
     })
     setIsHydrated(true)
   }, [])
@@ -245,42 +248,52 @@ export function useChatWithSync() {
     persistCurrentChatId(chatId)
   }, [])
 
-  const removeChat = useCallback(async (chatId: string) => {
-    const allIds = collectDescendantIds(chats, chatId)
-    for (const id of allIds) useStreamStore.getState().stopStream(id)
-    setDeletingChatIds((prev) => new Set([...prev, ...allIds]))
+  const removeChat = useCallback(
+    async (chatId: string, getNextChatId?: (deletedIds: string[]) => string | null) => {
+      const allIds = collectDescendantIds(chats, chatId)
+      for (const id of allIds) useStreamStore.getState().stopStream(id)
+      setDeletingChatIds((prev) => new Set([...prev, ...allIds]))
 
-    try {
-      const result = await deleteChatMutation.mutateAsync(chatId)
-      for (const sandboxId of result.sandboxIdsToCleanup) {
-        sandboxDeleteMutation.mutate(sandboxId)
-      }
-      clearLocalStateForChats(result.deletedChatIds)
-      setLocalChatState((prev) => {
-        const next = { ...prev, previewItems: { ...prev.previewItems }, queuedMessages: { ...prev.queuedMessages }, queuePaused: { ...prev.queuePaused } }
-        for (const id of result.deletedChatIds) {
-          delete next.previewItems[id]
-          delete next.queuedMessages[id]
-          delete next.queuePaused[id]
+      try {
+        const result = await deleteChatMutation.mutateAsync(chatId)
+        for (const sandboxId of result.sandboxIdsToCleanup) {
+          sandboxDeleteMutation.mutate(sandboxId)
         }
-        return next
-      })
-      if (result.deletedChatIds.includes(currentChatId ?? "")) {
-        const remaining = chats.filter((c) => !result.deletedChatIds.includes(c.id))
-        const nextChat = remaining[0]?.id ?? null
-        setCurrentChatIdState(nextChat)
-        persistCurrentChatId(nextChat)
+        clearLocalStateForChats(result.deletedChatIds)
+        setLocalChatState((prev) => {
+          const next = { ...prev, previewItems: { ...prev.previewItems }, queuedMessages: { ...prev.queuedMessages }, queuePaused: { ...prev.queuePaused }, drafts: { ...prev.drafts } }
+          for (const id of result.deletedChatIds) {
+            delete next.previewItems[id]
+            delete next.queuedMessages[id]
+            delete next.queuePaused[id]
+            delete next.drafts[id]
+          }
+          return next
+        })
+        if (result.deletedChatIds.includes(currentChatId ?? "")) {
+          let nextChat: string | null = null
+          if (getNextChatId) {
+            nextChat = getNextChatId(result.deletedChatIds)
+          } else {
+            // Fallback: select first remaining chat
+            const remaining = chats.filter((c) => !result.deletedChatIds.includes(c.id))
+            nextChat = remaining[0]?.id ?? null
+          }
+          setCurrentChatIdState(nextChat)
+          persistCurrentChatId(nextChat)
+        }
+      } catch (error) {
+        console.error("Failed to delete chat:", error)
+      } finally {
+        setDeletingChatIds((prev) => {
+          const next = new Set(prev)
+          for (const id of allIds) next.delete(id)
+          return next
+        })
       }
-    } catch (error) {
-      console.error("Failed to delete chat:", error)
-    } finally {
-      setDeletingChatIds((prev) => {
-        const next = new Set(prev)
-        for (const id of allIds) next.delete(id)
-        return next
-      })
-    }
-  }, [chats, currentChatId, deleteChatMutation, sandboxDeleteMutation])
+    },
+    [chats, currentChatId, deleteChatMutation, sandboxDeleteMutation]
+  )
 
   const renameChat = useCallback(async (chatId: string, newName: string) => {
     try {
@@ -427,6 +440,23 @@ export function useChatWithSync() {
               sessionId: data.sessionId ?? c.sessionId,
             } : c
           ))
+
+          // Fetch any new messages created by the backend (e.g., push failure messages)
+          // This uses delta sync - only fetches messages after the assistant message
+          try {
+            const chatData = await fetchChat(chatId, assistantMessageId)
+            const incomingMessages = chatData.messages.map(toMessageType)
+            if (incomingMessages.length > 0) {
+              updateChatsCache((old) =>
+                old.map((c) => {
+                  if (c.id !== chatId) return c
+                  return { ...c, messages: mergeMessages(c.messages, incomingMessages) }
+                })
+              )
+            }
+          } catch (fetchErr) {
+            console.error("Failed to fetch new messages after stream complete:", fetchErr)
+          }
         } catch (err) {
           console.error("Failed to parse SSE complete:", err)
         }
@@ -590,11 +620,14 @@ export function useChatWithSync() {
     }
   }, [currentChatId, chats, session?.accessToken, settings, credentialFlags, updateChatsCache, startStreaming, suggestNameMutation])
 
-  const stopAgent = useCallback(() => {
+  const stopAgent = useCallback(async () => {
     if (!currentChat) return
+
+    // Stop the SSE stream on the client side
     useStreamStore.getState().stopStream(currentChat.id)
     const hasQueue = (currentChat.queuedMessages?.length ?? 0) > 0
 
+    // Optimistically update the UI
     updateChatsCache((old) => old.map((c) =>
       c.id === currentChat.id ? { ...c, status: "ready", queuePaused: hasQueue ? true : c.queuePaused } : c
     ))
@@ -602,6 +635,18 @@ export function useChatWithSync() {
     if (hasQueue) {
       setQueuePaused(currentChat.id, true)
       setLocalChatState((prev) => ({ ...prev, queuePaused: { ...prev.queuePaused, [currentChat.id]: true } }))
+    }
+
+    // Call the stop endpoint to actually kill the agent process
+    // This is fire-and-forget - we've already updated the UI optimistically
+    try {
+      await fetch("/api/agent/stop", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chatId: currentChat.id }),
+      })
+    } catch (err) {
+      console.error("[stopAgent] Failed to stop agent:", err)
     }
   }, [currentChat, updateChatsCache])
 
@@ -669,6 +714,58 @@ export function useChatWithSync() {
     setLocalChatState((prev) => ({ ...prev, queuePaused: { ...prev.queuePaused, [currentChat.id]: false } }))
   }, [currentChat])
 
+  // Draft management
+  const updateDraft = useCallback((chatId: string, draft: string) => {
+    setDraft(chatId, draft)
+    setLocalChatState((prev) => {
+      const newDrafts = { ...prev.drafts }
+      if (draft === "") {
+        delete newDrafts[chatId]
+      } else {
+        newDrafts[chatId] = draft
+      }
+      return { ...prev, drafts: newDrafts }
+    })
+  }, [])
+
+  const clearDraft = useCallback((chatId: string) => {
+    setDraft(chatId, undefined)
+    setLocalChatState((prev) => {
+      const newDrafts = { ...prev.drafts }
+      delete newDrafts[chatId]
+      return { ...prev, drafts: newDrafts }
+    })
+  }, [])
+
+  // Auto-dispatch queued messages when a chat transitions from running to ready
+  useEffect(() => {
+    if (!isHydrated) return
+
+    for (const chat of chats) {
+      const prevStatus = prevStatuses.current.get(chat.id)
+      // Only trigger on running → ready/error transition
+      if (prevStatus !== "running" || chat.status === "running") continue
+
+      const queue = localChatState.queuedMessages[chat.id]
+      const paused = localChatState.queuePaused[chat.id]
+
+      // If there are queued messages and queue is not paused, dispatch the first one
+      if (queue && queue.length > 0 && !paused && chat.status === "ready") {
+        const [first, ...rest] = queue
+        // Update queue state (remove the dispatched message)
+        setQueuedMessages(chat.id, rest.length > 0 ? rest : undefined)
+        setLocalChatState((prev) => ({
+          ...prev,
+          queuedMessages: { ...prev.queuedMessages, [chat.id]: rest.length > 0 ? rest : undefined },
+        }))
+        // Send the message (using setTimeout to avoid calling sendMessage during render)
+        setTimeout(() => {
+          sendMessage(first.content, first.agent, first.model, undefined, chat.id)
+        }, 0)
+      }
+    }
+  }, [chats, isHydrated, localChatState.queuedMessages, localChatState.queuePaused, sendMessage])
+
   // Refetch messages for a specific chat (used after git operations add messages on backend)
   // Uses delta sync - only fetches messages after the last known message ID
   const refetchMessages = useCallback(async (chatId: string) => {
@@ -726,5 +823,8 @@ export function useChatWithSync() {
     removeQueuedMessage,
     resumeQueue,
     refetchMessages,
+    drafts: localChatState.drafts,
+    updateDraft,
+    clearDraft,
   }
 }

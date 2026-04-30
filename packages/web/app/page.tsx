@@ -86,6 +86,9 @@ export default function HomePage() {
     resumeQueue,
     updateChatById,
     refetchMessages,
+    drafts,
+    updateDraft,
+    clearDraft,
   } = useChatWithSync()
 
   const [repoSelectOpen, setRepoSelectOpen] = useState(false)
@@ -195,6 +198,10 @@ export default function HomePage() {
   // the chat row that would normally hold these doesn't exist yet.
   const [draftAgent, setDraftAgent] = useState<string | null>(null)
   const [draftModel, setDraftModel] = useState<string | null>(null)
+
+  // Per-chat draft message text (stored in localStorage via useChatWithSync)
+  // For unauthenticated users (draft mode), we use local component state instead.
+  const [draftModeInput, setDraftModeInput] = useState("")
 
   // Repository filter state (shared with Sidebar)
   const [repoFilter, setRepoFilter] = useState<string>(ALL_REPOSITORIES)
@@ -686,6 +693,23 @@ export default function HomePage() {
     handleSelectChat(nextId)
   }, [treeOrderedChatIds, currentChatId, chats, expandChatAndAncestors])
 
+  // Compute the next chat to select after deletion (following chat, or previous if last)
+  const getNextChatId = useCallback(
+    (deletedIds: string[]) => {
+      const deletedSet = new Set(deletedIds)
+      const remaining = treeOrderedChatIds.filter((id) => !deletedSet.has(id))
+      if (remaining.length === 0) return null
+
+      // Find index of first deleted chat in original order
+      const firstDeletedIdx = treeOrderedChatIds.findIndex((id) => deletedSet.has(id))
+
+      // Select chat at same index (following chat) or last remaining if beyond bounds
+      const targetIdx = Math.min(firstDeletedIdx, remaining.length - 1)
+      return remaining[targetIdx] ?? null
+    },
+    [treeOrderedChatIds]
+  )
+
   // Open the current chat's branch on GitHub (available once the branch is pushed).
   const githubBranchUrl =
     currentChat?.branch && currentChat.sandboxId && currentChat.repo !== NEW_REPOSITORY
@@ -772,6 +796,21 @@ export default function HomePage() {
     [isDraftMode, updateCurrentChat]
   )
 
+  // Per-chat draft handling: in draft mode use local state, otherwise use
+  // localStorage-backed drafts keyed by chatId.
+  const currentDraft = isDraftMode
+    ? draftModeInput
+    : (currentChatId ? (drafts[currentChatId] ?? "") : "")
+
+  const handleDraftChange = useCallback((draft: string) => {
+    if (isDraftMode) {
+      setDraftModeInput(draft)
+      return
+    }
+    if (!currentChatId) return
+    updateDraft(currentChatId, draft)
+  }, [isDraftMode, currentChatId, updateDraft])
+
   return (
     <PaletteProvider
       repos={repos}
@@ -820,7 +859,7 @@ export default function HomePage() {
           unseenChatIds={unseenChatIds}
           onSelectChat={handleSelectChat}
           onNewChat={handleNewChat}
-          onDeleteChat={removeChat}
+          onDeleteChat={(chatId) => removeChat(chatId, getNextChatId)}
           onRenameChat={renameChat}
           onOpenSettings={() => handleOpenSettings()}
           collapsed={sidebarCollapsed}
@@ -847,7 +886,7 @@ export default function HomePage() {
           unseenChatIds={unseenChatIds}
           onSelectChat={handleSelectChat}
           onNewChat={handleNewChat}
-          onDeleteChat={removeChat}
+          onDeleteChat={(chatId) => removeChat(chatId, getNextChatId)}
           onRenameChat={renameChat}
           onOpenSettings={() => handleOpenSettings()}
           collapsed={false}
@@ -909,7 +948,7 @@ export default function HomePage() {
                 onOpenSettings={handleOpenSettings}
                 onSlashCommand={handleSlashCommand}
                 onRequireSignIn={!session ? () => setSignInModalOpen(true) : undefined}
-                onDeleteChat={displayCurrentChatId ? () => removeChat(displayCurrentChatId) : undefined}
+                onDeleteChat={displayCurrentChatId ? () => removeChat(displayCurrentChatId, getNextChatId) : undefined}
                 onOpenHelp={() => setHelpOpen(true)}
                 onOpenFile={(filePath) => {
                   const filename = filePath.split("/").pop() || filePath
@@ -924,6 +963,8 @@ export default function HomePage() {
                 onBranchQueuedMessage={handleBranchQueuedMessage}
                 canBranch={canBranch}
                 isLoadingMessages={isLoadingMessages}
+                draft={currentDraft}
+                onDraftChange={handleDraftChange}
               />
             </div>
             {!isMobile && previewOpen && (
@@ -1071,7 +1112,7 @@ export default function HomePage() {
         open={deleteConfirmChatId !== null}
         onClose={() => setDeleteConfirmChatId(null)}
         onConfirm={() => {
-          if (deleteConfirmChatId) removeChat(deleteConfirmChatId)
+          if (deleteConfirmChatId) removeChat(deleteConfirmChatId, getNextChatId)
         }}
         title="Delete chat"
         description={

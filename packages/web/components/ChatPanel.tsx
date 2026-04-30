@@ -50,10 +50,18 @@ interface ChatPanelProps {
   canBranch?: boolean
   /** Whether messages are currently being loaded for this chat */
   isLoadingMessages?: boolean
+  /** Current draft text for this chat */
+  draft?: string
+  /** Callback when draft text changes */
+  onDraftChange?: (draft: string) => void
 }
 
-export function ChatPanel({ chat, settings, credentialFlags, onSendMessage, onEnqueueMessage, onRemoveQueuedMessage, onResumeQueue, onStopAgent, onChangeRepo, onChangeBranch, onUpdateChat, onOpenSettings, onSlashCommand, onRequireSignIn, onDeleteChat, onOpenHelp, onOpenFile, onForcePush, isMobile = false, rebaseConflict, onAbortConflict, conflictActionLoading = false, onBranchWithMessage, onBranchQueuedMessage, canBranch = false, isLoadingMessages = false }: ChatPanelProps) {
-  const [input, setInput] = useState("")
+export function ChatPanel({ chat, settings, credentialFlags, onSendMessage, onEnqueueMessage, onRemoveQueuedMessage, onResumeQueue, onStopAgent, onChangeRepo, onChangeBranch, onUpdateChat, onOpenSettings, onSlashCommand, onRequireSignIn, onDeleteChat, onOpenHelp, onOpenFile, onForcePush, isMobile = false, rebaseConflict, onAbortConflict, conflictActionLoading = false, onBranchWithMessage, onBranchQueuedMessage, canBranch = false, isLoadingMessages = false, draft = "", onDraftChange }: ChatPanelProps) {
+  // Use draft prop as input value (controlled component pattern for per-chat drafts)
+  const input = draft
+  const setInput = useCallback((value: string) => {
+    onDraftChange?.(value)
+  }, [onDraftChange])
   const [userHasScrolledUp, setUserHasScrolledUp] = useState(false)
   const [showAgentDropdown, setShowAgentDropdown] = useState(false)
   const [showModelDropdown, setShowModelDropdown] = useState(false)
@@ -80,6 +88,18 @@ export function ChatPanel({ chat, settings, credentialFlags, onSendMessage, onEn
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const prevChatIdRef = useRef<string | null>(null)
+
+  const focusPrompt = useCallback((moveCursorToEnd: boolean = false) => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+
+    textarea.focus()
+
+    if (moveCursorToEnd) {
+      const end = textarea.value.length
+      textarea.setSelectionRange(end, end)
+    }
+  }, [])
 
   // Get current agent/model (from chat, the user's preference, or auto-resolved
   // from credential flags). Uses ?? so we don't trip over the empty string.
@@ -136,10 +156,10 @@ export function ChatPanel({ chat, settings, credentialFlags, onSendMessage, onEn
   useEffect(() => {
     if (isMobile) return
     const t = window.setTimeout(() => {
-      textareaRef.current?.focus()
+      focusPrompt(true)
     }, 0)
     return () => window.clearTimeout(t)
-  }, [chat?.id, isCreating, isMobile])
+  }, [chat?.id, isCreating, isMobile, focusPrompt])
 
   // Auto-resize textarea
   useEffect(() => {
