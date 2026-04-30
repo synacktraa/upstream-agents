@@ -32,4 +32,4 @@ See [DEVELOPMENT.md](./DEVELOPMENT.md) for local setup (database, environment va
 
 ## Deployment
 
-Deploys to Vercel. See [packages/web/README.md](packages/web/README.md) for configuration.
+The `web` package deploys to Vercel. See [packages/web/README.md](packages/web/README.md) for configuration.
