@@ -1,4 +1,4 @@
-# Upstream Agents
+# Daytona Background Agents
 
 A monorepo for building applications with AI coding agents (Claude Code, OpenCode, Codex, Gemini, Goose, Pi) running in isolated [Daytona](https://daytona.io) sandboxes.
 
