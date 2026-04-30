@@ -101,7 +101,7 @@ For unit tests and Playwright end-to-end tests, see [TESTING.md](./TESTING.md).
 
 ## Deployment
 
-`packages/web` deploys as a Vercel project. It has its own `vercel.json` pinning `buildCommand`, `outputDirectory`, and an `ignoreCommand` that delegates to [scripts/vercel-ignore.sh](scripts/vercel-ignore.sh); there is no root `vercel.json`.
+`packages/web` deploys as a Vercel project. It has its own `vercel.json` pinning `buildCommand` and `outputDirectory`; there is no root `vercel.json`.
 
 ### Setup Steps
 
@@ -118,10 +118,6 @@ For unit tests and Playwright end-to-end tests, see [TESTING.md](./TESTING.md).
 - `DAYTONA_API_KEY`, `DAYTONA_API_URL`
 - `NEXTAUTH_URL`, `NEXTAUTH_SECRET`
 - `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`
-
-### Selective Deploys
-
-`vercel-ignore.sh` skips a deploy when nothing under the app's package, its workspace dependencies (`agents`, `common`), or root config changed since the previous deploy. The first deploy of a project always runs.
 
 For detailed package-specific setup, see:
 - [packages/web/README.md](packages/web/README.md)
