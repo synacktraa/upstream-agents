@@ -10,7 +10,6 @@ A monorepo for building applications with AI coding agents (Claude Code, OpenCod
 | [`@upstream/common`](packages/common) | Shared utilities and types | [README](packages/common/README.md) |
 | [`@upstream/terminal`](packages/terminal) | WebSocket-based PTY terminal for Daytona sandboxes | [README](packages/terminal/README.md) |
 | [`@upstream/web`](packages/web) | Standalone chat app for AI coding agents | [README](packages/web/README.md) |
-| [`@upstream/legacy`](packages/legacy) | Multi-tenant web app with Slack-like interface (legacy) | [README](packages/legacy/README.md) |
 
 ---
 
@@ -25,9 +24,6 @@ npm run build:sdk
 
 # Start the web app
 npm run dev
-
-# Or start legacy app
-npm run dev:legacy
 ```
 
 ---
@@ -36,13 +32,12 @@ npm run dev:legacy
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│                         Applications                                    │
-│  ┌──────────────────────┐     ┌──────────────────────────────────────┐ │
-│  │  @upstream/web       │     │  @upstream/legacy                    │ │
-│  │  - Chat application  │     │  - Full-featured app                 │ │
-│  │  - Single-tenant     │     │  - Multi-tenant                      │ │
-│  │  - Database-backed   │     │  - Database-backed                   │ │
-│  └──────────────────────┘     └──────────────────────────────────────┘ │
+│                           Application                                   │
+│                    ┌──────────────────────┐                            │
+│                    │  @upstream/web       │                            │
+│                    │  - Chat application  │                            │
+│                    │  - Database-backed   │                            │
+│                    └──────────────────────┘                            │
 └─────────────────────────────────────┬──────────────────────────────────┘
                                       │
 ┌─────────────────────────────────────┼──────────────────────────────────┐
@@ -75,8 +70,7 @@ packages/
 ├── agents/        # background-agents      — TypeScript SDK for AI coding agents
 ├── common/        # @upstream/common      — Shared utilities and types
 ├── terminal/      # @upstream/terminal    — WebSocket-based PTY terminal
-├── web/           # @upstream/web         — Main Next.js chat application
-└── legacy/        # @upstream/legacy      — Legacy multi-tenant Next.js application
+└── web/           # @upstream/web         — Main Next.js chat application
 ```
 
 ### Available Scripts
@@ -84,13 +78,10 @@ packages/
 | Script | Description |
 |--------|-------------|
 | `npm run dev` | Start the `web` development server (port 4000) |
-| `npm run dev:legacy` | Start the `legacy` development server |
-| `npm run build` | Build SDK + both apps (CI / local sanity check) |
+| `npm run build` | Build SDK + web app |
 | `npm run build:sdk` | Build only the SDK package |
 | `npm run build:web` | Build SDK + `web` app |
-| `npm run build:legacy` | Build SDK + `legacy` app |
 | `npm run start` | Start `web` production server |
-| `npm run start:legacy` | Start `legacy` production server |
 | `npm run lint` | ESLint check across all packages |
 | `npm run clean` | Clean build artifacts |
 | `npm run prisma:migrate` | Create + apply migrations for `web` |
@@ -106,12 +97,12 @@ For unit tests and Playwright end-to-end tests, see [TESTING.md](./TESTING.md).
 
 ## Deployment
 
-`packages/web` and `packages/legacy` deploy as **two independent Vercel projects** from the same repo. Each has its own `vercel.json` pinning `buildCommand`, `outputDirectory`, and an `ignoreCommand` that delegates to [scripts/vercel-ignore.sh](scripts/vercel-ignore.sh); there is no root `vercel.json`.
+`packages/web` deploys as a Vercel project. It has its own `vercel.json` pinning `buildCommand`, `outputDirectory`, and an `ignoreCommand` that delegates to [scripts/vercel-ignore.sh](scripts/vercel-ignore.sh); there is no root `vercel.json`.
 
 ### Setup Steps
 
 1. **Create Vercel Project**: Add New → Project → Import Git Repository
-2. **Set Root Directory**: `packages/web` or `packages/legacy`
+2. **Set Root Directory**: `packages/web`
 3. **Configure Build**: Leave Build & Output overrides off (uses `vercel.json`)
 4. **Add Environment Variables**: Before the first deploy
 
@@ -124,28 +115,12 @@ For unit tests and Playwright end-to-end tests, see [TESTING.md](./TESTING.md).
 - `NEXTAUTH_URL`, `NEXTAUTH_SECRET`
 - `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`
 
-**@upstream/legacy** needs the full set:
-
-| Variable | Description |
-|----------|-------------|
-| `DATABASE_URL` | Neon pooled connection |
-| `DATABASE_URL_UNPOOLED` | Neon direct connection (migrations) |
-| `NEXTAUTH_URL` | Your app's URL |
-| `NEXTAUTH_SECRET` | Random secret for NextAuth |
-| `GITHUB_CLIENT_ID` | From GitHub OAuth App |
-| `GITHUB_CLIENT_SECRET` | From GitHub OAuth App |
-| `ENCRYPTION_KEY` | For encrypting API keys |
-| `DAYTONA_API_KEY` | Your shared Daytona API key |
-| `DAYTONA_API_URL` | Daytona API endpoint |
-| `SMITHERY_API_KEY` | Smithery API key for MCP registry |
-
 ### Selective Deploys
 
 `vercel-ignore.sh` skips a deploy when nothing under the app's package, its workspace dependencies (`agents`, `common`), or root config changed since the previous deploy. The first deploy of a project always runs.
 
 For detailed package-specific setup, see:
 - [packages/web/README.md](packages/web/README.md)
-- [packages/legacy/README.md](packages/legacy/README.md)
 
 ---
 

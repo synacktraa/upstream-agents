@@ -3,7 +3,7 @@
 #
 # Usage (from a per-app vercel.json, with cwd at the package root):
 #   bash ../../scripts/vercel-ignore.sh <app>
-# where <app> is "web" or "legacy".
+# where <app> is "web".
 #
 # Exit 0  -> skip the build (no relevant changes)
 # Exit 1  -> proceed with the build
@@ -40,13 +40,6 @@ ROOT_PATHS=(
 
 # Per-app paths to watch.
 case "$APP" in
-  legacy)
-    APP_PATHS=(
-      "packages/legacy/"
-      "packages/agents/"
-      "packages/common/"
-    )
-    ;;
   web)
     APP_PATHS=(
       "packages/web/"
