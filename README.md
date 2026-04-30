@@ -22,12 +22,14 @@ npm install
 npm run dev
 ```
 
+Opens the web app at [http://localhost:4000](http://localhost:4000).
+
 ---
 
 ## Development
 
-See [DEVELOPMENT.md](./DEVELOPMENT.md) for local setup and [TESTING.md](./TESTING.md) for tests.
+See [DEVELOPMENT.md](./DEVELOPMENT.md) for local setup (database, environment variables) and [TESTING.md](./TESTING.md) for tests.
 
 ## Deployment
 
-See [packages/web/README.md](packages/web/README.md).
+Deploys to Vercel. See [packages/web/README.md](packages/web/README.md) for configuration.
