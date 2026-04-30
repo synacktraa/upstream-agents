@@ -239,8 +239,15 @@ export interface GitHubSearchReposResponse {
 }
 
 /**
+ * GitHub org type for listing user's orgs
+ */
+interface GitHubOrg {
+  login: string
+}
+
+/**
  * Search repositories using GitHub's Search API
- * This allows searching across ALL of a user's accessible repos, not just the first page
+ * Searches repos the user owns + repos in orgs they belong to
  */
 export async function searchRepos(
   token: string,
@@ -249,12 +256,23 @@ export async function searchRepos(
 ): Promise<GitHubRepo[]> {
   const { perPage = 50 } = options
 
-  // Build search query - search in user's accessible repos
-  // The query searches repo names and descriptions
-  const searchQuery = encodeURIComponent(query)
+  // Get current user and their orgs in parallel
+  const [user, orgs] = await Promise.all([
+    getUser(token),
+    githubFetch<GitHubOrg[]>("/user/orgs?per_page=100", token),
+  ])
+
+  // Build search query scoped to user's repos and their orgs
+  // In GitHub search, multiple user:/org: qualifiers act as OR
+  const owners = [user.login, ...orgs.map((org) => org.login)]
+  const ownerFilter = owners.map((owner) => `user:${owner}`).join(" ")
+
+  // Construct the full query
+  // Note: we encode the whole query string to handle spaces properly
+  const fullQuery = `${query} in:name,description ${ownerFilter} fork:true`
 
   const response = await githubFetch<GitHubSearchReposResponse>(
-    `/search/repositories?q=${searchQuery}+in:name,description+fork:true&per_page=${perPage}&sort=updated`,
+    `/search/repositories?q=${encodeURIComponent(fullQuery)}&per_page=${perPage}&sort=updated`,
     token
   )
 
