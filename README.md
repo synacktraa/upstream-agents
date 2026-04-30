@@ -6,12 +6,12 @@ A monorepo for building applications with AI coding agents (Claude Code, OpenCod
 
 | Package | Description |
 |---------|-------------|
+| [`web`](packages/web) | Standalone chat app for AI coding agents |
 | [`agents`](packages/agents) | TypeScript SDK for running AI coding agents in Daytona sandboxes |
 | [`agent-configuration`](packages/agent-configuration) | Agent configuration and policy rules for blocking dangerous operations |
 | [`claude-credentials`](packages/claude-credentials) | Claude Code OAuth credential generation via ccauth and Daytona |
 | [`common`](packages/common) | Shared utilities and types |
 | [`terminal`](packages/terminal) | WebSocket-based PTY terminal for Daytona sandboxes |
-| [`web`](packages/web) | Standalone chat app for AI coding agents |
 
 ---
 
