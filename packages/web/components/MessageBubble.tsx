@@ -193,7 +193,7 @@ function MarkdownContent({ text, isMobile = false }: { text: string; isMobile?: 
 
             // Inline code - styled but no syntax highlighting
             return (
-              <code {...props} className="px-1.5 py-0.5 rounded bg-muted font-mono text-[0.9em] break-words">
+              <code {...props} className="px-1.5 py-0.5 rounded bg-muted/50 font-mono text-[0.9em] break-words">
                 {children}
               </code>
             )
