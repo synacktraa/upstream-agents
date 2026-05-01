@@ -122,10 +122,9 @@ export async function GET() {
         COUNT(DISTINCT m.id)::bigint as "messageCount",
         COUNT(DISTINCT c.id)::bigint as "chatCount"
       FROM "User" u
-      LEFT JOIN "Chat" c ON c."userId" = u.id AND c."createdAt" >= NOW() - INTERVAL '30 days'
-      LEFT JOIN "Message" m ON m."chatId" = c.id AND m."createdAt" >= NOW() - INTERVAL '30 days'
+      INNER JOIN "Chat" c ON c."userId" = u.id
+      INNER JOIN "Message" m ON m."chatId" = c.id AND m."createdAt" >= NOW() - INTERVAL '30 days'
       GROUP BY u.id, u.name, u.image
-      HAVING COUNT(DISTINCT m.id) > 0
       ORDER BY "messageCount" DESC
       LIMIT 10
     `,
