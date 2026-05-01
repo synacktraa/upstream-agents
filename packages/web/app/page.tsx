@@ -15,7 +15,7 @@ import { ConfirmDialog } from "@/components/modals/ConfirmDialog"
 import { BranchPickerModal } from "@/components/modals/BranchPickerModal"
 import { MergeDialog, RebaseDialog, PRDialog, SquashDialog, ForcePushDialog, useGitDialogs } from "@/components/modals/GitDialogs"
 import { MobileCommandsMenu } from "@/components/MobileCommandsMenu"
-import { clearAllStorage, setDraftChatConfig } from "@/lib/storage"
+import { clearAllStorage } from "@/lib/storage"
 import type { SlashCommandType } from "@/components/SlashCommandMenu"
 import { PaletteProvider } from "@/components/search-palette"
 import { useChatWithSync } from "@/lib/hooks/useChatWithSync"
@@ -91,6 +91,7 @@ export default function HomePage() {
     clearDraft,
     draftChatConfig,
     isDraftChatId,
+    updateDraftChatConfig,
   } = useChatWithSync()
 
   const [repoSelectOpen, setRepoSelectOpen] = useState(false)
@@ -822,14 +823,14 @@ export default function HomePage() {
   const handleUpdateChatProp = useCallback(
     (updates: Partial<Chat>) => {
       if (isDraftMode) {
-        if (isAuthenticatedDraft && draftChatConfig) {
-          // Authenticated draft - update the draftChatConfig in localStorage
-          const newConfig = { ...draftChatConfig }
-          if (updates.agent !== undefined) newConfig.agent = updates.agent
-          if (updates.model !== undefined) newConfig.model = updates.model
-          if (updates.repo !== undefined) newConfig.repo = updates.repo
-          if (updates.baseBranch !== undefined) newConfig.baseBranch = updates.baseBranch
-          setDraftChatConfig(newConfig)
+        if (isAuthenticatedDraft) {
+          // Authenticated draft - update via hook (updates both React state and localStorage)
+          updateDraftChatConfig({
+            agent: updates.agent,
+            model: updates.model,
+            repo: updates.repo,
+            baseBranch: updates.baseBranch,
+          })
         } else {
           // Unauthenticated draft - use local component state
           if (updates.agent !== undefined) setDraftAgent(updates.agent)
@@ -839,7 +840,7 @@ export default function HomePage() {
       }
       updateCurrentChat(updates)
     },
-    [isDraftMode, isAuthenticatedDraft, draftChatConfig, updateCurrentChat]
+    [isDraftMode, isAuthenticatedDraft, updateDraftChatConfig, updateCurrentChat]
   )
 
   // Per-chat draft handling: in draft mode use local state, otherwise use
