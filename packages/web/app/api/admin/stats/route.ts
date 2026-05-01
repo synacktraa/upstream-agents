@@ -89,13 +89,19 @@ export async function GET() {
       take: 10,
     }),
 
-    // User growth over last 30 days
+    // Weekly active users (WAU) - for each of the last 30 days, count unique users active in the preceding 7 days
     prisma.$queryRaw<Array<{ date: Date; count: bigint }>>`
-      SELECT DATE("createdAt") as date, COUNT(*)::bigint as count
-      FROM "User"
-      WHERE "createdAt" >= NOW() - INTERVAL '30 days'
-      GROUP BY DATE("createdAt")
-      ORDER BY date ASC
+      SELECT d.date, COUNT(DISTINCT a."userId")::bigint as count
+      FROM (
+        SELECT generate_series(
+          (NOW() - INTERVAL '30 days')::date,
+          NOW()::date,
+          '1 day'::interval
+        )::date as date
+      ) d
+      LEFT JOIN "ActivityLog" a ON a."createdAt" >= d.date - INTERVAL '6 days' AND a."createdAt" < d.date + INTERVAL '1 day'
+      GROUP BY d.date
+      ORDER BY d.date ASC
     `,
 
     // Activity by day for last 14 days
@@ -155,8 +161,8 @@ export async function GET() {
     count: item._count.id,
   }))
 
-  // Format user growth for chart
-  const userGrowth = userGrowthRaw.map((item) => ({
+  // Format weekly active users for chart
+  const weeklyActiveUsers = userGrowthRaw.map((item) => ({
     date: item.date.toISOString().split("T")[0],
     count: Number(item.count),
   }))
@@ -209,7 +215,7 @@ export async function GET() {
       loginsThisWeek,
     },
     modelUsage,
-    userGrowth,
+    weeklyActiveUsers,
     activityTrends,
     topUsers,
     repoActivity,

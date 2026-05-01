@@ -79,7 +79,7 @@ export default function AdminDashboard() {
   }
 
   const stats = statsQuery.data?.stats
-  const userGrowth = statsQuery.data?.userGrowth ?? []
+  const weeklyActiveUsers = statsQuery.data?.weeklyActiveUsers ?? []
   const activityTrends = statsQuery.data?.activityTrends ?? []
   const topUsers = statsQuery.data?.topUsers ?? []
   const hourlyActivity = statsQuery.data?.hourlyActivity ?? []
@@ -156,9 +156,9 @@ export default function AdminDashboard() {
           <div className="rounded-lg border bg-card p-6">
             <div className="mb-4 flex items-center gap-2">
               <TrendingUp className="h-5 w-5 text-muted-foreground" />
-              <h3 className="font-semibold">User Growth (Last 30 Days)</h3>
+              <h3 className="font-semibold">Weekly Active Users</h3>
             </div>
-            <UserGrowthChart data={userGrowth} />
+            <UserGrowthChart data={weeklyActiveUsers} />
           </div>
         </section>
 
