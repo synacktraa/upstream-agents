@@ -92,7 +92,12 @@ function MarkdownContent({ text, isMobile = false }: { text: string; isMobile?: 
         remarkPlugins={[remarkGfm]}
         components={{
           a: ({ children, ...props }) => (
-            <a {...props} target="_blank" rel="noopener noreferrer" className="break-words">
+            <a
+              {...props}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary underline underline-offset-2 decoration-primary/50 hover:decoration-primary break-words"
+            >
               {children}
             </a>
           ),
@@ -100,10 +105,10 @@ function MarkdownContent({ text, isMobile = false }: { text: string; isMobile?: 
             <p className="mt-2 first:mt-0">{children}</p>
           ),
           ul: ({ children }) => (
-            <ul className="mt-2 first:mt-0 pl-4 list-disc space-y-0.5">{children}</ul>
+            <ul className="mt-2 first:mt-0 pl-4 list-disc space-y-0.5 [&_ul]:mt-1 [&_ol]:mt-1">{children}</ul>
           ),
           ol: ({ children }) => (
-            <ol className="mt-2 first:mt-0 pl-4 list-decimal space-y-0.5">{children}</ol>
+            <ol className="mt-2 first:mt-0 pl-4 list-decimal space-y-0.5 [&_ul]:mt-1 [&_ol]:mt-1">{children}</ol>
           ),
           li: ({ children }) => (
             <li>{children}</li>
@@ -142,6 +147,20 @@ function MarkdownContent({ text, isMobile = false }: { text: string; isMobile?: 
           h4: ({ children }) => (
             <h4 className="text-sm font-semibold mt-3 mb-1 first:mt-0">{children}</h4>
           ),
+          blockquote: ({ children }) => (
+            <blockquote className="mt-2 first:mt-0 border-l-2 border-border pl-4 text-muted-foreground italic">
+              {children}
+            </blockquote>
+          ),
+          hr: () => (
+            <hr className="my-4 first:mt-0 border-t border-border" />
+          ),
+          strong: ({ children }) => (
+            <strong className="font-semibold text-foreground">{children}</strong>
+          ),
+          em: ({ children }) => (
+            <em className="italic">{children}</em>
+          ),
           code: ({ children, className, ...props }) => {
             // Detect language from className (e.g., "language-typescript")
             const match = /language-(\w+)/.exec(className || "")
@@ -172,9 +191,9 @@ function MarkdownContent({ text, isMobile = false }: { text: string; isMobile?: 
               )
             }
 
-            // Inline code - no highlighting
+            // Inline code - styled but no syntax highlighting
             return (
-              <code {...props} className="break-words">
+              <code {...props} className="px-1.5 py-0.5 rounded bg-muted font-mono text-[0.9em] break-words">
                 {children}
               </code>
             )
@@ -514,7 +533,7 @@ function ToolCallRow({ tool, isMobile = false, onOpenFile }: ToolCallRowProps) {
       {expanded && tool.output && (
         <pre className={cn(
           "font-mono whitespace-pre-wrap overflow-x-auto mobile-scroll text-muted-foreground mt-1.5 pl-3 border-l-2 border-border",
-          isMobile ? "text-xs max-h-64 ml-5" : "text-[10px] max-h-48 ml-4"
+          isMobile ? "text-xs max-h-64 ml-5" : "text-[11px] max-h-48 ml-4"
         )}>
           {tool.output}
         </pre>
