@@ -153,7 +153,7 @@ function MarkdownContent({ text, isMobile = false }: { text: string; isMobile?: 
             </blockquote>
           ),
           hr: () => (
-            <hr className="my-4 first:mt-0 border-t border-border" />
+            <hr className="mt-4 mb-4 first:mt-0 border-t border-border" />
           ),
           strong: ({ children }) => (
             <strong className="font-semibold text-foreground">{children}</strong>
