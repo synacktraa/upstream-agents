@@ -10,40 +10,29 @@ import {
   ResponsiveContainer,
 } from "recharts"
 
-interface UserGrowthData {
+interface WeeklyActiveUsersData {
   date: string
   count: number
 }
 
 interface UserGrowthChartProps {
-  data: UserGrowthData[]
+  data: WeeklyActiveUsersData[]
 }
 
 export function UserGrowthChart({ data }: UserGrowthChartProps) {
   if (!data || data.length === 0) {
     return (
       <div className="flex h-[300px] items-center justify-center text-muted-foreground">
-        No user growth data available
+        No weekly active users data available
       </div>
     )
   }
-
-  // Calculate cumulative totals
-  let cumulative = 0
-  const cumulativeData = data.map((item) => {
-    cumulative += item.count
-    return {
-      date: item.date,
-      newUsers: item.count,
-      totalUsers: cumulative,
-    }
-  })
 
   return (
     <div className="h-[300px] w-full">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart
-          data={cumulativeData}
+          data={data}
           margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
         >
           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
@@ -64,14 +53,15 @@ export function UserGrowthChart({ data }: UserGrowthChartProps) {
               borderRadius: "6px",
             }}
             labelStyle={{ color: "hsl(var(--popover-foreground))" }}
-            formatter={(value, name) => [
-              value,
-              name === "totalUsers" ? "Total Users" : "New Users",
-            ]}
+            formatter={(value) => [value, "Active Users (7-day)"]}
+            labelFormatter={(label) => {
+              const date = new Date(label)
+              return date.toLocaleDateString()
+            }}
           />
           <Area
             type="monotone"
-            dataKey="totalUsers"
+            dataKey="count"
             stroke="#8884d8"
             fill="#8884d8"
             fillOpacity={0.3}
