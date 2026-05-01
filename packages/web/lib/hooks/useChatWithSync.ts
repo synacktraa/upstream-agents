@@ -245,6 +245,14 @@ export function useChatWithSync() {
     return draftId
   }, [])
 
+  // Update the draft chat config (both React state and localStorage)
+  const updateDraftChatConfig = useCallback((updates: Partial<Omit<DraftChatConfig, "id">>) => {
+    if (!draftChatConfig) return
+    const newConfig: DraftChatConfig = { ...draftChatConfig, ...updates }
+    setDraftChatConfigState(newConfig)
+    setDraftChatConfig(newConfig)
+  }, [draftChatConfig])
+
   // Materialize a draft chat into a real database chat
   // Returns the full chat object so callers can use it directly without looking it up
   const materializeDraft = useCallback(async (
@@ -964,5 +972,6 @@ export function useChatWithSync() {
     // Draft chat support
     draftChatConfig,
     isDraftChatId,
+    updateDraftChatConfig,
   }
 }
