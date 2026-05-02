@@ -157,7 +157,7 @@ export function CommandPalette({
           {onClosePreview && (
             <CommandItem value="close preview" onSelect={() => run(onClosePreview)}>
               <PanelRightClose className="mr-2 h-4 w-4 text-muted-foreground" />
-              <span>Close preview pane</span>
+              <span>Hide preview pane</span>
             </CommandItem>
           )}
           {onDownloadProject && (
