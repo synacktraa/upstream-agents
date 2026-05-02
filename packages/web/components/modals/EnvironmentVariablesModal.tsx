@@ -348,86 +348,72 @@ export function EnvironmentVariablesModal({
               </div>
             </>
           ) : (
-            <div className="flex flex-1 min-h-0">
-              {/* Left sidebar with tabs (only show if more than one) */}
-              {visibleTabs.length > 1 ? (
-                <aside className="w-44 flex-shrink-0 flex flex-col bg-muted/20">
-                  <div className="flex items-center px-3 pt-3 pb-2">
-                    <Dialog.Close
-                      className="flex items-center justify-center h-7 w-7 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                      aria-label="Close"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </Dialog.Close>
-                  </div>
-                  <nav className="flex-1 flex flex-col gap-0.5 px-2 pb-2">
-                    {visibleTabs.map((tab) => {
-                      const Icon = tab.icon
-                      const isActive = activeTab === tab.key
-                      return (
-                        <button
-                          key={tab.key}
-                          onClick={() => setActiveTab(tab.key)}
-                          className={cn(
-                            "flex items-center gap-2.5 px-2.5 py-2.5 rounded-md text-sm text-left transition-colors cursor-pointer",
-                            isActive
-                              ? "bg-accent text-accent-foreground"
-                              : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-                          )}
-                        >
-                          <Icon className="h-4 w-4" />
-                          {tab.label}
-                        </button>
-                      )
-                    })}
-                  </nav>
-                </aside>
-              ) : (
-                /* Close button when no sidebar */
-                <div className="absolute top-3 left-3 z-10">
-                  <Dialog.Close
-                    className="flex items-center justify-center h-7 w-7 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                    aria-label="Close"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </Dialog.Close>
+            <div className="flex flex-col flex-1 min-h-0">
+              {/* Header with close button and title */}
+              <div className="flex items-center justify-between px-5 pt-4 pb-2">
+                <Dialog.Title className="text-lg font-semibold">
+                  Environment Variables
+                </Dialog.Title>
+                <Dialog.Close
+                  className="flex items-center justify-center h-7 w-7 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                  aria-label="Close"
+                >
+                  <X className="h-4 w-4" />
+                </Dialog.Close>
+              </div>
+
+              {/* Horizontal tabs (only show if more than one) */}
+              {visibleTabs.length > 1 && (
+                <div className="flex border-b border-border px-5">
+                  {visibleTabs.map((tab) => {
+                    const Icon = tab.icon
+                    const isActive = activeTab === tab.key
+                    return (
+                      <button
+                        key={tab.key}
+                        onClick={() => setActiveTab(tab.key)}
+                        className={cn(
+                          "flex items-center gap-2 px-4 py-2.5 text-sm transition-colors border-b-2 -mb-px cursor-pointer",
+                          isActive
+                            ? "border-primary text-foreground"
+                            : "border-transparent text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        <Icon className="h-4 w-4" />
+                        {tab.label}
+                      </button>
+                    )
+                  })}
                 </div>
               )}
 
-              {/* Right pane */}
-              <div className="flex-1 flex flex-col min-h-0">
-                <div ref={contentRef} className={cn(
-                  "flex-1 overflow-y-auto pt-5 pb-6",
-                  visibleTabs.length > 1 ? "px-6" : "px-6 pl-14"
-                )}>
-                  <Dialog.Title className="text-xl font-medium pb-4 mb-5 border-b border-border">
-                    {activeTitle}
-                  </Dialog.Title>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    {activeTab === "chat"
-                      ? "Environment variables set here will be available for this chat only. They are passed to the agent on every message."
-                      : "Environment variables set here will be available for all your chats using this repository."}
-                  </p>
-                  {renderContent()}
-                </div>
+              {/* Content */}
+              <div ref={contentRef} className="flex-1 overflow-y-auto px-5 pt-4 pb-4">
+                <p className="text-sm text-muted-foreground mb-4">
+                  {activeTab === "chat"
+                    ? "Environment variables set here will be available for this chat only. They are passed to the agent on every message."
+                    : "Environment variables set here will be available for all your chats using this repository."}
+                </p>
+                {renderContent()}
+              </div>
 
-                <div className="flex items-center justify-end gap-3 border-t border-border px-6 py-3">
-                  <button
-                    onClick={onClose}
-                    disabled={isSaving}
-                    className="rounded-md hover:bg-accent transition-colors px-3 py-1.5 text-sm cursor-pointer disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleSave}
-                    disabled={isSaving}
-                    className="rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors px-3 py-1.5 text-sm cursor-pointer disabled:opacity-50 flex items-center gap-2"
-                  >
-                    {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
-                    Save
-                  </button>
-                </div>
+              {/* Footer */}
+              <div className="flex items-center justify-end gap-3 border-t border-border px-5 py-3">
+                <button
+                  onClick={onClose}
+                  disabled={isSaving}
+                  className="rounded-md hover:bg-accent transition-colors px-3 py-1.5 text-sm cursor-pointer disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className="rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors px-3 py-1.5 text-sm cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                >
+                  {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Save
+                </button>
               </div>
             </div>
           )}
