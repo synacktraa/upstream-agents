@@ -919,27 +919,32 @@ export function ChatPanel({ chat, settings, credentialFlags, onSendMessage, onEn
             Test User Messages (Markdown Rendering)
           </h2>
         </div>
-        {/* TEST MESSAGES for new chat screen */}
+        {/* TEST MESSAGES for new chat screen - using same layout as actual messages */}
         <div className={cn(
-          "space-y-4 mx-auto mb-6",
-          isMobile ? "max-w-full" : "max-w-3xl space-y-6"
+          "flex-1 overflow-y-auto overflow-x-hidden",
+          isMobile ? "py-3 px-[27px]" : "py-4 px-[31px]"
         )}>
-          <MessageBubble
-            message={{ id: "test-1", role: "user", content: "Hello! This is a **bold** and *italic* test message.", timestamp: Date.now() }}
-            isMobile={isMobile}
-          />
-          <MessageBubble
-            message={{ id: "test-2", role: "user", content: "Here's a list:\n- Item one\n- Item two\n- Item three\n\nAnd some `inline code` too!", timestamp: Date.now() }}
-            isMobile={isMobile}
-          />
-          <MessageBubble
-            message={{ id: "test-3", role: "user", content: "Check out this link: [Google](https://google.com)\n\n> This is a blockquote\n\n### Heading 3\n\nAnd a numbered list:\n1. First\n2. Second\n3. Third", timestamp: Date.now() }}
-            isMobile={isMobile}
-          />
-          <MessageBubble
-            message={{ id: "test-4", role: "user", content: "```javascript\nconst hello = 'world';\nconsole.log(hello);\n```", timestamp: Date.now() }}
-            isMobile={isMobile}
-          />
+          <div className={cn(
+            "space-y-4 mx-auto",
+            isMobile ? "max-w-full" : "max-w-3xl space-y-6"
+          )}>
+            <MessageBubble
+              message={{ id: "test-1", role: "user", content: "Hello! This is a **bold** and *italic* test message.", timestamp: Date.now() }}
+              isMobile={isMobile}
+            />
+            <MessageBubble
+              message={{ id: "test-2", role: "user", content: "Here's a list:\n- Item one\n- Item two\n- Item three\n\nAnd some `inline code` too!", timestamp: Date.now() }}
+              isMobile={isMobile}
+            />
+            <MessageBubble
+              message={{ id: "test-3", role: "user", content: "Check out this link: [Google](https://google.com)\n\n> This is a blockquote\n\n### Heading 3\n\nAnd a numbered list:\n1. First\n2. Second\n3. Third", timestamp: Date.now() }}
+              isMobile={isMobile}
+            />
+            <MessageBubble
+              message={{ id: "test-4", role: "user", content: "```javascript\nconst hello = 'world';\nconsole.log(hello);\n```", timestamp: Date.now() }}
+              isMobile={isMobile}
+            />
+          </div>
         </div>
         {chatInput}
       </div>
