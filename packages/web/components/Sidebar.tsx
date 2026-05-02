@@ -55,7 +55,7 @@ const MIN_WIDTH = 140
 const MAX_WIDTH = 400
 const COLLAPSED_WIDTH = 64
 const COLLAPSE_THRESHOLD = 100 // Collapse when dragged below this width
-const SWIPE_THRESHOLD = 80 // Minimum swipe distance to close drawer
+
 interface SidebarProps {
   chats: Chat[]
   currentChatId: string | null
@@ -87,6 +87,8 @@ interface SidebarProps {
   onRequestMergeChats?: (sourceId: string, targetId?: string) => void
   /** Pick Rebase from a chat's context menu. */
   onRequestRebaseChat?: (sourceId: string) => void
+  /** Mobile rename - opens a bottom sheet in the parent */
+  onMobileRename?: (chatId: string, currentName: string) => void
 }
 
 export function Sidebar({
@@ -113,17 +115,12 @@ export function Sidebar({
   onToggleChatCollapsed: controlledToggleChatCollapsed,
   onRequestMergeChats,
   onRequestRebaseChat,
+  onMobileRename,
 }: SidebarProps) {
   const { data: session } = useSession()
   const isResizing = useRef(false)
   const [isAnimating, setIsAnimating] = useState(false)
   const sidebarRef = useRef<HTMLDivElement>(null)
-
-  // Swipe gesture state for mobile drawer
-  const [isDragging, setIsDragging] = useState(false)
-  const [dragX, setDragX] = useState(0)
-  const [startX, setStartX] = useState(0)
-  const [startTime, setStartTime] = useState(0)
 
   // Mobile user menu state
   const [mobileUserMenuOpen, setMobileUserMenuOpen] = useState(false)
@@ -326,45 +323,6 @@ export function Sidebar({
     }
   }, [resize, stopResizing, isMobile])
 
-  // Mobile swipe gesture handlers
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (!isMobile || !mobileOpen) return
-    setIsDragging(true)
-    setStartX(e.touches[0].clientX)
-    setStartTime(Date.now())
-    setDragX(0)
-  }, [isMobile, mobileOpen])
-
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (!isDragging) return
-
-    const currentX = e.touches[0].clientX
-    const diff = currentX - startX
-
-    // Only allow dragging left (negative direction to close)
-    if (diff < 0) {
-      setDragX(diff)
-    }
-  }, [isDragging, startX])
-
-  const handleTouchEnd = useCallback(() => {
-    if (!isDragging) return
-
-    setIsDragging(false)
-
-    const duration = Date.now() - startTime
-    const velocity = Math.abs(dragX) / duration
-
-    // Close if:
-    // 1. Dragged more than threshold
-    // 2. OR fast swipe (velocity > 0.5)
-    if (Math.abs(dragX) > SWIPE_THRESHOLD || velocity > 0.5) {
-      onMobileClose?.()
-    }
-
-    setDragX(0)
-  }, [isDragging, dragX, startTime, onMobileClose])
-
   // Close mobile drawer when selecting a chat
   const handleSelectChat = (chatId: string) => {
     onSelectChat(chatId)
@@ -407,27 +365,14 @@ export function Sidebar({
           aria-hidden="true"
         />
 
-        {/* Mobile drawer with swipe gesture */}
+        {/* Mobile drawer */}
         <div
           ref={sidebarRef}
-          className={cn(
-            "fixed inset-y-0 left-0 z-50 w-[280px] flex flex-col bg-background border-r border-sidebar-border",
-            !isDragging && "transition-transform duration-300 ease-out"
-          )}
+          className="fixed inset-y-0 left-0 z-50 w-[280px] flex flex-col bg-background border-r border-sidebar-border transition-transform duration-300 ease-out"
           style={{
-            transform: mobileOpen
-              ? `translateX(${Math.min(0, dragX)}px)`
-              : "translateX(-100%)",
+            transform: mobileOpen ? "translateX(0)" : "translateX(-100%)",
           }}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
         >
-          {/* Swipe indicator bar */}
-          <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-16 flex items-center justify-center">
-            <div className="w-1 h-8 rounded-full bg-muted-foreground/20" />
-          </div>
-
           {/* Header with close button */}
           <div className="flex items-center justify-between px-4 pb-4 pt-safe border-b border-sidebar-border">
             <h1 className="text-base font-semibold text-foreground">
@@ -532,7 +477,7 @@ export function Sidebar({
                   isUnseen={unseenChatIds?.has(chat.id) ?? false}
                   onSelect={() => handleSelectChat(chat.id)}
                   onDelete={() => onDeleteChat(chat.id)}
-                  onRename={(newName) => onRenameChat(chat.id, newName)}
+                  onRequestRename={() => onMobileRename?.(chat.id, chat.displayName || "Untitled")}
                 />
               ))}
             </div>
@@ -823,35 +768,13 @@ interface MobileChatItemProps {
   isUnseen: boolean
   onSelect: () => void
   onDelete: () => void
-  onRename: (newName: string) => void
+  onRequestRename: () => void
 }
 
-function MobileChatItem({ chat, isActive, isDeleting, isUnseen, onSelect, onDelete, onRename }: MobileChatItemProps) {
+function MobileChatItem({ chat, isActive, isDeleting, isUnseen, onSelect, onDelete, onRequestRename }: MobileChatItemProps) {
   const [menuOpen, setMenuOpen] = useState(false)
-  const [isEditing, setIsEditing] = useState(false)
-  const [editName, setEditName] = useState("")
   const menuRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
   const displayName = chat.displayName || "Untitled"
-
-  const startEditing = () => {
-    setEditName(displayName)
-    setIsEditing(true)
-    setMenuOpen(false)
-  }
-
-  const saveEdit = () => {
-    const trimmed = editName.trim()
-    if (trimmed && trimmed !== displayName) {
-      onRename(trimmed)
-    }
-    setIsEditing(false)
-  }
-
-  const cancelEdit = () => {
-    setIsEditing(false)
-    setEditName("")
-  }
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -865,32 +788,6 @@ function MobileChatItem({ chat, isActive, isDeleting, isUnseen, onSelect, onDele
     }
     return () => document.removeEventListener("mousedown", handleClickOutside)
   }, [menuOpen])
-
-  useEffect(() => {
-    if (isEditing && inputRef.current) {
-      inputRef.current.focus()
-      inputRef.current.select()
-    }
-  }, [isEditing])
-
-  if (isEditing) {
-    return (
-      <div className="flex items-center gap-2 rounded-md px-3 py-2 bg-accent">
-        <input
-          ref={inputRef}
-          type="text"
-          value={editName}
-          onChange={(e) => setEditName(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") saveEdit()
-            if (e.key === "Escape") cancelEdit()
-          }}
-          onBlur={saveEdit}
-          className="flex-1 min-w-0 bg-transparent text-sm outline-none"
-        />
-      </div>
-    )
-  }
 
   return (
     <div
@@ -937,7 +834,8 @@ function MobileChatItem({ chat, isActive, isDeleting, isUnseen, onSelect, onDele
             <button
               onClick={(e) => {
                 e.stopPropagation()
-                startEditing()
+                setMenuOpen(false)
+                onRequestRename()
               }}
               className="flex items-center gap-2 w-full px-3 py-1.5 text-sm hover:bg-accent text-left"
             >
