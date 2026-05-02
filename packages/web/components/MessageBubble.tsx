@@ -131,8 +131,16 @@ function CodeBlock({ children, isMobile = false }: { children: React.ReactNode; 
 function UserMarkdownContent({ text, isMobile = false }: { text: string; isMobile?: boolean }) {
   return (
     <div className={cn(
-      "whitespace-pre-wrap",
-      isMobile ? "text-base" : "text-[15px]"
+      "prose dark:prose-invert max-w-none w-full overflow-hidden text-left",
+      // Spacing is controlled via component overrides below
+      "prose-p:leading-relaxed",
+      "prose-li:leading-relaxed",
+      "prose-headings:font-semibold",
+      // Remove default prose margins
+      "prose-p:my-0 prose-ul:my-0 prose-ol:my-0 prose-li:my-0 prose-pre:my-0 prose-headings:my-0",
+      // First/last child margin reset
+      "[&>*:first-child]:!mt-0 [&>*:last-child]:!mb-0",
+      isMobile ? "prose-base" : "prose-sm prose-p:text-[15px] prose-li:text-[15px]"
     )}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
@@ -148,7 +156,7 @@ function UserMarkdownContent({ text, isMobile = false }: { text: string; isMobil
             </a>
           ),
           p: ({ children }) => (
-            <p className="mt-2 first:mt-0 leading-relaxed">{children}</p>
+            <p className="mt-2 first:mt-0">{children}</p>
           ),
           ul: ({ children }) => (
             <ul className="mt-2 first:mt-0 pl-4 list-disc space-y-0.5 [&_ul]:mt-1 [&_ol]:mt-1">{children}</ul>
@@ -157,10 +165,10 @@ function UserMarkdownContent({ text, isMobile = false }: { text: string; isMobil
             <ol className="mt-2 first:mt-0 pl-4 list-decimal space-y-0.5 [&_ul]:mt-1 [&_ol]:mt-1">{children}</ol>
           ),
           li: ({ children }) => (
-            <li className="leading-relaxed">{children}</li>
+            <li>{children}</li>
           ),
           strong: ({ children }) => (
-            <strong className="font-semibold">{children}</strong>
+            <strong className="font-semibold text-foreground">{children}</strong>
           ),
           em: ({ children }) => (
             <em className="italic">{children}</em>
