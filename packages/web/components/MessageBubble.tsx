@@ -41,7 +41,7 @@ export function MessageBubble({ message, isStreaming, isMobile = false, repo, on
               "inline-block rounded-lg bg-muted text-foreground text-left",
               isMobile ? "px-3 py-2 text-base" : "px-4 py-2 text-[15px]"
             )}>
-              <UserMarkdownContent text={message.content} isMobile={isMobile} />
+              <MarkdownContent text={message.content} isMobile={isMobile} />
             </div>
             {/* Uploaded files display */}
             {hasUploadedFiles && (
@@ -118,82 +118,6 @@ function CodeBlock({ children, isMobile = false }: { children: React.ReactNode; 
     </div>
   )
 }
-
-// =============================================================================
-// Assistant Content (with tool calls)
-// =============================================================================
-
-// =============================================================================
-// User Markdown Content (simplified markdown for user messages)
-// =============================================================================
-
-function UserMarkdownContent({ text, isMobile = false }: { text: string; isMobile?: boolean }) {
-  return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      components={{
-        a: ({ children, ...props }) => (
-          <a
-            {...props}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-primary underline underline-offset-2 decoration-primary/50 hover:decoration-primary break-words"
-          >
-            {children}
-          </a>
-        ),
-        p: ({ children }) => (
-          <p className="whitespace-pre-wrap [&:not(:first-child)]:mt-2">{children}</p>
-        ),
-        ul: ({ children }) => (
-          <ul className="[&:not(:first-child)]:mt-2 pl-4 list-disc space-y-0.5">{children}</ul>
-        ),
-        ol: ({ children }) => (
-          <ol className="[&:not(:first-child)]:mt-2 pl-4 list-decimal space-y-0.5">{children}</ol>
-        ),
-        li: ({ children }) => (
-          <li>{children}</li>
-        ),
-        strong: ({ children }) => (
-          <strong className="font-semibold">{children}</strong>
-        ),
-        em: ({ children }) => (
-          <em className="italic">{children}</em>
-        ),
-        code: ({ children, ...props }) => (
-          <code {...props} className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[0.9em]">
-            {children}
-          </code>
-        ),
-        pre: ({ children }) => (
-          <pre className="[&:not(:first-child)]:mt-2 p-2 rounded bg-black/10 dark:bg-white/10 overflow-x-auto text-sm font-mono whitespace-pre-wrap">
-            {children}
-          </pre>
-        ),
-        blockquote: ({ children }) => (
-          <blockquote className="[&:not(:first-child)]:mt-2 border-l-2 border-border pl-3 text-muted-foreground italic">
-            {children}
-          </blockquote>
-        ),
-        h1: ({ children }) => (
-          <h1 className="text-lg font-semibold [&:not(:first-child)]:mt-3 mb-1">{children}</h1>
-        ),
-        h2: ({ children }) => (
-          <h2 className="text-base font-semibold [&:not(:first-child)]:mt-3 mb-1">{children}</h2>
-        ),
-        h3: ({ children }) => (
-          <h3 className="text-sm font-semibold [&:not(:first-child)]:mt-2 mb-1">{children}</h3>
-        ),
-      }}
-    >
-      {text}
-    </ReactMarkdown>
-  )
-}
-
-// =============================================================================
-// Assistant Markdown Content (full markdown support)
-// =============================================================================
 
 function MarkdownContent({ text, isMobile = false }: { text: string; isMobile?: boolean }) {
   return (
@@ -323,6 +247,10 @@ function MarkdownContent({ text, isMobile = false }: { text: string; isMobile?: 
     </div>
   )
 }
+
+// =============================================================================
+// Assistant Content (with tool calls)
+// =============================================================================
 
 function AssistantContent({ message, isStreaming, isMobile = false, repo, onOpenFile, onForcePush }: { message: Message; isStreaming?: boolean; isMobile?: boolean; repo?: string; onOpenFile?: (filePath: string) => void; onForcePush?: () => void }) {
   const hasContent = message.content && message.content.trim().length > 0
