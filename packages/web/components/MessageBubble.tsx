@@ -131,7 +131,7 @@ function CodeBlock({ children, isMobile = false }: { children: React.ReactNode; 
 function UserMarkdownContent({ text, isMobile = false }: { text: string; isMobile?: boolean }) {
   return (
     <div className={cn(
-      "prose dark:prose-invert max-w-none w-full overflow-hidden text-left",
+      "prose dark:prose-invert max-w-none overflow-hidden text-left",
       // Spacing is controlled via component overrides below
       "prose-p:leading-relaxed",
       "prose-li:leading-relaxed",
