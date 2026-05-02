@@ -5,6 +5,15 @@ import { GitMerge, GitBranch, GitPullRequest, GitCommitVertical, FolderGit2, Git
 import { cn } from "@/lib/utils"
 import { filterSlashCommands, filterSlashCommandsWithConflict, type SlashCommand } from "@upstream/common"
 
+/** Custom italic x icon for variables */
+function VariableIcon({ className }: { className?: string }) {
+  return (
+    <span className={cn("flex items-center justify-center italic font-serif", className)}>
+      𝑥
+    </span>
+  )
+}
+
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   GitMerge,
   GitBranch,
@@ -13,9 +22,10 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   FolderGit2,
   GitBranchPlus,
   XCircle,
+  Variable: VariableIcon,
 }
 
-export type SlashCommandType = "merge" | "rebase" | "pr" | "squash" | "repo" | "branch" | "abort" | "download"
+export type SlashCommandType = "merge" | "rebase" | "pr" | "squash" | "repo" | "branch" | "abort" | "download" | "env"
 
 interface SlashCommandMenuProps {
   /** The current input value (used for filtering) */
@@ -45,11 +55,18 @@ const CREATE_REPO_COMMAND: SlashCommand = {
   icon: "FolderGit2",
 }
 
-function filterSingleCommand(input: string, cmd: SlashCommand): SlashCommand[] {
+const ENV_COMMAND: SlashCommand = {
+  name: "env",
+  label: "Environment Variables",
+  description: "Set environment variables",
+  icon: "Variable",
+}
+
+function filterLocalCommands(input: string, commands: SlashCommand[]): SlashCommand[] {
   const filter = input.startsWith("/") ? input.slice(1).toLowerCase() : input.toLowerCase()
-  if (!filter) return [cmd]
+  if (!filter) return commands
   // Match typed-in prefix against the command name.
-  return cmd.name.toLowerCase().startsWith(filter) ? [cmd] : []
+  return commands.filter(cmd => cmd.name.toLowerCase().startsWith(filter))
 }
 
 export function SlashCommandMenu({
@@ -64,9 +81,11 @@ export function SlashCommandMenu({
   isMobile = false,
 }: SlashCommandMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null)
+  const gitCommands = filterSlashCommandsWithConflict(input, inConflict)
+  const localCommands = filterLocalCommands(input, hasLinkedRepo ? [ENV_COMMAND] : [CREATE_REPO_COMMAND, ENV_COMMAND])
   const filteredCommands = hasLinkedRepo
-    ? filterSlashCommandsWithConflict(input, inConflict)
-    : filterSingleCommand(input, CREATE_REPO_COMMAND)
+    ? [...gitCommands, ...localCommands]
+    : localCommands
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -112,7 +131,7 @@ export function SlashCommandMenu({
         "px-2 py-1.5 font-medium text-muted-foreground uppercase tracking-wider",
         isMobile ? "text-xs" : "text-[10px]"
       )}>
-        {hasLinkedRepo ? "Git Commands" : "Repository"}
+        Commands
       </div>
       {filteredCommands.map((cmd, index) => {
         const Icon = ICON_MAP[cmd.icon]

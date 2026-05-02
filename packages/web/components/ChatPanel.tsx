@@ -267,8 +267,12 @@ export function ChatPanel({ chat, settings, credentialFlags, onSendMessage, onEn
       onAbortConflict?.()
       return
     }
+    if (command === "env") {
+      onOpenEnvVars?.()
+      return
+    }
     onSlashCommand?.(command)
-  }, [onSlashCommand, onChangeRepo, onAbortConflict])
+  }, [onSlashCommand, onChangeRepo, onAbortConflict, onOpenEnvVars])
 
   const handleSend = () => {
     if (!canSend) return
