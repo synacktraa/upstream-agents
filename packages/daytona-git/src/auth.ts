@@ -1,7 +1,7 @@
 /**
  * Authentication utilities for git operations
  *
- * Token is passed via environment variable to avoid exposure in process list.
+ * Token is passed via git -c flag and never persisted.
  */
 
 // Declare globals for environments (Node.js Buffer, browser btoa)
@@ -23,18 +23,14 @@ function base64Encode(str: string): string {
   throw new Error("No base64 encoding available")
 }
 
+function esc(arg: string): string {
+  return `'${arg.replace(/'/g, "'\\''")}'`
+}
+
 /**
- * Build a command that runs git with auth, hiding token from process list.
- *
- * Uses an inline environment variable so the token doesn't appear in `ps aux`.
- * The env var is expanded by the shell, not visible in the command args.
- *
- * @param token - The authentication token
- * @param gitCommand - The git command (e.g., "push -u origin HEAD")
- * @returns Full shell command with hidden auth
+ * Build git command with auth header
  */
-export function withAuth(token: string, gitCommand: string): string {
-  const credentials = base64Encode(`x-access-token:${token}`)
-  // Token in env var, not in command args - hidden from ps
-  return `GIT_AUTH_HEADER='Authorization: Basic ${credentials}' git -c http.extraHeader="$GIT_AUTH_HEADER" ${gitCommand}`
+export function withAuth(token: string, gitCmd: string): string {
+  const creds = base64Encode(`x-access-token:${token}`)
+  return `git -c http.extraHeader=${esc(`Authorization: Basic ${creds}`)} ${gitCmd}`
 }
