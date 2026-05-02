@@ -25,7 +25,7 @@ export function MessageBubble({ message, isStreaming, isMobile = false, repo, on
 
   return (
     <div
-      className={cn("flex", isUser && "justify-start")}
+      className={cn("flex", isUser && "justify-end")}
       data-testid={isUser ? "user-message" : "assistant-message"}
       data-message-id={message.id}
       data-role={message.role}
@@ -33,7 +33,7 @@ export function MessageBubble({ message, isStreaming, isMobile = false, repo, on
       {/* Content */}
       <div className={cn(
         !isUser && "w-full",
-        isUser && "text-left",
+        isUser && "text-right",
         isUser && (isMobile ? "max-w-[95%]" : "max-w-[90%]")
       )}>
         {isUser ? (

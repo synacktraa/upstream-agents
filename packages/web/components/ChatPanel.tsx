@@ -929,19 +929,27 @@ export function ChatPanel({ chat, settings, credentialFlags, onSendMessage, onEn
             isMobile ? "max-w-full" : "max-w-3xl space-y-6"
           )}>
             <MessageBubble
-              message={{ id: "test-1", role: "user", content: "Hello! This is a **bold** and *italic* test message.", timestamp: Date.now() }}
+              message={{ id: "test-1", role: "user", content: "Short message", timestamp: Date.now() }}
               isMobile={isMobile}
             />
             <MessageBubble
-              message={{ id: "test-2", role: "user", content: "Here's a list:\n- Item one\n- Item two\n- Item three\n\nAnd some `inline code` too!", timestamp: Date.now() }}
+              message={{ id: "test-2", role: "user", content: "Hello! This is a **bold** and *italic* test message with some more text to make it longer.", timestamp: Date.now() }}
               isMobile={isMobile}
             />
             <MessageBubble
-              message={{ id: "test-3", role: "user", content: "Check out this link: [Google](https://google.com)\n\n> This is a blockquote\n\n### Heading 3\n\nAnd a numbered list:\n1. First\n2. Second\n3. Third", timestamp: Date.now() }}
+              message={{ id: "test-3", role: "user", content: "This is a much longer message to test the width behavior. It should wrap properly and not exceed the maximum width constraint. The bubble should expand to fit the content but respect the max-width of 90% on desktop. Let's add even more text to really test this out and see how it handles multiple lines of content that need to wrap naturally.", timestamp: Date.now() }}
               isMobile={isMobile}
             />
             <MessageBubble
-              message={{ id: "test-4", role: "user", content: "```javascript\nconst hello = 'world';\nconsole.log(hello);\n```", timestamp: Date.now() }}
+              message={{ id: "test-4", role: "user", content: "Here's a list:\n- Item one with some longer text to see how it wraps\n- Item two\n- Item three with **bold** and *italic*\n\nAnd some `inline code` too!", timestamp: Date.now() }}
+              isMobile={isMobile}
+            />
+            <MessageBubble
+              message={{ id: "test-5", role: "user", content: "Check out this link: [Google](https://google.com)\n\n> This is a blockquote with a longer piece of text to test how blockquotes handle wrapping in the user message bubble.\n\n### Heading 3\n\nAnd a numbered list:\n1. First item\n2. Second item with more content\n3. Third item", timestamp: Date.now() }}
+              isMobile={isMobile}
+            />
+            <MessageBubble
+              message={{ id: "test-6", role: "user", content: "```javascript\nfunction calculateSum(numbers) {\n  return numbers.reduce((acc, num) => acc + num, 0);\n}\n\nconst result = calculateSum([1, 2, 3, 4, 5]);\nconsole.log('The sum is:', result);\n```", timestamp: Date.now() }}
               isMobile={isMobile}
             />
           </div>
