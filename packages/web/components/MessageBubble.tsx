@@ -130,82 +130,65 @@ function CodeBlock({ children, isMobile = false }: { children: React.ReactNode; 
 
 function UserMarkdownContent({ text, isMobile = false }: { text: string; isMobile?: boolean }) {
   return (
-    <div className={cn(
-      "prose dark:prose-invert max-w-none w-full overflow-hidden text-left",
-      // Spacing is controlled via component overrides below
-      "prose-p:leading-relaxed",
-      "prose-li:leading-relaxed",
-      "prose-headings:font-semibold",
-      // Remove default prose margins
-      "prose-p:my-0 prose-ul:my-0 prose-ol:my-0 prose-li:my-0 prose-pre:my-0 prose-headings:my-0",
-      // First/last child margin reset
-      "[&>*:first-child]:!mt-0 [&>*:last-child]:!mb-0",
-      isMobile ? "prose-base" : "prose-sm prose-p:text-[15px] prose-li:text-[15px]"
-    )}>
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          a: ({ children, ...props }) => (
-            <a
-              {...props}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary underline underline-offset-2 decoration-primary/50 hover:decoration-primary break-words"
-            >
-              {children}
-            </a>
-          ),
-          p: ({ children }) => (
-            <p className="mt-2 first:mt-0">{children}</p>
-          ),
-          ul: ({ children }) => (
-            <ul className="mt-2 first:mt-0 pl-4 list-disc space-y-0.5 [&_ul]:mt-1 [&_ol]:mt-1">{children}</ul>
-          ),
-          ol: ({ children }) => (
-            <ol className="mt-2 first:mt-0 pl-4 list-decimal space-y-0.5 [&_ul]:mt-1 [&_ol]:mt-1">{children}</ol>
-          ),
-          li: ({ children }) => (
-            <li>{children}</li>
-          ),
-          strong: ({ children }) => (
-            <strong className="font-semibold text-foreground">{children}</strong>
-          ),
-          em: ({ children }) => (
-            <em className="italic">{children}</em>
-          ),
-          code: ({ children, className, ...props }) => {
-            // For user messages, render all code as inline code (no syntax highlighting)
-            return (
-              <code {...props} className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[0.9em] break-words">
-                {children}
-              </code>
-            )
-          },
-          // For user messages, render code blocks as simple preformatted text
-          pre: ({ children }) => (
-            <pre className="mt-2 first:mt-0 p-2 rounded bg-black/10 dark:bg-white/10 overflow-x-auto text-sm font-mono whitespace-pre-wrap">
-              {children}
-            </pre>
-          ),
-          blockquote: ({ children }) => (
-            <blockquote className="mt-2 first:mt-0 border-l-2 border-border pl-4 text-muted-foreground italic">
-              {children}
-            </blockquote>
-          ),
-          h1: ({ children }) => (
-            <h1 className="text-lg font-semibold mt-3 mb-1 first:mt-0">{children}</h1>
-          ),
-          h2: ({ children }) => (
-            <h2 className="text-base font-semibold mt-3 mb-1 first:mt-0">{children}</h2>
-          ),
-          h3: ({ children }) => (
-            <h3 className="text-sm font-semibold mt-2 mb-1 first:mt-0">{children}</h3>
-          ),
-        }}
-      >
-        {text}
-      </ReactMarkdown>
-    </div>
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        a: ({ children, ...props }) => (
+          <a
+            {...props}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary underline underline-offset-2 decoration-primary/50 hover:decoration-primary break-words"
+          >
+            {children}
+          </a>
+        ),
+        p: ({ children }) => (
+          <p className="whitespace-pre-wrap [&:not(:first-child)]:mt-2">{children}</p>
+        ),
+        ul: ({ children }) => (
+          <ul className="[&:not(:first-child)]:mt-2 pl-4 list-disc space-y-0.5">{children}</ul>
+        ),
+        ol: ({ children }) => (
+          <ol className="[&:not(:first-child)]:mt-2 pl-4 list-decimal space-y-0.5">{children}</ol>
+        ),
+        li: ({ children }) => (
+          <li>{children}</li>
+        ),
+        strong: ({ children }) => (
+          <strong className="font-semibold">{children}</strong>
+        ),
+        em: ({ children }) => (
+          <em className="italic">{children}</em>
+        ),
+        code: ({ children, ...props }) => (
+          <code {...props} className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[0.9em]">
+            {children}
+          </code>
+        ),
+        pre: ({ children }) => (
+          <pre className="[&:not(:first-child)]:mt-2 p-2 rounded bg-black/10 dark:bg-white/10 overflow-x-auto text-sm font-mono whitespace-pre-wrap">
+            {children}
+          </pre>
+        ),
+        blockquote: ({ children }) => (
+          <blockquote className="[&:not(:first-child)]:mt-2 border-l-2 border-border pl-3 text-muted-foreground italic">
+            {children}
+          </blockquote>
+        ),
+        h1: ({ children }) => (
+          <h1 className="text-lg font-semibold [&:not(:first-child)]:mt-3 mb-1">{children}</h1>
+        ),
+        h2: ({ children }) => (
+          <h2 className="text-base font-semibold [&:not(:first-child)]:mt-3 mb-1">{children}</h2>
+        ),
+        h3: ({ children }) => (
+          <h3 className="text-sm font-semibold [&:not(:first-child)]:mt-2 mb-1">{children}</h3>
+        ),
+      }}
+    >
+      {text}
+    </ReactMarkdown>
   )
 }
 
