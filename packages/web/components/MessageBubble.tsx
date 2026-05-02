@@ -131,21 +131,8 @@ function CodeBlock({ children, isMobile = false }: { children: React.ReactNode; 
 function UserMarkdownContent({ text, isMobile = false }: { text: string; isMobile?: boolean }) {
   return (
     <div className={cn(
-      // Use prose for typography but override max-width completely
-      "prose dark:prose-invert overflow-hidden text-left",
-      // Critical: override prose's default max-width (65ch)
-      "[&]:max-w-none",
-      // Spacing is controlled via component overrides below
-      "prose-p:leading-relaxed",
-      "prose-li:leading-relaxed",
-      "prose-headings:font-semibold",
-      // Remove default prose margins
-      "prose-p:my-0 prose-ul:my-0 prose-ol:my-0 prose-li:my-0 prose-pre:my-0 prose-headings:my-0",
-      // First/last child margin reset
-      "[&>*:first-child]:!mt-0 [&>*:last-child]:!mb-0",
-      // Also override max-width on all child elements
-      "[&_*]:max-w-none",
-      isMobile ? "prose-base" : "prose-sm prose-p:text-[15px] prose-li:text-[15px]"
+      "whitespace-pre-wrap",
+      isMobile ? "text-base" : "text-[15px]"
     )}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
@@ -161,7 +148,7 @@ function UserMarkdownContent({ text, isMobile = false }: { text: string; isMobil
             </a>
           ),
           p: ({ children }) => (
-            <p className="mt-2 first:mt-0">{children}</p>
+            <p className="mt-2 first:mt-0 leading-relaxed">{children}</p>
           ),
           ul: ({ children }) => (
             <ul className="mt-2 first:mt-0 pl-4 list-disc space-y-0.5 [&_ul]:mt-1 [&_ol]:mt-1">{children}</ul>
@@ -170,10 +157,10 @@ function UserMarkdownContent({ text, isMobile = false }: { text: string; isMobil
             <ol className="mt-2 first:mt-0 pl-4 list-decimal space-y-0.5 [&_ul]:mt-1 [&_ol]:mt-1">{children}</ol>
           ),
           li: ({ children }) => (
-            <li>{children}</li>
+            <li className="leading-relaxed">{children}</li>
           ),
           strong: ({ children }) => (
-            <strong className="font-semibold text-foreground">{children}</strong>
+            <strong className="font-semibold">{children}</strong>
           ),
           em: ({ children }) => (
             <em className="italic">{children}</em>
