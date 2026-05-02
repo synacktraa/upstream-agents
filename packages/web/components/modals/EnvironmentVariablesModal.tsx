@@ -277,19 +277,26 @@ export function EnvironmentVariablesModal({
             !isDragging && isMobile && "transition-transform duration-300"
           )}
           style={isMobile ? { transform: `translateY(${dragY}px)` } : undefined}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
         >
           {isMobile ? (
             <>
               {/* Drag handle */}
-              <div className="flex justify-center pt-3 pb-1">
+              <div
+                className="flex justify-center pt-3 pb-1"
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+              >
                 <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
               </div>
 
-              {/* Header */}
-              <div className="sticky top-0 flex items-center justify-between border-b border-border bg-popover z-10 px-4 py-3">
+              {/* Header - also draggable */}
+              <div
+                className="sticky top-0 flex items-center justify-between border-b border-border bg-popover z-10 px-4 py-3"
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+              >
                 <Dialog.Title className="font-semibold text-lg">
                   Environment Variables
                 </Dialog.Title>

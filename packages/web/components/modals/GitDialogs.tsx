@@ -162,24 +162,28 @@ function BaseDialog({ open, onClose, title, icon, children, isMobile = false, al
             !isDragging && isMobile && "transition-transform duration-300"
           )}
           style={isMobile ? { transform: `translateY(${dragY}px)` } : undefined}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
         >
-          {isMobile && (
-            <div className="flex justify-center pt-3 pb-1">
-              <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
-            </div>
-          )}
+          {/* Draggable header area */}
+          <div
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
+            {isMobile && (
+              <div className="flex justify-center pt-3 pb-1">
+                <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
+              </div>
+            )}
 
-          <ModalHeader
-            title={
-              <>
-                {icon}
-                {title}
-              </>
-            }
-          />
+            <ModalHeader
+              title={
+                <>
+                  {icon}
+                  {title}
+                </>
+              }
+            />
+          </div>
 
           <div ref={contentRef} className={cn(
             "flex-1",

@@ -206,18 +206,22 @@ export function BranchPickerModal({
           style={isMobile ? {
             transform: `translateY(${dragY}px)`,
           } : undefined}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
         >
-          {/* Drag handle for mobile */}
-          {isMobile && (
-            <div className="flex justify-center pt-3 pb-1">
-              <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
-            </div>
-          )}
+          {/* Draggable header area */}
+          <div
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
+            {/* Drag handle for mobile */}
+            {isMobile && (
+              <div className="flex justify-center pt-3 pb-1">
+                <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
+              </div>
+            )}
 
-          <ModalHeader title="Select Branch" />
+            <ModalHeader title="Select Branch" />
+          </div>
 
           {/* Repo info breadcrumb */}
           <div className={cn(
