@@ -131,7 +131,10 @@ function CodeBlock({ children, isMobile = false }: { children: React.ReactNode; 
 function UserMarkdownContent({ text, isMobile = false }: { text: string; isMobile?: boolean }) {
   return (
     <div className={cn(
-      "prose dark:prose-invert max-w-none overflow-hidden text-left",
+      // Use prose for typography but override max-width completely
+      "prose dark:prose-invert overflow-hidden text-left",
+      // Critical: override prose's default max-width (65ch)
+      "[&]:max-w-none",
       // Spacing is controlled via component overrides below
       "prose-p:leading-relaxed",
       "prose-li:leading-relaxed",
@@ -140,6 +143,8 @@ function UserMarkdownContent({ text, isMobile = false }: { text: string; isMobil
       "prose-p:my-0 prose-ul:my-0 prose-ol:my-0 prose-li:my-0 prose-pre:my-0 prose-headings:my-0",
       // First/last child margin reset
       "[&>*:first-child]:!mt-0 [&>*:last-child]:!mb-0",
+      // Also override max-width on all child elements
+      "[&_*]:max-w-none",
       isMobile ? "prose-base" : "prose-sm prose-p:text-[15px] prose-li:text-[15px]"
     )}>
       <ReactMarkdown
