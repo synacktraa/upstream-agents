@@ -128,7 +128,7 @@ Run these from the monorepo root:
 
 **Workflow:**
 
-1. Edit `packages/simple-chat/prisma/schema.prisma`
+1. Edit `packages/web/prisma/schema.prisma`
 2. Run `npm run prisma:migrate -- --name my_change`
 3. Commit the new files in `prisma/migrations/`
 4. Push to git
