@@ -33,13 +33,12 @@ export function MessageBubble({ message, isStreaming, isMobile = false, repo, on
       {/* Content */}
       <div className={cn(
         !isUser && "w-full",
-        isUser && "text-right",
         isUser && (isMobile ? "max-w-[95%]" : "max-w-[90%]")
       )}>
         {isUser ? (
           <div>
             <div className={cn(
-              "inline-block rounded-lg bg-muted text-foreground",
+              "inline-block rounded-lg bg-muted text-foreground text-left",
               isMobile ? "px-3 py-2 text-base" : "px-4 py-2 text-[15px]"
             )}>
               <UserMarkdownContent text={message.content} isMobile={isMobile} />
