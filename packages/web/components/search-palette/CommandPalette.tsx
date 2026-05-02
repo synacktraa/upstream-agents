@@ -10,7 +10,17 @@ import {
   CommandItem,
   CommandShortcut,
 } from "@/components/ui/command"
+import { cn } from "@/lib/utils"
 import { SLASH_COMMANDS } from "@upstream/common"
+
+/** Custom italic x icon for variables */
+function VariableIcon({ className }: { className?: string }) {
+  return (
+    <span className={cn("flex items-center justify-center italic font-serif", className)}>
+      𝑥
+    </span>
+  )
+}
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   GitMerge,
@@ -52,6 +62,8 @@ interface CommandPaletteProps {
   onCopyCloneCommand?: () => void
   /** Copy git checkout command to clipboard. Omitted when no branch exists. */
   onCopyCheckoutCommand?: () => void
+  /** Open environment variables modal. Omitted when no chat is active. */
+  onOpenEnvVars?: () => void
 }
 
 export function CommandPalette({
@@ -77,6 +89,7 @@ export function CommandPalette({
   isDownloading = false,
   onCopyCloneCommand,
   onCopyCheckoutCommand,
+  onOpenEnvVars,
 }: CommandPaletteProps) {
   const handleSelect = (command: string) => {
     onRunCommand(command)
@@ -168,6 +181,12 @@ export function CommandPalette({
             >
               <Download className="mr-2 h-4 w-4 text-muted-foreground" />
               <span>{isDownloading ? "Downloading..." : "Download project"}</span>
+            </CommandItem>
+          )}
+          {onOpenEnvVars && (
+            <CommandItem value="environment variables" onSelect={() => run(onOpenEnvVars)}>
+              <VariableIcon className="mr-2 h-4 w-4 text-muted-foreground" />
+              <span>Environment variables</span>
             </CommandItem>
           )}
           {onDeleteChat && (

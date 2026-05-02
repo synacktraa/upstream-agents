@@ -54,6 +54,7 @@ interface PaletteProviderProps {
   isDownloading?: boolean
   onCopyCloneCommand?: () => void
   onCopyCheckoutCommand?: () => void
+  onOpenEnvVars?: () => void
   // For Alt+Up/Down chat navigation
   chatIds: string[]
   currentChatId: string | null
@@ -92,6 +93,7 @@ export function PaletteProvider({
   isDownloading,
   onCopyCloneCommand,
   onCopyCheckoutCommand,
+  onOpenEnvVars,
   chatIds,
   currentChatId,
   onSelectChat,
@@ -210,6 +212,7 @@ export function PaletteProvider({
         isDownloading={isDownloading}
         onCopyCloneCommand={onCopyCloneCommand}
         onCopyCheckoutCommand={onCopyCheckoutCommand}
+        onOpenEnvVars={onOpenEnvVars}
       />
     </PaletteContext.Provider>
   )

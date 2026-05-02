@@ -968,6 +968,7 @@ export default function HomePage() {
       isDownloading={isDownloading}
       onCopyCloneCommand={currentChat?.repo && currentChat.repo !== NEW_REPOSITORY ? handleCopyCloneCommand : undefined}
       onCopyCheckoutCommand={currentChat?.branch ? handleCopyCheckoutCommand : undefined}
+      onOpenEnvVars={currentChat ? handleOpenEnvVars : undefined}
       chatIds={displayChats.map((c) => c.id)}
       onNavigateChat={handleNavigateChat}
       currentChatId={displayCurrentChatId}
