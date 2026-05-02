@@ -1323,10 +1323,8 @@ export default function HomePage() {
           open={mobileCommandsOpen}
           onClose={() => setMobileCommandsOpen(false)}
           onSlashCommand={handleSlashCommand}
-          onOpenGitHub={githubBranchUrl ? handleOpenInGitHub : undefined}
           hasLinkedRepo={!!(currentChat && currentChat.repo !== NEW_REPOSITORY)}
           inConflict={!!(gitDialogs.rebaseConflict?.inRebase || gitDialogs.rebaseConflict?.inMerge)}
-          hasGitHubLink={!!githubBranchUrl}
         />
       )}
 
