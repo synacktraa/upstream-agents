@@ -236,10 +236,10 @@ export function MobileSelect({
 }
 
 // =============================================================================
-// MobileRenameSheet - A bottom sheet for renaming items
+// MobileRenameModal - A centered modal for renaming items
 // =============================================================================
 
-interface MobileRenameSheetProps {
+interface MobileRenameModalProps {
   open: boolean
   onClose: () => void
   title?: string
@@ -249,28 +249,40 @@ interface MobileRenameSheetProps {
   placeholder?: string
 }
 
-export function MobileRenameSheet({
+export function MobileRenameModal({
   open,
   onClose,
   title = "Rename",
   initialValue,
   onSave,
   placeholder = "Enter name",
-}: MobileRenameSheetProps) {
+}: MobileRenameModalProps) {
   const [value, setValue] = useState(initialValue)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Reset value when sheet opens with new initialValue
+  // Reset value when modal opens with new initialValue
   useEffect(() => {
     if (open) {
       setValue(initialValue)
-      // Focus input after sheet animation
+      // Focus input after animation
       setTimeout(() => {
         inputRef.current?.focus()
         inputRef.current?.select()
       }, 100)
     }
   }, [open, initialValue])
+
+  // Prevent body scroll when open
+  useEffect(() => {
+    if (open) {
+      document.body.style.overflow = "hidden"
+    } else {
+      document.body.style.overflow = ""
+    }
+    return () => {
+      document.body.style.overflow = ""
+    }
+  }, [open])
 
   const handleSave = () => {
     const trimmed = value.trim()
@@ -289,40 +301,54 @@ export function MobileRenameSheet({
     }
   }
 
+  if (!open) return null
+
   return (
-    <MobileBottomSheet
-      open={open}
-      onClose={onClose}
-      title={title}
-      height="auto"
-      elevated
-    >
-      <div className="p-4 space-y-4">
-        <input
-          ref={inputRef}
-          type="text"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder}
-          className="w-full px-4 py-3 text-base rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-        />
-        <div className="flex gap-3">
-          <button
-            onClick={onClose}
-            className="flex-1 px-4 py-3 text-base font-medium rounded-lg border border-border hover:bg-accent active:bg-accent transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={!value.trim()}
-            className="flex-1 px-4 py-3 text-base font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Save
-          </button>
+    <>
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 z-[60] bg-black/40 transition-opacity duration-200"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+
+      {/* Modal */}
+      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 pointer-events-none">
+        <div className="w-full max-w-sm bg-popover rounded-xl shadow-xl pointer-events-auto">
+          {/* Header */}
+          <div className="px-4 pt-4 pb-2">
+            <h3 className="text-lg font-semibold">{title}</h3>
+          </div>
+
+          {/* Content */}
+          <div className="px-4 pb-4 space-y-4">
+            <input
+              ref={inputRef}
+              type="text"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={placeholder}
+              className="w-full px-3 py-2 text-base rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+            />
+            <div className="flex gap-3">
+              <button
+                onClick={onClose}
+                className="flex-1 px-4 py-2 text-base font-medium rounded-lg border border-border hover:bg-accent active:bg-accent transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={!value.trim()}
+                className="flex-1 px-4 py-2 text-base font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Save
+              </button>
+            </div>
+          </div>
         </div>
       </div>
-    </MobileBottomSheet>
+    </>
   )
 }
