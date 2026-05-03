@@ -329,6 +329,35 @@ export function ChatPanel({ chat, settings, credentialFlags, onSendMessage, onEn
     }
   }
 
+  // Handle paste from clipboard (for images)
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items
+    if (!items) return
+
+    const imageFiles: File[] = []
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i]
+      // Check if the item is an image
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile()
+        if (file) {
+          // Generate a name for pasted images since they don't have one
+          const extension = item.type.split('/')[1] || 'png'
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+          const namedFile = new File([file], `pasted-image-${timestamp}.${extension}`, {
+            type: file.type,
+          })
+          imageFiles.push(namedFile)
+        }
+      }
+    }
+
+    if (imageFiles.length > 0) {
+      e.preventDefault() // Prevent pasting image data as text
+      addFiles(imageFiles)
+    }
+  }
+
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes}B`
     if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}KB`
@@ -654,6 +683,7 @@ export function ChatPanel({ chat, settings, credentialFlags, onSendMessage, onEn
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
               placeholder={
                 isCreating
                   ? "Creating sandbox..."
