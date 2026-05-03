@@ -1878,30 +1878,26 @@ function PdfThumbnail({ file }: { file: File }) {
   )
 }
 
-// Text Thumbnail Component - shows first few words as preview
+// Text Thumbnail Component - fills the thumbnail with text content
 function TextThumbnail({ content, filename }: { content: string; filename: string }) {
-  // Get first ~100 characters, clean up whitespace
-  const preview = content
-    .slice(0, 150)
-    .replace(/\s+/g, ' ')
-    .trim()
+  // Get enough text to fill the thumbnail (~500 chars should be plenty)
+  const preview = content.slice(0, 500)
 
   const ext = filename.split('.').pop()?.toUpperCase() || 'TXT'
 
   return (
-    <div className="w-full h-full p-1.5 overflow-hidden flex flex-col">
-      {/* Extension badge */}
-      <div className="flex items-center justify-between mb-0.5">
-        <span className="text-[8px] font-semibold text-muted-foreground bg-muted/50 px-1 rounded">
+    <div className="w-full h-full overflow-hidden relative bg-muted/20">
+      {/* Text content - fills the entire thumbnail */}
+      <pre className="w-full h-full p-1.5 text-[6px] leading-[1.2] text-muted-foreground overflow-hidden font-mono whitespace-pre-wrap break-all">
+        {preview}
+      </pre>
+      {/* Extension badge - overlay at bottom right */}
+      <div className="absolute bottom-1 right-1">
+        <span className="text-[8px] font-semibold text-muted-foreground bg-background/80 px-1 rounded shadow-sm">
           {ext}
         </span>
-      </div>
-      {/* Text preview */}
-      <div className="flex-1 overflow-hidden">
-        <p className="text-[7px] leading-[1.3] text-muted-foreground break-words line-clamp-6">
-          {preview}
-        </p>
       </div>
     </div>
   )
 }
+
