@@ -1775,7 +1775,7 @@ function FilePreviewModal({ file, fileContent, onClose, onRemove, isMobile, getF
   )
 }
 
-// PDF Thumbnail Component - renders first page of PDF as thumbnail (cropped from top-left)
+// PDF Thumbnail Component - renders first page of PDF as thumbnail (top square crop)
 function PdfThumbnail({ file }: { file: File }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [loading, setLoading] = useState(true)
@@ -1803,18 +1803,23 @@ function PdfThumbnail({ file }: { file: File }) {
         const context = canvas.getContext('2d')
         if (!context) return
 
-        // Render at a reasonable scale for crisp text, then crop to thumbnail
+        // Set thumbnail size and calculate scale to make page width match thumbnail
         const thumbnailSize = 72
-        const scale = 1.5 // Render at 1.5x for better quality
-        const viewport = page.getViewport({ scale })
+        const viewport = page.getViewport({ scale: 1 })
 
-        // Create an offscreen canvas to render the full page
-        const offscreenCanvas = document.createElement('canvas')
-        offscreenCanvas.width = viewport.width
-        offscreenCanvas.height = viewport.height
-        const offscreenContext = offscreenCanvas.getContext('2d')
-        if (!offscreenContext) return
+        // Scale so the page width equals thumbnail size (for a crisp top crop)
+        const scale = thumbnailSize / viewport.width
+        const scaledViewport = page.getViewport({ scale })
 
+        // Set canvas to thumbnail size (square)
+        canvas.width = thumbnailSize
+        canvas.height = thumbnailSize
+
+        // Fill with white background
+        context.fillStyle = '#ffffff'
+        context.fillRect(0, 0, thumbnailSize, thumbnailSize)
+
+        // Render the page directly - it will extend beyond canvas height but be clipped
         await page.render({
           canvasContext: offscreenContext,
           viewport: viewport
@@ -1871,7 +1876,7 @@ function PdfThumbnail({ file }: { file: File }) {
       <canvas
         ref={canvasRef}
         className={cn(
-          "w-full h-full object-cover",
+          "w-full h-full",
           loading && "opacity-0"
         )}
       />
