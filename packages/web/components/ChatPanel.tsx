@@ -790,12 +790,8 @@ export function ChatPanel({ chat, settings, credentialFlags, onSendMessage, onEn
                 >
                   {/* File preview content */}
                   <div className="w-full h-full flex items-center justify-center">
-                    {fileType === 'image' && previewUrl ? (
-                      <img
-                        src={previewUrl}
-                        alt={pf.name}
-                        className="w-full h-full object-cover"
-                      />
+                    {fileType === 'image' ? (
+                      <ImageThumbnail file={pf.file} />
                     ) : fileType === 'pdf' ? (
                       <PdfThumbnail file={pf.file} />
                     ) : (fileType === 'text' || fileType === 'code') && textContent ? (
@@ -1782,7 +1778,93 @@ function FilePreviewModal({ file, fileContent, onClose, onRemove, isMobile, getF
   )
 }
 
+// Image Thumbnail Component - renders image to canvas for crisp display on high-DPI
+function ImageThumbnail({ file }: { file: File }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    const context = canvas.getContext('2d')
+    if (!context) return
+
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+
+    img.onload = () => {
+      const dpr = window.devicePixelRatio || 1
+      const thumbnailSize = 108
+
+      // Set canvas size accounting for device pixel ratio
+      canvas.width = thumbnailSize * dpr
+      canvas.height = thumbnailSize * dpr
+      canvas.style.width = `${thumbnailSize}px`
+      canvas.style.height = `${thumbnailSize}px`
+
+      // Calculate crop to cover the thumbnail (center crop)
+      const imgAspect = img.width / img.height
+      const thumbAspect = 1 // Square thumbnail
+
+      let srcX = 0, srcY = 0, srcW = img.width, srcH = img.height
+
+      if (imgAspect > thumbAspect) {
+        // Image is wider - crop sides
+        srcW = img.height
+        srcX = (img.width - srcW) / 2
+      } else {
+        // Image is taller - crop top/bottom
+        srcH = img.width
+        srcY = (img.height - srcH) / 2
+      }
+
+      // Enable image smoothing for better quality
+      context.imageSmoothingEnabled = true
+      context.imageSmoothingQuality = 'high'
+
+      // Draw the cropped and scaled image
+      context.drawImage(
+        img,
+        srcX, srcY, srcW, srcH, // Source rectangle
+        0, 0, canvas.width, canvas.height // Destination rectangle
+      )
+
+      URL.revokeObjectURL(url)
+      setLoading(false)
+    }
+
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      setLoading(false)
+    }
+
+    img.src = url
+
+    return () => {
+      URL.revokeObjectURL(url)
+    }
+  }, [file])
+
+  return (
+    <div className="w-full h-full flex items-center justify-center overflow-hidden">
+      {loading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-muted/30">
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        </div>
+      )}
+      <canvas
+        ref={canvasRef}
+        className={cn(
+          loading && "opacity-0"
+        )}
+      />
+    </div>
+  )
+}
+
 // PDF Thumbnail Component - renders first page of PDF as thumbnail (top square crop)
+// Uses devicePixelRatio for crisp rendering on high-DPI displays
 function PdfThumbnail({ file }: { file: File }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [loading, setLoading] = useState(true)
@@ -1810,21 +1892,27 @@ function PdfThumbnail({ file }: { file: File }) {
         const context = canvas.getContext('2d')
         if (!context) return
 
-        // Set thumbnail size and calculate scale to make page width match thumbnail
+        // Account for device pixel ratio for crisp rendering
+        const dpr = window.devicePixelRatio || 1
         const thumbnailSize = 108
+
         const viewport = page.getViewport({ scale: 1 })
 
-        // Scale so the page width equals thumbnail size (for a crisp top crop)
-        const scale = thumbnailSize / viewport.width
+        // Scale so the page width equals thumbnail size * dpr (for crisp rendering)
+        const scale = (thumbnailSize * dpr) / viewport.width
         const scaledViewport = page.getViewport({ scale })
 
-        // Set canvas to thumbnail size (square)
-        canvas.width = thumbnailSize
-        canvas.height = thumbnailSize
+        // Set canvas to thumbnail size * dpr (internal resolution)
+        canvas.width = thumbnailSize * dpr
+        canvas.height = thumbnailSize * dpr
+
+        // Scale down via CSS to display at thumbnail size
+        canvas.style.width = `${thumbnailSize}px`
+        canvas.style.height = `${thumbnailSize}px`
 
         // Fill with white background
         context.fillStyle = '#ffffff'
-        context.fillRect(0, 0, thumbnailSize, thumbnailSize)
+        context.fillRect(0, 0, canvas.width, canvas.height)
 
         // Render the page directly - it will extend beyond canvas height but be clipped
         await page.render({
@@ -1870,7 +1958,6 @@ function PdfThumbnail({ file }: { file: File }) {
       <canvas
         ref={canvasRef}
         className={cn(
-          "w-full h-full",
           loading && "opacity-0"
         )}
       />
@@ -1878,26 +1965,98 @@ function PdfThumbnail({ file }: { file: File }) {
   )
 }
 
-// Text Thumbnail Component - fills the thumbnail with text content
+// Text Thumbnail Component - renders text to canvas for crisp display on high-DPI
 function TextThumbnail({ content, filename }: { content: string; filename: string }) {
-  // Get enough text to fill the thumbnail (~500 chars should be plenty)
-  const preview = content.slice(0, 500)
-
+  const canvasRef = useRef<HTMLCanvasElement>(null)
   const ext = filename.split('.').pop()?.toUpperCase() || 'TXT'
 
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    const context = canvas.getContext('2d')
+    if (!context) return
+
+    const dpr = window.devicePixelRatio || 1
+    const thumbnailSize = 108
+    const padding = 6
+    const fontSize = 9
+    const lineHeight = fontSize * 1.3
+    const badgePadding = 4
+
+    // Set canvas size accounting for device pixel ratio
+    canvas.width = thumbnailSize * dpr
+    canvas.height = thumbnailSize * dpr
+    canvas.style.width = `${thumbnailSize}px`
+    canvas.style.height = `${thumbnailSize}px`
+
+    // Scale context for high-DPI
+    context.scale(dpr, dpr)
+
+    // Fill background
+    context.fillStyle = '#f5f5f5'
+    context.fillRect(0, 0, thumbnailSize, thumbnailSize)
+
+    // Set up text rendering
+    context.fillStyle = '#666666'
+    context.font = `${fontSize}px ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace`
+    context.textBaseline = 'top'
+
+    // Calculate available space
+    const maxWidth = thumbnailSize - padding * 2
+    const maxLines = Math.floor((thumbnailSize - padding * 2 - 16) / lineHeight) // Leave space for badge
+
+    // Split content into lines that fit
+    const lines: string[] = []
+    const contentLines = content.split('\n')
+
+    for (const line of contentLines) {
+      if (lines.length >= maxLines) break
+
+      if (line.length === 0) {
+        lines.push('')
+        continue
+      }
+
+      // Word wrap long lines
+      let remaining = line
+      while (remaining.length > 0 && lines.length < maxLines) {
+        let end = remaining.length
+        while (context.measureText(remaining.slice(0, end)).width > maxWidth && end > 1) {
+          end--
+        }
+        lines.push(remaining.slice(0, end))
+        remaining = remaining.slice(end)
+      }
+    }
+
+    // Draw text lines
+    lines.forEach((line, i) => {
+      context.fillText(line, padding, padding + i * lineHeight, maxWidth)
+    })
+
+    // Draw extension badge
+    const badgeText = ext
+    context.font = `bold ${fontSize}px system-ui, sans-serif`
+    const badgeWidth = context.measureText(badgeText).width + badgePadding * 2
+    const badgeHeight = fontSize + badgePadding
+    const badgeX = thumbnailSize - badgeWidth - 4
+    const badgeY = thumbnailSize - badgeHeight - 4
+
+    context.fillStyle = 'rgba(255, 255, 255, 0.9)'
+    context.beginPath()
+    context.roundRect(badgeX, badgeY, badgeWidth, badgeHeight, 3)
+    context.fill()
+
+    context.fillStyle = '#666666'
+    context.fillText(badgeText, badgeX + badgePadding, badgeY + badgePadding / 2)
+  }, [content, filename, ext])
+
   return (
-    <div className="w-full h-full overflow-hidden relative bg-muted/20">
-      {/* Text content - fills the entire thumbnail */}
-      <pre className="w-full h-full p-1.5 text-[6px] leading-[1.2] text-muted-foreground overflow-hidden font-mono whitespace-pre-wrap break-all">
-        {preview}
-      </pre>
-      {/* Extension badge - overlay at bottom right */}
-      <div className="absolute bottom-1 right-1">
-        <span className="text-[8px] font-semibold text-muted-foreground bg-background/80 px-1 rounded shadow-sm">
-          {ext}
-        </span>
-      </div>
-    </div>
+    <canvas
+      ref={canvasRef}
+      className="w-full h-full"
+    />
   )
 }
 
