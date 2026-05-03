@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useRef, useState, useCallback } from "react"
+import { useEffect, useState, useRef } from "react"
 import { X } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useDragToClose } from "@/lib/hooks/useDragToClose"
 
 interface MobileBottomSheetProps {
   open: boolean
@@ -11,10 +12,8 @@ interface MobileBottomSheetProps {
   children: React.ReactNode
   /** Height of the sheet: 'auto' fits content, 'full' is 90vh, or specify a number in vh */
   height?: "auto" | "full" | number
-  /** Show drag handle indicator */
+  /** Show drag handle indicator (also enables swipe on handle to dismiss) */
   showDragHandle?: boolean
-  /** Enable swipe to dismiss */
-  swipeToDismiss?: boolean
   /** Higher z-index to layer over other modals/drawers */
   elevated?: boolean
 }
@@ -26,14 +25,9 @@ export function MobileBottomSheet({
   children,
   height = "auto",
   showDragHandle = true,
-  swipeToDismiss = true,
   elevated = false,
 }: MobileBottomSheetProps) {
-  const sheetRef = useRef<HTMLDivElement>(null)
-  const [isDragging, setIsDragging] = useState(false)
-  const [dragY, setDragY] = useState(0)
-  const [startY, setStartY] = useState(0)
-  const [sheetHeight, setSheetHeight] = useState(0)
+  const { handlers, dragY, isDragging, dragRef } = useDragToClose({ onClose })
 
   // Calculate height style
   const heightStyle = height === "auto"
@@ -41,48 +35,6 @@ export function MobileBottomSheet({
     : height === "full"
     ? { height: "90vh" }
     : { height: `${height}vh` }
-
-  // Measure sheet height for swipe calculations
-  useEffect(() => {
-    if (open && sheetRef.current) {
-      setSheetHeight(sheetRef.current.offsetHeight)
-    }
-  }, [open])
-
-  // Handle touch start
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (!swipeToDismiss) return
-    setIsDragging(true)
-    setStartY(e.touches[0].clientY)
-    setDragY(0)
-  }, [swipeToDismiss])
-
-  // Handle touch move
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (!isDragging || !swipeToDismiss) return
-
-    const currentY = e.touches[0].clientY
-    const diff = currentY - startY
-
-    // Only allow dragging down
-    if (diff > 0) {
-      setDragY(diff)
-    }
-  }, [isDragging, startY, swipeToDismiss])
-
-  // Handle touch end
-  const handleTouchEnd = useCallback(() => {
-    if (!isDragging || !swipeToDismiss) return
-
-    setIsDragging(false)
-
-    // If dragged more than 30% of sheet height, close it
-    if (dragY > sheetHeight * 0.3) {
-      onClose()
-    }
-
-    setDragY(0)
-  }, [isDragging, dragY, sheetHeight, onClose, swipeToDismiss])
 
   // Prevent body scroll when open
   useEffect(() => {
@@ -113,12 +65,11 @@ export function MobileBottomSheet({
 
       {/* Sheet */}
       <div
-        ref={sheetRef}
+        ref={dragRef}
         className={cn(
           "fixed bottom-0 left-0 right-0 bg-popover rounded-t-2xl shadow-xl",
           elevated ? "z-[60]" : "z-50",
-          "transition-transform duration-300 ease-out",
-          !isDragging && "transition-transform"
+          !isDragging && "transition-transform duration-300 ease-out"
         )}
         style={{
           ...heightStyle,
@@ -127,25 +78,21 @@ export function MobileBottomSheet({
             : "translateY(100%)",
         }}
       >
-        {/* Drag Handle - touch handlers only on this area */}
+        {/* Drag Handle */}
         {showDragHandle && (
           <div
-            className="flex justify-center pt-3 pb-1 cursor-grab active:cursor-grabbing"
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
+            className="flex justify-center pt-3 pb-1"
+            {...handlers}
           >
             <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
           </div>
         )}
 
-        {/* Header - also supports drag to dismiss */}
+        {/* Header - also draggable to dismiss */}
         {title && (
           <div
-            className="flex items-center justify-between px-4 py-3 border-b border-border cursor-grab active:cursor-grabbing"
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
+            className="flex items-center justify-between px-4 py-3 border-b border-border"
+            {...handlers}
           >
             <h3 className="text-base font-semibold">{title}</h3>
             <button
@@ -241,10 +188,10 @@ export function MobileSelect({
 }
 
 // =============================================================================
-// MobileRenameSheet - A bottom sheet for renaming items
+// MobileRenameModal - A centered modal for renaming items
 // =============================================================================
 
-interface MobileRenameSheetProps {
+interface MobileRenameModalProps {
   open: boolean
   onClose: () => void
   title?: string
@@ -254,28 +201,40 @@ interface MobileRenameSheetProps {
   placeholder?: string
 }
 
-export function MobileRenameSheet({
+export function MobileRenameModal({
   open,
   onClose,
   title = "Rename",
   initialValue,
   onSave,
   placeholder = "Enter name",
-}: MobileRenameSheetProps) {
+}: MobileRenameModalProps) {
   const [value, setValue] = useState(initialValue)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Reset value when sheet opens with new initialValue
+  // Reset value when modal opens with new initialValue
   useEffect(() => {
     if (open) {
       setValue(initialValue)
-      // Focus input after sheet animation
+      // Focus input after animation
       setTimeout(() => {
         inputRef.current?.focus()
         inputRef.current?.select()
       }, 100)
     }
   }, [open, initialValue])
+
+  // Prevent body scroll when open
+  useEffect(() => {
+    if (open) {
+      document.body.style.overflow = "hidden"
+    } else {
+      document.body.style.overflow = ""
+    }
+    return () => {
+      document.body.style.overflow = ""
+    }
+  }, [open])
 
   const handleSave = () => {
     const trimmed = value.trim()
@@ -294,40 +253,54 @@ export function MobileRenameSheet({
     }
   }
 
+  if (!open) return null
+
   return (
-    <MobileBottomSheet
-      open={open}
-      onClose={onClose}
-      title={title}
-      height="auto"
-      elevated
-    >
-      <div className="p-4 space-y-4">
-        <input
-          ref={inputRef}
-          type="text"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder}
-          className="w-full px-4 py-3 text-base rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-        />
-        <div className="flex gap-3">
-          <button
-            onClick={onClose}
-            className="flex-1 px-4 py-3 text-base font-medium rounded-lg border border-border hover:bg-accent active:bg-accent transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={!value.trim()}
-            className="flex-1 px-4 py-3 text-base font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Save
-          </button>
+    <>
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 z-[60] bg-black/40 transition-opacity duration-200"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+
+      {/* Modal */}
+      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 pointer-events-none">
+        <div className="w-full max-w-sm bg-popover rounded-xl shadow-xl pointer-events-auto">
+          {/* Header */}
+          <div className="px-4 pt-4 pb-2">
+            <h3 className="text-lg font-semibold">{title}</h3>
+          </div>
+
+          {/* Content */}
+          <div className="px-4 pb-4 space-y-4">
+            <input
+              ref={inputRef}
+              type="text"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={placeholder}
+              className="w-full px-3 py-2 text-base rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+            />
+            <div className="flex gap-3">
+              <button
+                onClick={onClose}
+                className="flex-1 px-4 py-2 text-base font-medium rounded-lg border border-border hover:bg-accent active:bg-accent transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={!value.trim()}
+                className="flex-1 px-4 py-2 text-base font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Save
+              </button>
+            </div>
+          </div>
         </div>
       </div>
-    </MobileBottomSheet>
+    </>
   )
 }

@@ -17,7 +17,7 @@ import { BranchPickerModal } from "@/components/modals/BranchPickerModal"
 import { MergeDialog, RebaseDialog, PRDialog, SquashDialog, ForcePushDialog, useGitDialogs } from "@/components/modals/GitDialogs"
 import { EnvironmentVariablesModal } from "@/components/modals/EnvironmentVariablesModal"
 import { MobileCommandsMenu } from "@/components/MobileCommandsMenu"
-import { MobileRenameSheet } from "@/components/ui/MobileBottomSheet"
+import { MobileRenameModal } from "@/components/ui/MobileBottomSheet"
 import { clearAllStorage } from "@/lib/storage"
 import type { SlashCommandType } from "@/components/SlashCommandMenu"
 import { PaletteProvider } from "@/components/search-palette"
@@ -1365,8 +1365,8 @@ export default function HomePage() {
         isMobile={isMobile}
       />
 
-      {/* Mobile Rename Sheet */}
-      <MobileRenameSheet
+      {/* Mobile Rename Modal */}
+      <MobileRenameModal
         open={mobileRenameChat !== null}
         onClose={() => setMobileRenameChat(null)}
         title="Rename Chat"
