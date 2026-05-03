@@ -86,7 +86,36 @@ export function ChatPanel({ chat, settings, credentialFlags, onSendMessage, onEn
   const [isDraggingOver, setIsDraggingOver] = useState(false)
   const [previewFile, setPreviewFile] = useState<PendingFile | null>(null)
   const [fileContents, setFileContents] = useState<Map<string, string>>(new Map())
+  const [fileError, setFileError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // File upload constraints
+  const MAX_FILE_SIZE = 30 * 1024 * 1024 // 30 MB
+  const MAX_FILE_COUNT = 20
+  const MAX_IMAGE_DIMENSION = 8000 // 8000 x 8000 pixels
+  const SUPPORTED_MIME_TYPES = [
+    // Images
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+    // Documents
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // DOCX
+    'text/plain',
+    'text/csv',
+    'text/tab-separated-values',
+    'text/html',
+    'text/rtf',
+    'application/rtf',
+    'application/epub+zip',
+  ]
+  const SUPPORTED_EXTENSIONS = [
+    // Images
+    'jpg', 'jpeg', 'png', 'gif', 'webp',
+    // Documents
+    'pdf', 'docx', 'txt', 'csv', 'tsv', 'html', 'htm', 'rtf', 'epub',
+  ]
   const titleInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -284,24 +313,115 @@ export function ChatPanel({ chat, settings, credentialFlags, onSendMessage, onEn
     onSendMessage(input.trim(), currentAgent, currentModel, files)
     setInput("")
     setPendingFiles([])
+    setFileError(null)
     textareaRef.current?.focus()
+  }
+
+  // Helper to check if file type is supported
+  const isFileTypeSupported = (file: File): boolean => {
+    const ext = file.name.split('.').pop()?.toLowerCase() || ''
+    return SUPPORTED_MIME_TYPES.includes(file.type) || SUPPORTED_EXTENSIONS.includes(ext)
+  }
+
+  // Helper to validate image dimensions (async, returns promise)
+  const validateImageDimensions = (file: File): Promise<{ valid: boolean; width?: number; height?: number }> => {
+    return new Promise((resolve) => {
+      if (!file.type.startsWith('image/')) {
+        resolve({ valid: true })
+        return
+      }
+
+      const img = new Image()
+      const url = URL.createObjectURL(file)
+
+      img.onload = () => {
+        URL.revokeObjectURL(url)
+        resolve({
+          valid: img.width <= MAX_IMAGE_DIMENSION && img.height <= MAX_IMAGE_DIMENSION,
+          width: img.width,
+          height: img.height,
+        })
+      }
+
+      img.onerror = () => {
+        URL.revokeObjectURL(url)
+        resolve({ valid: true }) // Allow if we can't check
+      }
+
+      img.src = url
+    })
   }
 
   // File handling - files can be added anytime, upload happens after sandbox is ready
   // If user is not signed in, trigger sign-in immediately when adding files
-  const addFiles = (files: FileList | File[]) => {
+  const addFiles = async (files: FileList | File[]) => {
+    // Clear previous errors
+    setFileError(null)
+
     // Require sign-in before adding files (files can't persist across OAuth redirect)
     if (onRequireSignIn) {
       onRequireSignIn()
       return
     }
-    const newFiles: PendingFile[] = Array.from(files).map(file => ({
-      id: nanoid(),
-      file,
-      name: file.name,
-      size: file.size,
-    }))
-    setPendingFiles(prev => [...prev, ...newFiles])
+
+    const fileArray = Array.from(files)
+    const errors: string[] = []
+    const validFiles: File[] = []
+
+    // Check file count limit
+    const currentCount = pendingFiles.length
+    const availableSlots = MAX_FILE_COUNT - currentCount
+
+    if (fileArray.length > availableSlots) {
+      if (availableSlots <= 0) {
+        setFileError(`Maximum ${MAX_FILE_COUNT} files allowed per message`)
+        return
+      }
+      errors.push(`Only ${availableSlots} more file(s) can be added (max ${MAX_FILE_COUNT})`)
+      fileArray.splice(availableSlots) // Only process files that fit
+    }
+
+    // Validate each file
+    for (const file of fileArray) {
+      // Check file size
+      if (file.size > MAX_FILE_SIZE) {
+        errors.push(`"${file.name}" exceeds 30 MB limit`)
+        continue
+      }
+
+      // Check file type
+      if (!isFileTypeSupported(file)) {
+        errors.push(`"${file.name}" is not a supported file type`)
+        continue
+      }
+
+      // Check image dimensions
+      if (file.type.startsWith('image/')) {
+        const dimCheck = await validateImageDimensions(file)
+        if (!dimCheck.valid) {
+          errors.push(`"${file.name}" exceeds 8000x8000 pixel limit (${dimCheck.width}x${dimCheck.height})`)
+          continue
+        }
+      }
+
+      validFiles.push(file)
+    }
+
+    // Show errors if any
+    if (errors.length > 0) {
+      setFileError(errors.join('. '))
+    }
+
+    // Add valid files
+    if (validFiles.length > 0) {
+      const newFiles: PendingFile[] = validFiles.map(file => ({
+        id: nanoid(),
+        file,
+        name: file.name,
+        size: file.size,
+      }))
+      setPendingFiles(prev => [...prev, ...newFiles])
+    }
   }
 
   const removeFile = (id: string) => {
@@ -629,6 +749,7 @@ export function ChatPanel({ chat, settings, credentialFlags, onSendMessage, onEn
           ref={fileInputRef}
           type="file"
           multiple
+          accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.docx,.txt,.csv,.tsv,.html,.htm,.rtf,.epub,image/jpeg,image/png,image/gif,image/webp,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/csv,text/tab-separated-values,text/html,text/rtf,application/rtf,application/epub+zip"
           className="hidden"
           onChange={(e) => {
             if (e.target.files) {
@@ -740,6 +861,24 @@ export function ChatPanel({ chat, settings, credentialFlags, onSendMessage, onEn
             ) : null}
           </div>
         </div>
+
+        {/* File upload error message */}
+        {fileError && (
+          <div className={cn(
+            "flex items-start gap-2 text-destructive bg-destructive/10 rounded-md",
+            isMobile ? "mx-3 mb-2 px-3 py-2 text-sm" : "mx-4 mb-2 px-3 py-2 text-xs"
+          )}>
+            <AlertTriangle className={cn("shrink-0 mt-0.5", isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
+            <span className="flex-1">{fileError}</span>
+            <button
+              onClick={() => setFileError(null)}
+              className="shrink-0 text-destructive/70 hover:text-destructive transition-colors"
+              aria-label="Dismiss error"
+            >
+              <X className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5")} />
+            </button>
+          </div>
+        )}
 
         {/* Pending files display - square preview boxes */}
         {pendingFiles.length > 0 && (
